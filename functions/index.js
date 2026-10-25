@@ -19,6 +19,7 @@ const { promoForItem, freeDeliveryPromo, lineDiscount, promoLabel, voucherDiscou
 
 admin.initializeApp();
 const db = getFirestore();
+if (typeof db.settings === "function") db.settings({ ignoreUndefinedProperties: true }); // a missing optional field never breaks a write
 
 // Singapore region = closest to the Philippines. Must match VITE_FUNCTIONS_REGION.
 // Cloud Run counts (max instances × CPU) of EVERY function against the region's CPU quota, so most functions
@@ -606,7 +607,7 @@ async function rebuildPublicStore(storeId) {
     qrMode: s.qrMode || "per_table",
     callStaff: pro.callstaff ? s.callStaff || null : null,
     payments: (s.payments?.methods || []).filter((m) => m.enabled !== false),
-    confirm: s.confirm || store.mode === "table" || store.mode === "salon" ? { mode: s.confirm?.mode || "messenger", messengerLink: s.confirm?.messengerLink || "", minutes: s.confirm?.minutes || 60, skipReturning: s.confirm?.skipReturning } : null,
+    confirm: s.confirm || store.mode === "table" || store.mode === "salon" ? { mode: s.confirm?.mode || "messenger", messengerLink: s.confirm?.messengerLink || "", minutes: s.confirm?.minutes || 60, skipReturning: s.confirm?.skipReturning !== false } : null,
     landing: s.landing !== false,
     reservations: pro.reservations ? s.reservations || null : null,
     events: can("events_vip") ? s.events || null : null,
