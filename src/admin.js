@@ -40,10 +40,12 @@ function shell(user) {
       <div id="support"></div>
       <div id="verifyBox"></div>
       <div id="collabBox"></div>
+      <div id="trustBox"></div>
+      <div id="partnerBox"></div>
       <div id="pending"></div>
       <div id="feedback"></div>
       <div class="tile" id="demoTile" style="margin-top:14px"><div class="row between wrap" style="gap:8px"><div><h3 style="margin:0">🧪 Demo stores</h3><p class="small muted" style="margin:4px 0 0">Live sample shops with photos and sample orders, for your homepage and ads. Visitors can order — nothing is charged and their pretend orders clear every 3 hours. Sample data refreshes daily at 4 AM.</p></div><button class="btn sm" type="button" data-seed>Create / refresh demo stores</button></div>
-        <div class="row wrap" style="gap:8px;margin-top:10px">${[["taptayo-cafe", "☕ TapTayo Café"], ["taptayo-salon", "💇 TapTayo Salon"], ["taptayo-spa", "💆 TapTayo Spa"], ["taptayo-studio", "🎨 TapTayo Studio"], ["taptayo-creator", "🎥 Kain Tayo with Bea"], ["taptayo-laundry", "🧺 TapTayo Laundry"], ["taptayo-airbnb", "🏡 TapTayo Airbnb"]].map(([sl, n]) => `<a class="btn ghost sm" href="/m/${sl}" target="_blank" rel="noopener">${n} ↗</a>`).join("")}</div><div data-seedout class="small muted" style="margin-top:8px"></div></div>
+        <div class="row wrap" style="gap:8px;margin-top:10px">${[["taptayo-cafe", "☕ TapTayo Café"], ["taptayo-salon", "💇 TapTayo Salon"], ["taptayo-spa", "💆 TapTayo Spa"], ["taptayo-studio", "🎨 TapTayo Studio"], ["taptayo-creator", "🎥 Kain Tayo with Bea"], ["taptayo-ugc", "📸 Mika Makes UGC"], ["taptayo-laundry", "🧺 TapTayo Laundry"], ["taptayo-airbnb", "🏡 TapTayo Airbnb"]].map(([sl, n]) => `<a class="btn ghost sm" href="/m/${sl}" target="_blank" rel="noopener">${n} ↗</a>`).join("")}</div><div data-seedout class="small muted" style="margin-top:8px"></div></div>
       <details class="tile" id="adminSettings" style="margin-top:14px"><summary style="cursor:pointer;font-weight:600">⚙️ Settings — your GCash details & payment alerts</summary><div data-set class="small muted" style="margin-top:10px">Loading…</div></details>
       <div class="row between wrap" style="margin:16px 0 10px">
         <div class="tabs" style="margin:0;flex:1;max-width:620px">
@@ -63,7 +65,7 @@ function shell(user) {
 async function load() {
   try { stores = await call("adminListStores"); draw(); }
   catch (e) { toast(e.message, "error"); }
-  loadFeedback(); loadSettings(); loadSupport(); loadVerify(); loadCollabAdmin();
+  loadFeedback(); loadSettings(); loadSupport(); loadVerify(); loadCollabAdmin(); loadTrust(); loadPartners();
   const sb = document.querySelector("[data-seed]"); if (sb) sb.onclick = async () => {
     if (!confirm("Create or refresh the 4 demo stores? Their sample data is rebuilt (pretend orders are removed).")) return;
     sb.disabled = true; sb.textContent = "Working… (about a minute)"; const out = document.querySelector("[data-seedout]");
@@ -219,16 +221,50 @@ function activate(storeId, pre = {}) {
 }
 
 // 🤝 Collab launch switch + 🛡 Protect claims
+// 🛡 Trust & safety: documents to check (DTI / BIR / owner ID), shop reports, and the valid-ID counter (NPC registration at 1,000+)
+async function loadTrust() {
+  const box = document.getElementById("trustBox"); if (!box) return;
+  try {
+    const t = await call("adminTrust", {});
+    const KIND = { dti: "DTI certificate", bir: "BIR 2303", permit: "Business / Mayor's permit", ownerId: "Owner's valid ID" };
+    box.innerHTML = `<div class="tile" style="margin-bottom:14px"><h3 style="margin:0 0 6px">🛡 Trust & safety</h3>
+      <p class="small">💾 Weekly backup: ${t.backup?.lastAt ? `${t.backup.ok ? "✅" : "⚠️ failed —"} ${new Date(t.backup.lastAt).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}${t.backup.ok ? "" : ` (${esc(t.backup.error || "")})`}` : "not run yet (runs Sundays 3 AM — see deploy notes)"}</p>
+      <p class="small">🪪 Valid IDs on file (all shops, approx.): <b>${t.idUploads}</b>${t.idUploads >= 800 ? ` <span class="tag" style="background:#dc2626;color:#fff">${t.idUploads >= 1000 ? "Register with the NPC now" : "Close to 1,000 — prepare NPC registration"}</span>` : " · NPC registration needed at 1,000+"}</p>
+      <h4 style="margin:12px 0 4px">Documents to check ${t.toCheck.length ? `<span class="tag" style="background:#dc2626;color:#fff">${t.toCheck.length}</span>` : ""}</h4>
+      <p class="small muted" style="margin:0 0 4px">Check: is the name the same as the shop / owner? Not edited, not expired, readable? If unsure, ask for another proof. Goal: decide within 3 days.</p>
+      ${t.toCheck.map((x) => { const days = x.sentAt ? Math.floor((Date.now() - x.sentAt) / 864e5) : 0; return `<div style="border-top:1px solid var(--line);padding:6px 0" class="small"><b>${esc(x.name)}</b>${x.creator ? ` <span class="tag">creator</span>` : ""} · ${KIND[x.kind] || x.kind}${x.number ? ` · no. ${esc(x.number)}` : ""}${x.round > 1 ? ` · <b>extra proof (round ${x.round})</b>` : ""} · <span class="${days >= 3 ? "" : "muted"}" ${days >= 3 ? 'style="color:#dc2626;font-weight:700"' : ""}>${days ? `${days} day${days > 1 ? "s" : ""} waiting${days >= 3 ? " — overdue" : ""}` : "today"}</span>${x.reason === "renamed" ? `<div style="color:#b45309">✏️ Shop renamed from “${esc(x.oldName || "")}” — does the document still match the new name?</div>` : ""}${x.expires ? `<div>📅 Valid until <b>${esc(x.expires)}</b> — check it matches the permit</div>` : ""}${x.kind !== "ownerId" ? `<div class="muted">Name to match: <b>${esc(x.name)}</b>${x.ownerName ? ` or owner <b>${esc(x.ownerName)}</b>` : ""}</div>` : ""}${x.ownerNote ? `<div>💬 Owner: ${esc(x.ownerNote)}</div>` : ""}${x.payName ? `<div class="muted">Payment account names: ${esc(x.payName)} — should match the business or the owner</div>` : ""}<div class="row wrap" style="gap:6px;margin-top:4px">${(x.urls || (x.url ? [x.url] : [])).map((u, i, a) => u ? `<a class="btn sm ghost" href="${esc(u)}" target="_blank" rel="noopener">View${a.length > 1 ? ` proof ${i + 1}` : ""} (15 min)</a>` : "").join("")}<button class="btn sm" data-va="approve:${x.storeId}:${x.kind}">Approve</button><button class="btn sm ghost" data-va="more:${x.storeId}:${x.kind}">📎 Ask for another proof</button><button class="btn sm ghost" data-va="reject:${x.storeId}:${x.kind}">Reject</button></div></div>`; }).join("") || `<p class="small muted">Nothing to check.</p>`}
+      <h4 style="margin:12px 0 4px">⚑ Shop reports ${t.reports.length ? `<span class="tag" style="background:#dc2626;color:#fff">${t.reports.length}</span>` : ""}</h4>
+      ${t.reports.map((r) => `<div style="border-top:1px solid var(--line);padding:6px 0" class="small"><b>${esc(r.storeName)}</b> (<a href="/m/${esc(r.slug)}" target="_blank" rel="noopener">/m/${esc(r.slug)}</a>) · ${esc(r.reason)}<div>${esc(r.details)}</div>${r.contact ? `<div class="muted">Contact: ${esc(r.contact)}</div>` : ""}<div class="row" style="gap:6px;margin-top:4px"><button class="btn sm" data-rp="resolve:${r.id}">Resolved</button><button class="btn sm ghost" data-rp="dismiss:${r.id}">Dismiss</button></div></div>`).join("") || `<p class="small muted">No open reports.</p>`}</div>`;
+    box.querySelectorAll("[data-va]").forEach((b) => (b.onclick = async () => { const [action, storeId, kind] = b.dataset.va.split(":"); const note = action === "reject" ? prompt("Why? (the owner sees this)", "The name on the document doesn't match the shop.") : action === "more" ? prompt("What should they send? (the owner sees this)", "The photo is blurry — please send a clear photo of the whole document.") : ""; if (note === null) return; let nameOk = false; if (action === "approve" && kind !== "ownerId") { nameOk = confirm("Does the name on the document match the shop name or the owner's name? (OK = yes, matches)"); if (!nameOk) return toast("Not approved — use “Ask for another proof” or Reject"); } await call("adminTrust", { verif: true, action, storeId, kind, note, nameOk }); toast(action === "more" ? "Asked for another proof" : action === "approve" ? "Approved — badge is live" : "Rejected"); loadTrust(); }));
+    box.querySelectorAll("[data-rp]").forEach((b) => (b.onclick = async () => { const [action, report] = b.dataset.rp.split(":"); const note = prompt("Note (optional):", "") ?? ""; await call("adminTrust", { report, action, note }); loadTrust(); }));
+  } catch (e) { box.innerHTML = `<p class="muted small">Trust: ${esc(e.message)}</p>`; }
+}
+
+async function loadPartners() {
+  const box = document.getElementById("partnerBox"); if (!box) return;
+  try {
+    const list = await call("adminPartners", {});
+    if (!list.length) { box.innerHTML = ""; return; }
+    box.innerHTML = `<div class="tile" style="margin-bottom:14px"><h3 style="margin:0 0 6px">🤝 Partners & investors ${list.some((x) => x.status === "new") ? `<span class="tag" style="background:#dc2626;color:#fff">${list.filter((x) => x.status === "new").length} new</span>` : ""}</h3>
+      ${list.map((x) => `<div style="border-top:1px solid var(--line);padding:8px 0" class="small"><b>${esc(x.name)}</b>${x.org ? ` · ${esc(x.org)}` : ""} · <span class="tag">${esc(x.kindLabel)}</span> · <span class="muted">${new Date(x.createdAt).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}</span>${x.status !== "new" ? ` · <span class="muted">${esc(x.status)}</span>` : ""}
+        <div style="white-space:pre-wrap;margin:4px 0">${esc(x.message)}</div><div>📇 ${esc(x.contact)}</div>${x.note ? `<div class="muted">Note: ${esc(x.note)}</div>` : ""}
+        <div class="row" style="gap:6px;margin-top:4px">${x.status === "new" ? `<button class="btn sm" data-pl="replied:${x.id}">✓ Replied</button>` : ""}<button class="btn ghost sm" data-pl="closed:${x.id}">Close</button></div></div>`).join("")}</div>`;
+    box.querySelectorAll("[data-pl]").forEach((b) => (b.onclick = async () => { const [status, id] = b.dataset.pl.split(":"); const note = prompt("Note (optional):", "") ?? ""; await call("adminPartners", { id, status, note }); loadPartners(); }));
+  } catch (e) { box.innerHTML = `<p class="muted small">Partners: ${esc(e.message)}</p>`; }
+}
+
 async function loadCollabAdmin() {
   const box = document.getElementById("collabBox"); if (!box) return;
   try {
-    const [c, st, claims] = await Promise.all([call("adminCollabConfig", {}), call("collabStatus", {}), call("adminProtectClaims", { action: "list" })]);
+    const [c, st, claims, appeals] = await Promise.all([call("adminCollabConfig", {}), call("collabStatus", {}), call("adminProtectClaims", { action: "list" }), call("adminXdealAppeals", {}).catch(() => [])]);
     const open = claims.filter((x) => ["pending", "flagged"].includes(x.status));
     box.innerHTML = `<div class="tile" style="margin-bottom:14px"><div class="row between wrap"><h3 style="margin:0">🤝 TapTayo Collab</h3><span class="pill ${c.live ? "active" : "trial"}">${c.live ? "LIVE" : "Coming soon"}</span></div>
       <p class="small">Creators listed: <b>${st.creators}/${c.target || 100}</b> (${esc(c.city || "Metro Manila")}) · waitlist ${c.waitlist || 0} (${c.waitBusiness || 0} businesses)</p>
       <div class="row wrap" style="gap:6px"><input data-ct type="number" value="${c.target || 100}" style="width:90px"/><button class="btn sm ${c.live ? "ghost" : ""}" data-live="${c.live ? "0" : "1"}">${c.live ? "Switch back to Coming soon" : "🚀 Go live"}</button></div>
       <h4 style="margin:14px 0 4px">🛡 Protect claims ${open.length ? `<span class="tag" style="background:#dc2626;color:#fff">${open.length}</span>` : ""}</h4>
       ${claims.slice(0, 20).map((x) => `<div style="border-top:1px solid var(--line);padding:6px 0" class="small"><b>${esc(x.storeName)}</b> → ${esc(x.creatorName)} · ${esc(x.code)} · ${esc(x.item?.desc || "")} · <b>₱${x.amount}</b> · ${x.status}${x.linked ? " ⚠️ linked accounts" : ""}${x.note ? `<div>${esc(x.note)}</div>` : ""}${["pending", "flagged"].includes(x.status) ? `<div class="row" style="gap:6px;margin-top:4px"><button class="btn sm" data-ca="approve:${x.id}">Approve → credits</button><button class="btn sm ghost" data-ca="reject:${x.id}">Reject</button></div>` : ""}</div>`).join("") || `<p class="small muted">No claims.</p>`}</div>`;
+    box.firstElementChild.insertAdjacentHTML("beforeend", `<h4 style="margin:14px 0 4px">⚖️ X-Deal appeals ${appeals.length ? `<span class="tag" style="background:#dc2626;color:#fff">${appeals.length}</span>` : ""}</h4>${appeals.map((x) => `<div style="border-top:1px solid var(--line);padding:6px 0" class="small"><b>${esc(x.bizName)}</b> cancelled ${esc(x.code)} (${esc(x.item?.desc || "")}) → creator <b>${esc(x.creatorName)}</b><div>Business: ${esc(x.reason)}</div><div>Creator: ${esc(x.note)}</div><div class="row" style="gap:6px;margin-top:4px"><button class="btn sm" data-xa="uphold:${x.id}">Uphold (creator was right)</button><button class="btn sm ghost" data-xa="reject:${x.id}">Reject</button></div></div>`).join("") || `<p class="small muted">No open appeals.</p>`}`);
+    box.querySelectorAll("[data-xa]").forEach((b) => (b.onclick = async () => { const [decide, id] = b.dataset.xa.split(":"); const note = prompt("Note to the creator (optional):", "") ?? ""; await call("adminXdealAppeals", { id, decide, note }); toast(decide === "uphold" ? "Upheld — trust point returned" : "Rejected"); loadCollabAdmin(); }));
     box.querySelector("[data-live]").onclick = async (e) => { if (!confirm(e.target.dataset.live === "1" ? "Open TapTayo Collab to everyone?" : "Switch Collab back to Coming soon?")) return; await call("adminCollabConfig", { set: true, live: e.target.dataset.live === "1", target: Number(box.querySelector("[data-ct]").value) || 100 }); loadCollabAdmin(); };
     box.querySelectorAll("[data-ca]").forEach((b) => (b.onclick = async () => { const [a, id] = b.dataset.ca.split(":"); const reason = a === "reject" ? prompt("Reason (the business sees this):", "No proof the item was sent.") : ""; if (reason === null) return; await call("adminProtectClaims", { action: a, id, reason }); toast(a === "approve" ? "Credits added" : "Rejected"); loadCollabAdmin(); }));
   } catch (e) { box.innerHTML = `<p class="muted small">Collab: ${esc(e.message)}</p>`; }

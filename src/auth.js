@@ -13,12 +13,12 @@ import { call } from "./firebase.js";
 const $ = (id) => document.getElementById(id);
 let mode = "login"; // login | signup
 let role = (() => { try { const t = new URLSearchParams(location.search).get("type") || ""; const r = new URLSearchParams(location.search).get("role") || ""; return ["client", "creator", "business"].includes(r) ? r : t === "freelance" ? "creator" : "business"; } catch { return "business"; } })();
-const ROLE_TXT = { client: ["Your name", "Juan dela Cruz", "Create your free account", "Book shops, hire creators and see all your bookings in one place."], creator: ["Your creator / page name", "Kain Tayo with Bea", "Let's set up your creator page", "Your rate card, offers and bookings — free to start."], business: ["Shop name", "Kapehan sa Kanto", "Let's set up your shop", "Takes about 10 minutes. Free for 14 days."] };
+const ROLE_TXT = { client: ["Your name", "Juan dela Cruz", "Create your free account", "Book shops, hire creators and see all your bookings in one place."], creator: ["Your creator / page name", "Kain Tayo with Bea", "Let's set up your creator page", "Your rate card, offers and bookings — free to start."], business: ["Shop name", "Kapehan sa Kanto", "Let's set up your shop", "Free account. Takes about 10 minutes."] };
 function drawRole() {
   document.querySelectorAll("[data-role]").forEach((b) => { const on = b.dataset.role === role; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); });
   const t = ROLE_TXT[role]; $("shopLabel").textContent = t[0]; $("a-shop").placeholder = t[1];
   $("adultField").classList.toggle("hidden", role !== "creator");
-  if (mode === "signup") { $("authTitle").textContent = t[2]; $("authSub").textContent = t[3]; $("ctaText").textContent = role === "business" ? "Start free trial" : "Create account"; }
+  if (mode === "signup") { $("authTitle").textContent = t[2]; $("authSub").textContent = t[3]; $("ctaText").textContent = "Create free account"; }
   try { localStorage.setItem("taptayo:role", role); if (role === "creator") localStorage.setItem("taptayo:edition", "freelance"); } catch {}
 }
 let showPw = false;
@@ -77,8 +77,8 @@ function setMode(next) {
   $("signupNote").classList.toggle("hidden", !signup);
   $("forgot").classList.toggle("hidden", signup);
   $("authTitle").textContent = signup ? "Let's set up your shop" : "Welcome back!";
-  $("authSub").textContent = signup ? "Takes about 10 minutes. Free for 14 days." : "Let's check today's orders.";
-  $("ctaText").textContent = signup ? "Start free trial" : "Log in";
+  $("authSub").textContent = signup ? "Free account. Takes about 10 minutes." : "Let's check today's orders.";
+  $("ctaText").textContent = signup ? "Create free account" : "Log in";
   $("password").placeholder = signup ? "At least 8 characters" : "Your password";
   $("password").autocomplete = signup ? "new-password" : "current-password";
   $("password").minLength = signup ? 8 : 6;

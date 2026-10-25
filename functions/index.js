@@ -24,8 +24,11 @@ if (typeof db.settings === "function") db.settings({ ignoreUndefinedProperties: 
 // Singapore region = closest to the Philippines. Must match VITE_FUNCTIONS_REGION.
 // Cloud Run counts (max instances × CPU) of EVERY function against the region's CPU quota, so most functions
 // stay small (2). The busy customer / counter functions get more room (HOT below).
-setGlobalOptions({ region: "asia-southeast1", maxInstances: 2 });
-const HOT = { maxInstances: 8 };
+// up to 20 copies of each function can run at once (pay per use — idle copies cost nothing); was 2, which queued customers at lunch peaks
+setGlobalOptions({ region: "asia-southeast1", maxInstances: 20 });
+// busiest customer-facing calls (orders, bookings, slots): up to 100 copies, each serving up to 40 customers at the same time.
+// Costs nothing while idle (pay per use); the per-store plan limits, rate limits and the budget alert still apply.
+const HOT = { maxInstances: 100, concurrency: 40, cpu: 1, memory: "512MiB" };
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -96,7 +99,8 @@ async function buildStore({ uid, token, data, orgId, copyFrom = null }) {
     if (preset.mode === "salon") store.settings.salon = { ...(store.settings.salon || {}), ownerWorks: setup.kind === "solo" || !!setup.ownerWorks, ...(setup.place !== "shop" ? { homeService: { enabled: true, fee: 0, note: "", travelMin: 30, areas: [], exclusive: true } } : {}), ...(setup.kind === "solo" ? { allowAnyone: true } : {}) };
     if (businessType === "spa") store.settings.salon = { ...store.settings.salon, rooms: [], roomBufferMin: 10, allowPax2: true, genderPick: true, intake: { enabled: true } };
   if (businessType === "spa") store.settings.policies = { ...(store.settings.policies || {}), salon: "• Please arrive 10 minutes early to change and relax. A 15-minute grace period applies; late arrivals may get a shorter session.\n• Cancel or reschedule at least 2 hours before your booking.\n• Tell your therapist about injuries, pregnancy, allergies or medical conditions before the session.\n• Repeated no-shows may require a reservation fee for future bookings.\n• Our therapists offer professional massage only — any inappropriate request ends the session without refund.\n• Home service: please prepare a safe, private space. Our rider drops off and picks up the therapist." };
-    if (preset.mode === "table" && setup.kind === "home") store.settings.service = { ...(store.settings.service || {}), dineIn: false, takeOut: false, pickup: true, delivery: true };
+    if (preset.mode === "table" && setup.kind === "home" && !setup.channels) store.settings.service = { ...(store.settings.service || {}), dineIn: false, takeOut: false, pickup: true, delivery: true };
+    if (preset.mode === "table" && setup.channels) { const f = foodServiceFrom(setup, store.settings); store.settings.service = f.service; store.settings.popup = f.popup; }
   }
   const batch = db.batch();
   batch.set(storeRef, store);
@@ -151,10 +155,82 @@ async function buildStore({ uid, token, data, orgId, copyFrom = null }) {
 function setupFrom(mode, s) {
   const k = String(s?.kind || "");
   if (mode === "salon") { const place = ["shop", "home", "both"].includes(s?.place) ? s.place : k === "solo" ? "both" : "shop"; return { kind: k === "solo" ? "solo" : "team", ownerWorks: k === "solo" || !!s?.ownerWorks, place }; }
-  if (mode === "table") return { kind: k === "home" ? "home" : "shop" };
+  if (mode === "table") {
+    // food business: how they sell (more than one), who works, when customers pay
+    const channels = Array.isArray(s?.channels) ? [...new Set(s.channels.filter((c) => FOOD_CHANNELS.includes(c)))] : null;
+    if (channels?.length) return { kind: channels.includes("dinein") ? "shop" : "home", channels, team: s?.team === "solo" ? "solo" : "staff", pay: s?.pay === "after" ? "after" : s?.pay === "first" ? "first" : channels.includes("dinein") && channels.length === 1 ? "after" : "first" };
+    return { kind: k === "home" ? "home" : "shop" };
+  }
   return { kind: "default" };
 }
-const ownerProfileNeeded = (mode, setup) => (mode === "salon" && (setup.kind === "solo" || setup.ownerWorks)) || (mode === "table" && setup.kind === "home");
+const FOOD_CHANNELS = ["dinein", "takeout", "popup", "home", "preorder", "online"];
+/** food setup → what the customer can choose + pay-first + pop-up / pre-order settings */
+function foodServiceFrom(setup, cur = {}) {
+  const c = new Set(setup?.channels || []); if (!c.size) return null;
+  return {
+    service: { ...(cur.service || {}), dineIn: c.has("dinein"), takeOut: c.has("dinein") || c.has("takeout") || c.has("popup"), pickup: c.has("home") || c.has("preorder") || c.has("online") || c.has("takeout"), delivery: c.has("home") || c.has("online"), payFirst: setup.pay === "first",
+      ...(c.has("preorder") ? { allowSchedule: true, preorderDays: cur.service?.preorderDays || 14, preorderLeadHours: cur.service?.preorderLeadHours ?? 24 } : {}) },
+    popup: { ...(cur.popup || {}), on: c.has("popup"), days: cur.popup?.days || (c.size === 1 ? [] : ["fri", "sat", "sun"]), from: cur.popup?.from ?? (c.size === 1 ? "" : "17:00"), to: cur.popup?.to ?? (c.size === 1 ? "" : "23:00") },
+  };
+}
+/** pop-up / night market mode is on right now? (days + hours, PH time; "17:00–02:00" crosses midnight) */
+function popupActive(cfg, now = Date.now()) {
+  if (!cfg?.on) return false;
+  const ph = new Date(now + 8 * 3600e3); const hm = ph.toISOString().slice(11, 16); let dayIdx = ph.getUTCDay();
+  const from = cfg.from || "", to = cfg.to || "";
+  if (from && to) { const inWin = to > from ? hm >= from && hm < to : hm >= from || hm < to; if (!inWin) return false; if (to < from && hm < to) dayIdx = (dayIdx + 6) % 7; }
+  const days = Array.isArray(cfg.days) ? cfg.days : [];
+  return !days.length || days.includes(["sun", "mon", "tue", "wed", "thu", "fri", "sat"][dayIdx]);
+}
+const NEW_SHOP_DP_CAP = 1500;
+/** NPC: about how many people have a valid ID on file (all shops) — registration is needed at 1,000+ */
+function countIdUpload(kind) { db.doc("config/idUploads").set({ total: FieldValue.increment(1), [kind]: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {}); }
+/** trust badges from real use: completed transactions, different customers, age, documents checked by TapTayo */
+const normName = (n) => String(n || "").toLowerCase().replace(/[^a-z0-9ñ]+/g, "");
+/** a checked document is tied to the shop name it was checked against: rename → back to review (badge hidden until rechecked) */
+async function recheckOnRename(storeRef, store) {
+  const v = store.verif || {}; const up = {};
+  for (const k of ["dti", "bir", "permit"]) if (v[k]?.status === "approved" && v[k].name && normName(v[k].name) !== normName(store.name)) up[k] = { ...v[k], status: "pending", reason: "renamed", oldName: v[k].name, at: Date.now() };
+  if (!Object.keys(up).length) return store;
+  await storeRef.set({ verif: up }, { merge: true });
+  notifyAdmin(`✏️ ${store.name} changed its name (was “${Object.values(up)[0].oldName}”) — documents back to review`);
+  return { ...store, verif: { ...v, ...up } };
+}
+function trustOf(store, now = Date.now()) {
+  const ms = (t) => (t?.toMillis ? t.toMillis() : Number(t) || 0);
+  const age = (now - (ms(store.createdAt) || now)) / 864e5, st = store.stats || {}, v = store.verif || {};
+  const tx = st.txDone || 0, cust = st.txCustomers || 0;
+  const today = new Date(now + 8 * 3600e3).toISOString().slice(0, 10);
+  const ok = (k) => v[k]?.status === "approved" && (!v[k].name || normName(v[k].name) === normName(store.name)) && (k !== "permit" || !v[k].expires || v[k].expires >= today);
+  const verified = age >= 30 && tx >= 50 && cust >= 20 && (ok("ownerId") || !!store.kycAt);
+  const badges = [...(verified ? ["verified"] : age >= 14 && tx >= 20 ? ["active"] : age < 30 ? ["new"] : []), ...(ok("dti") ? ["dti"] : []), ...(ok("bir") ? ["bir"] : []), ...(ok("permit") ? ["permit"] : []), ...(store.businessType === "freelance" && (store.kycAt || ok("ownerId")) ? ["creator"] : [])];
+  return { badges, tx, verified, newShop: age < 30 && !verified, since: ms(store.createdAt) || null };
+}
+/** one more completed transaction (+ a new customer) → trust counters; a referred shop that reaches 20 rewards the shop that invited it */
+async function countTx(storeId, before, after, doneList, docRef = null) {
+  if (!before || !after || after.test || after.txCounted || !doneList.includes(after.status) || doneList.includes(before.status)) return;
+  // each order / booking counts once — flipping the status back and forth can't pump the badge or referral counts
+  if (docRef) { const first = await db.runTransaction(async (tx) => { const d = await tx.get(docRef); if (d.data()?.txCounted) return false; tx.update(docRef, { txCounted: true }); return true; }).catch(() => false); if (!first) return; }
+  const sref = db.doc(`stores/${storeId}`); const key = String(after.customerKey || after.customerUid || "").slice(0, 60);
+  let fresh = false;
+  if (key) { const cref = db.doc(`stores/${storeId}/trustCust/${key}`); fresh = await db.runTransaction(async (tx) => { const c = await tx.get(cref); if (c.exists) return false; tx.set(cref, { at: Date.now() }); return true; }).catch(() => false); }
+  await sref.set({ stats: { txDone: FieldValue.increment(1), ...(fresh ? { txCustomers: FieldValue.increment(1) } : {}) } }, { merge: true });
+  const st = (await sref.get()).data() || {};
+  if ((st.stats?.txDone || 0) >= 20 && st.referredBy && !st.referralRewarded) await rewardReferral(storeId, st).catch((e) => logger.warn("referral", e.message));
+}
+/** the shop that invited this one gets 1 month: Basic for 30 days if it's on Free, else 30 more days of its plan */
+async function rewardReferral(storeId, st) {
+  const refStoreId = st.referredBy ? (await db.doc(`publicStores/${st.referredBy}`).get()).data()?.storeId : null;
+  if (!refStoreId || refStoreId === storeId || st.referralRewarded) return false;
+  const now = Date.now(); const rRef = db.doc(`stores/${refStoreId}/subscription/current`); const rs = (await rRef.get()).data(); if (!rs) return false;
+  const onFree = planOf(rs) === "free";
+  await rRef.update(onFree ? { plan: "starter", status: "active", paidUntil: Timestamp.fromMillis(now + MONTH_DAYS * 86400000), referralMonths: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }
+    : { paidUntil: Timestamp.fromMillis(Math.max(now, rs.paidUntil?.toMillis?.() || 0) + MONTH_DAYS * 86400000), referralMonths: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
+  await db.doc(`stores/${storeId}`).update({ referralRewarded: now });
+  notifyTelegram(refStoreId, "system", `🎉 ${st.name || "A shop you invited"} is now active on TapTayo — you got 1 free month${onFree ? " of Basic" : ""}!`);
+  return true;
+}
+const ownerProfileNeeded = (mode, setup) => (mode === "salon" && (setup.kind === "solo" || setup.ownerWorks)) || (mode === "table" && (setup.kind === "home" || setup.team === "solo"));
 /** Owner: change the business setup later (Tools → Business setup) */
 exports.changeSetup = onCall(async (req) => {
   const t = requireOwner(req);
@@ -162,8 +238,9 @@ exports.changeSetup = onCall(async (req) => {
   const setup = setupFrom(store.mode, req.data?.setup || {});
   const patch = { "settings.setup": setup, updatedAt: FieldValue.serverTimestamp() };
   if (store.mode === "salon") { patch["settings.salon.ownerWorks"] = setup.kind === "solo" || !!setup.ownerWorks; patch["settings.salon.homeService"] = { travelMin: 30, areas: [], exclusive: true, fee: 0, note: "", ...(store.settings?.salon?.homeService || {}), enabled: setup.place !== "shop" }; }
-  if (store.mode === "table" && setup.kind === "home") Object.assign(patch, { "settings.service.dineIn": false, "settings.service.takeOut": false, "settings.service.pickup": true, "settings.service.delivery": true });
-  if (store.mode === "table" && setup.kind === "shop") Object.assign(patch, { "settings.service.dineIn": true, "settings.service.takeOut": true });
+  if (store.mode === "table" && setup.channels) { const f = foodServiceFrom(setup, store.settings || {}); Object.assign(patch, { "settings.service": f.service, "settings.popup": f.popup }); }
+  else if (store.mode === "table" && setup.kind === "home") Object.assign(patch, { "settings.service.dineIn": false, "settings.service.takeOut": false, "settings.service.pickup": true, "settings.service.delivery": true });
+  else if (store.mode === "table" && setup.kind === "shop") Object.assign(patch, { "settings.service.dineIn": true, "settings.service.takeOut": true });
   await db.doc(`stores/${t.storeId}`).update(patch);
   // make sure the owner has a staff profile when they work too
   if (ownerProfileNeeded(store.mode, setup)) {
@@ -477,13 +554,14 @@ async function uncountBooking(storeId, createdAt) {
   await db.runTransaction(async (tx) => { const u = (await tx.get(ref)).data() || {}; if (u.month === mon && (u.bookings || 0) > 0) tx.set(ref, { bookings: u.bookings - 1 }, { merge: true }); }).catch(() => {});
 }
 const BOOKING_GONE = ["cancelled", "declined", "expired", "rejected"];
-const bookingEndHandler = async (ev) => {
+const bookingEndHandler = (doneList) => async (ev) => {
   const b = ev.data?.before?.data(), a = ev.data?.after?.data();
+  await countTx(ev.params.storeId, b, a, doneList, ev.data?.after?.ref).catch((e) => logger.warn("countTx", e.message));
   if (!b || !a || a.test || BOOKING_GONE.includes(b.status) || !BOOKING_GONE.includes(a.status)) return;
   await uncountBooking(ev.params.storeId, a.createdAt);
 };
-exports.usageApptEnd = onDocumentWritten("stores/{storeId}/appointments/{id}", bookingEndHandler);
-exports.usageStayEnd = onDocumentWritten("stores/{storeId}/stays/{id}", bookingEndHandler);
+exports.usageApptEnd = onDocumentWritten("stores/{storeId}/appointments/{id}", bookingEndHandler(["done"]));
+exports.usageStayEnd = onDocumentWritten("stores/{storeId}/stays/{id}", bookingEndHandler(["checked_out", "done"]));
 async function storeEntitled(storeId, key) {
   const sub = (await db.doc(`stores/${storeId}/subscription/current`).get()).data();
   return entitled(sub, key);
@@ -499,7 +577,7 @@ async function rebuildPublicStore(storeId) {
   const storeRef = db.doc(`stores/${storeId}`);
   const storeSnap = await storeRef.get();
   if (!storeSnap.exists) return;
-  const store = storeSnap.data();
+  const store = await recheckOnRename(storeRef, storeSnap.data());
 
   // no orderBy() on purpose: Firestore drops docs without the field — sort in code instead
   const bySort = (snap) => ({ docs: [...snap.docs].sort((a, b) => (Number(a.data().sortOrder) || 0) - (Number(b.data().sortOrder) || 0)) });
@@ -550,7 +628,7 @@ async function rebuildPublicStore(storeId) {
   const FLp = s.salon?.freelance || {};
   // creator profile (directory + "why book me"): only safe, public fields
   const cPort = store.businessType === "freelance" ? await safe("cportfolio", async () => (await storeRef.collection("portfolio").get()).docs.map((d) => d.data()).filter((x) => x.creator).sort((a, b) => (b.at || 0) - (a.at || 0)), []) : [];
-  const creator = store.businessType === "freelance" ? { xdeal: FLp.xdeal?.on && FLp.adult && store.kycAt && !store.xBanned ? { minTip: Number(FLp.xdeal.minTip) || 0, types: FLp.xdeal.types || XDEAL_TYPES, releaseDays: Number(FLp.xdeal.releaseDays) || 5, cap: xCap(store) } : null, xDone: store.stats?.xDone || 0, xRating: store.stats?.xRateN ? Math.round((store.stats.xRateSum / store.stats.xRateN) * 10) / 10 : null, kyc: !!store.kycAt, portfolio: cPort.slice(0, 12).map((x) => ({ url: x.url || "", thumb: x.thumb || (x.kind === "photo" ? x.url : null), kind: x.kind || "photo", label: x.label || "", ugc: !!x.ugc, brand: x.brand || "" })), portfolioCount: cPort.length, ugc: !!FLp.ugc, adult: !!FLp.adult, paused: FLp.availability?.paused && (!FLp.availability.until || FLp.availability.until > Date.now()) ? { until: FLp.availability.until || null } : null, sideJob: FLp.availability?.sideJob || "", maxPerWeek: Number(FLp.availability?.maxPerWeek) || 0, projectsDone: store.stats?.projectsDone || 0, verified: !!store.creatorVerified, niches: (FLp.niches || []).slice(0, 8), pitch: String(FLp.pitch || "").slice(0, 600), brands: (FLp.brands || []).slice(0, 12), city: FLp.city || "", offers: FLp.offers !== false, minFee: Number(FLp.minFee) || 0, rush: FLp.rush?.enabled ? { hours: Number(FLp.rush.hours) || 24, fee: Number(FLp.rush.fee) || 0 } : null, rushMiss: FLp.rushMiss || "refund", rushMissPct: Number(FLp.rushMissPct) || 10, release: FLp.release || null, idOnSite: !!FLp.requireIdOnSite, radiusKm: Number(s.salon?.homeService?.radiusKm) || 0, onTime: (store.stats?.delTotal || 0) >= 3 ? { rate: Math.round(((store.stats.delOnTime || 0) / store.stats.delTotal) * 100), n: store.stats.delTotal } : null, followers: (FLp.platforms || []).reduce((a, x) => a + (parseFloat(String(x.followers || "").replace(/,/g, "")) * (/m/i.test(x.followers || "") ? 1e6 : /k/i.test(x.followers || "") ? 1e3 : 1) || 0), 0) } : null;
+  const creator = store.businessType === "freelance" ? { xdeal: FLp.xdeal?.on && FLp.adult && store.kycAt && !store.xBanned ? { minTip: Number(FLp.xdeal.minTip) || 0, types: FLp.xdeal.types || XDEAL_TYPES, releaseDays: Number(FLp.xdeal.releaseDays) || 5, cap: xCap(store) } : null, xDone: store.stats?.xDone || 0, xCancels: store.stats?.xCancels || 0, xTrust: store.stats?.xTrust || 0, xRating: store.stats?.xRateN ? Math.round((store.stats.xRateSum / store.stats.xRateN) * 10) / 10 : null, kyc: !!store.kycAt, portfolio: cPort.slice(0, 12).map((x) => ({ url: x.url || "", thumb: x.thumb || (x.kind === "photo" ? x.url : null), kind: x.kind || "photo", label: x.label || "", ugc: !!x.ugc, brand: x.brand || "" })), portfolioCount: cPort.length, ugc: !!FLp.ugc, adult: !!FLp.adult, paused: FLp.availability?.paused && (!FLp.availability.until || FLp.availability.until > Date.now()) ? { until: FLp.availability.until || null } : null, sideJob: FLp.availability?.sideJob || "", maxPerWeek: Number(FLp.availability?.maxPerWeek) || 0, projectsDone: store.stats?.projectsDone || 0, verified: !!store.creatorVerified, niches: (FLp.niches || []).slice(0, 8), pitch: String(FLp.pitch || "").slice(0, 600), brands: (FLp.brands || []).slice(0, 12), city: FLp.city || "", offers: FLp.offers !== false, minFee: Number(FLp.minFee) || 0, rush: FLp.rush?.enabled ? { hours: Number(FLp.rush.hours) || 24, fee: Number(FLp.rush.fee) || 0 } : null, rushMiss: FLp.rushMiss || "refund", rushMissPct: Number(FLp.rushMissPct) || 10, release: FLp.release || null, idOnSite: !!FLp.requireIdOnSite, radiusKm: Number(s.salon?.homeService?.radiusKm) || 0, onTime: (store.stats?.delTotal || 0) >= 3 ? { rate: Math.round(((store.stats.delOnTime || 0) / store.stats.delTotal) * 100), n: store.stats.delTotal } : null, followers: (FLp.platforms || []).reduce((a, x) => a + (parseFloat(String(x.followers || "").replace(/,/g, "")) * (/m/i.test(x.followers || "") ? 1e6 : /k/i.test(x.followers || "") ? 1e3 : 1) || 0), 0) } : null;
   const fb = s.feedback || {};
   let reviews = [];
   if (fb.display === "3plus" || fb.display === "all") {
@@ -603,6 +681,8 @@ async function rebuildPublicStore(storeId) {
     kitchen: s.kitchen?.status === "busy" ? { status: "busy", busyExtra: s.kitchen.busyExtra || 0, busyPrep: Number(s.service?.busyPrep) || 35 } : null,
     locked, overLimit,
     service,
+    trust: trustOf(store),
+    popup: s.popup?.on ? { on: true, days: s.popup.days || [], from: s.popup.from || "", to: s.popup.to || "", note: String(s.popup.note || "").slice(0, 120) } : null,
     addons, pro,
     qrMode: s.qrMode || "per_table",
     callStaff: pro.callstaff ? s.callStaff || null : null,
@@ -779,6 +859,11 @@ exports.onOrderStatus = onDocumentWritten("stores/{storeId}/orders/{id}", async 
     const uRef = db.doc(`stores/${event.params.storeId}/stats/usage`);
     await db.runTransaction(async (tx) => { const u = (await tx.get(uRef)).data() || {}; if (u.day !== after.dayKey) return; tx.set(uRef, { cancelled: (u.cancelledDay === after.dayKey ? u.cancelled || 0 : 0) + 1, cancelledDay: after.dayKey }, { merge: true }); }).catch(() => {});
   }
+  if (before && after && before.status !== after.status && after.status === "ready" && after.readyPush?.endpoint) { // "ready — come back for it" (night market / pop-up / take-out)
+    const st = (await db.doc(`stores/${event.params.storeId}`).get()).data() || {};
+    await PUSH.sendOne(after.readyPush, { title: `🔔 Order #${after.orderNo} is ready!`, body: `${st.name || "The stall"}: please pick it up now.`, url: `/m/${st.slug || ""}`, tag: "ready-" + event.params.id }, { topic: "ready", ttl: 3600 }).catch(() => {});
+  }
+  await countTx(event.params.storeId, before, after, DONE_ST, event.data?.after?.ref).catch((e) => logger.warn("countTx", e.message));
   if (!after || after.test || !after.customerKey || !before) return;
   if (before.paid !== after.paid && before.status === after.status) { await stampOrder(event.params.storeId, event.data.after.ref, after).catch((e) => logger.warn("stamp", e.message)); return; }
   if (before.status === after.status) return;
@@ -1245,7 +1330,7 @@ exports.bookLaundryJob = onCall(withIndex("order", async (req) => {
   const d = req.data || {};
   const pubSnap = await db.doc(`publicStores/${String(d.slug || "")}`).get();
   if (!pubSnap.exists) throw new HttpsError("not-found", "Store not found.");
-  const pub = pubSnap.data(); const storeId = pub.storeId;
+  const pub = pubSnap.data(); const storeId = pub.storeId; requireOrderAccount(req, pub);
   if (pub.mode !== "laundry") throw new HttpsError("failed-precondition", "Not a laundry store.");
   if (pub.locked || pub.acceptOrders === false) throw new HttpsError("failed-precondition", "The shop is not accepting bookings right now."); if (pub.comingSoon && !(pub.testMode && pub.testMode.until > Date.now())) throw new HttpsError("failed-precondition", "This shop is not open yet — coming soon!");
   const cfg = pub.laundry || {};
@@ -1613,7 +1698,7 @@ async function writeAppointment(storeId, ctx, { lines, total, minutes, cats }, {
     startAt: Timestamp.fromDate(startAt), dayKey: dayKey(startAt, ctx.store.settings?.businessDayCutoff), notes: String(notes || "").slice(0, 300), homeService: homeService || null,
     ...(referral ? { referral } : {}),
     source, createdBy: staffName || null, confirmDeadline: deadline ? Timestamp.fromMillis(deadline) : null,
-    homeFee: homeService ? Number(homeService.fee) || 0 : 0,
+    homeFee: homeService ? (Number(homeService.fee) || 0) + (Number(homeService.prep?.fee) || 0) : 0,
     paid: false, paymentMethod: null, tip: 0, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
     ...(extra || {}),
   });
@@ -1641,7 +1726,16 @@ function homeServiceFor(ctx, d, customer, total) {
   let area = null;
   if (areas.length) { area = areas.find((a) => a.name.toLowerCase() === areaName.toLowerCase()); if (!area && !d.staff) throw new HttpsError("invalid-argument", "Choose your area for home service."); }
   if (!d.staff) radiusGuard(hs, customer.mapUrl);
-  return { address: customer.address, landmark: customer.landmark || "", mapUrl: customer.mapUrl || "", area: area?.name || areaName || "", fee: area ? Number(area.fee) || 0 : Number(hs.fee) || 0, feeConfirmed: !!area };
+  // what to prepare: the client says "I have it" / "Please bring" (staff bring it, + the owner's fee) / "ready" (things only the client can prepare)
+  const list = (hs.prep || []).filter((x) => x && x.name); const said = Array.isArray(d.homeService?.prep) ? d.homeService.prep : [];
+  let prep = null;
+  if (list.length && !d.staff) {
+    const items = list.map((x) => { const c = said.find((y) => String(y?.name || "") === x.name)?.choice; return { name: x.name, choice: x.bring ? (c === "bring" ? "bring" : "have") : "ready", fee: x.bring && c === "bring" ? Math.max(0, Number(x.fee) || 0) : 0 }; });
+    const missing = list.filter((x) => !x.bring && said.find((y) => y?.name === x.name)?.choice !== "ready");
+    if (missing.length) throw new HttpsError("failed-precondition", `Please confirm you'll prepare: ${missing.map((x) => x.name).join(", ")}.`);
+    prep = { items, bring: items.filter((x) => x.choice === "bring").map((x) => x.name), fee: round2(items.reduce((a, x) => a + x.fee, 0)) };
+  }
+  return { address: customer.address, landmark: customer.landmark || "", mapUrl: customer.mapUrl || "", area: area?.name || areaName || "", fee: area ? Number(area.fee) || 0 : Number(hs.fee) || 0, feeConfirmed: !!area, ...(prep ? { prep } : {}) };
 }
 /** travel radius: base pin + km (Settings → Home service / On location). Pin comes from the customer's "📍 My location". */
 const pinOf = (u) => { const m = /[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/.exec(String(u || "")) || /@(-?\d+\.\d+),(-?\d+\.\d+)/.exec(String(u || "")) || /^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)$/.exec(String(u || "").trim()); return m ? { lat: Number(m[1]), lng: Number(m[2]) } : null; };
@@ -1656,6 +1750,20 @@ function radiusGuard(hs, mapUrl) {
 }
 /** a logged-in client (real account, not the anonymous browser login) gets every booking in "My bookings" across all TapTayo shops */
 function realAccount(req) { const t = req.auth?.token || {}; return !!(req.auth?.uid && t.email && t.firebase?.sign_in_provider !== "anonymous"); }
+/** bookings (salon / spa / home service, stays, reservations, creator inquiries) need a TapTayo account — one tap with Google.
+ *  Demo shops skip it. config/auth { bookingsNeedAccount: false } turns it off everywhere (emergency switch). */
+let _authCfg = { at: 0, v: true };
+async function bookingsNeedAccount() { if (Date.now() - _authCfg.at < 60000) return _authCfg.v; const c = (await db.doc("config/auth").get().catch(() => null))?.data?.() || {}; _authCfg = { at: Date.now(), v: c.bookingsNeedAccount !== false }; return _authCfg.v; }
+async function requireBookingAccount(req, pub) {
+  if (pub?.demo || realAccount(req)) return;
+  if (!(await bookingsNeedAccount())) return;
+  throw new HttpsError("unauthenticated", "LOGIN_REQUIRED:Log in or create a free TapTayo account to book — it's one tap with Google, and all your bookings and receipts stay in one place.");
+}
+/** food orders: quick guest orders are allowed unless the owner turns them off (Settings → Ordering) */
+function requireOrderAccount(req, pub) {
+  if (pub?.demo || pub?.service?.guestOrders !== false || realAccount(req)) return;
+  throw new HttpsError("unauthenticated", "LOGIN_REQUIRED:This shop asks you to log in before ordering — it's one tap with Google.");
+}
 function withIndex(kind, fn) { return async (req) => {
   const r = await fn(req);
   try {
@@ -1684,6 +1792,30 @@ exports.myAccount = onCall(async (req) => {
   const businesses = (u.businesses || []).map((b) => ({ storeId: b.storeId, name: b.name, businessType: b.businessType }));
   return { roles: [...new Set([...(u.accountRoles || []), ...(u.storeId ? [businesses.some((b) => b.businessType === "freelance") ? "creator" : "business"] : [])])], hasStore: !!u.storeId, businesses, profile: u.profile || {}, adult: !!u.adult, email: u.email || req.auth.token.email };
 });
+/** logged in with Google on a phone that already booked as a guest (and that Google account existed before) →
+ *  move the guest's bookings to the account. Proof: the guest session's own ID token (only that browser has it). */
+exports.claimGuestBookings = onCall(async (req) => {
+  if (!realAccount(req)) throw new HttpsError("unauthenticated", "Log in first.");
+  let old; try { old = await admin.auth().verifyIdToken(String(req.data?.token || "")); } catch { throw new HttpsError("invalid-argument", "Couldn't confirm the guest session."); }
+  if (old.firebase?.sign_in_provider !== "anonymous" || old.uid === req.auth.uid) return { moved: 0 };
+  if (Date.now() / 1000 - (old.auth_time || 0) > 365 * 86400) return { moved: 0 };
+  const snap = await db.collection(`users/${old.uid}/bookings`).limit(40).get(); let moved = 0;
+  for (const x of snap.docs) {
+    const b = x.data(); const ref = db.doc(`stores/${b.storeId}/${BOOK_COLL[b.kind] || "orders"}/${b.id}`);
+    const doc = (await ref.get()).data(); if (doc && doc.customerUid === old.uid) await ref.update({ customerUid: req.auth.uid }).catch(() => {});
+    await db.doc(`users/${req.auth.uid}/bookings/${x.id}`).set(b, { merge: true }); await x.ref.delete(); moved++;
+  }
+  return { moved };
+});
+/** customer: "Don't text me reminders" on a stay or salon / spa booking */
+exports.reminderOptOut = onCall(async (req) => {
+  const { uid } = requireAuth(req); const d = req.data || {};
+  const coll = d.kind === "stay" ? "stays" : d.kind === "appt" ? "appointments" : null; if (!coll) throw new HttpsError("invalid-argument", "kind?");
+  const ref = db.doc(`stores/${String(d.storeId || "")}/${coll}/${String(d.id || "")}`); const x = (await ref.get()).data();
+  if (!x || !(x.customerUid === uid || (coll === "appointments" && ownsResv(x, uid)))) throw new HttpsError("permission-denied", "This is not your booking.");
+  await ref.update({ noSms: !!d.off, updatedAt: FieldValue.serverTimestamp() });
+  return { ok: true, noSms: !!d.off };
+});
 exports.myBookings = onCall(async (req) => {
   if (!realAccount(req)) throw new HttpsError("unauthenticated", "Log in to see your bookings.");
   const snap = await db.collection(`users/${req.auth.uid}/bookings`).orderBy("at", "desc").limit(40).get();
@@ -1710,7 +1842,7 @@ exports.bookAppointment = onCall(HOT, withIndex("appt", async (req) => {
   const { uid } = requireAuth(req);
   const d = req.data || {};
   const pub = (await db.doc(`publicStores/${String(d.slug || "")}`).get()).data(); if (!pub) throw new HttpsError("not-found", "Store not found.");
-  if (pub.locked || pub.acceptOrders === false) throw new HttpsError("failed-precondition", "Not accepting bookings right now."); if (pub.comingSoon && !(pub.testMode && pub.testMode.until > Date.now())) throw new HttpsError("failed-precondition", "This shop is not open yet — coming soon!");
+  if (pub.locked || pub.acceptOrders === false) throw new HttpsError("failed-precondition", "Not accepting bookings right now."); await requireBookingAccount(req, pub); if (pub.comingSoon && !(pub.testMode && pub.testMode.until > Date.now())) throw new HttpsError("failed-precondition", "This shop is not open yet — coming soon!");
   const storeId = pub.storeId; const ctx = await salonContext(storeId);
   const customer = custFrom(d.customer);
   if (customer.name.length < 2 || !customer.phone) throw new HttpsError("invalid-argument", "Name and phone number are required.");
@@ -1743,6 +1875,7 @@ exports.bookAppointment = onCall(HOT, withIndex("appt", async (req) => {
     if (hsCfg.requireId !== false && !onFile && !idUrl) throw new HttpsError("failed-precondition", "ID_REQUIRED:Please upload a valid ID for your first home service. Only the salon sees it, and it's kept for your next bookings.");
     homeService.idUrl = idUrl || onFile || null;
     if (idUrl && phoneKey.length >= 7) await db.doc(`stores/${storeId}/customers/${phoneKey}`).set({ homeIdUrl: idUrl, homeIdAt: FieldValue.serverTimestamp() }, { merge: true });
+    if (idUrl) countIdUpload("home");
   }
   const pax = d.pax === 2 && ctx.cfg.allowPax2 !== false ? 2 : 1;
   const gender = ["female", "male"].includes(d.gender) ? d.gender : null;
@@ -2489,6 +2622,33 @@ function cleanIntake(x) {
 // ===== Push notifications to staff phones (installed app / browser) =====
 const PUSH = require("./push.js").makePush(db);
 exports.pushKey = onCall(async () => ({ publicKey: (await PUSH.keys()).publicKey }));
+/** customer: "notify me when my order is ready" — the push subscription is kept on that one order only */
+exports.orderReadyPush = onCall(async (req) => {
+  const uid = req.auth?.uid; if (!uid) throw new HttpsError("unauthenticated", "Open your order page again.");
+  const d = req.data || {}; const sub = d.sub || {};
+  const ref = db.doc(`stores/${String(d.storeId || "")}/orders/${String(d.orderId || "")}`); const o = (await ref.get()).data();
+  if (!o || o.customerUid !== uid) throw new HttpsError("permission-denied", "This is not your order.");
+  if (!/^https:\/\/[^\s]+$/.test(String(sub.endpoint || "")) || String(sub.endpoint).length > 900 || !sub.keys?.p256dh || !sub.keys?.auth) throw new HttpsError("invalid-argument", "This phone can't receive notifications.");
+  await ref.update({ readyPush: { endpoint: sub.endpoint, keys: { p256dh: String(sub.keys.p256dh).slice(0, 200), auth: String(sub.keys.auth).slice(0, 60) } } });
+  return { ok: true };
+});
+/** staff: an item ran out after the customer paid (night market / pre-order) → refund recorded on the order and shown to the customer */
+exports.orderRefund = onCall(async (req) => {
+  const who = await staffFrom(req); const d = req.data || {};
+  const ref = db.doc(`stores/${who.storeId}/orders/${String(d.orderId || "")}`); const o = (await ref.get()).data(); if (!o) throw new HttpsError("not-found", "Order not found.");
+  if (d.step === "refunded") { // money handed back / sent
+    if (!o.refund) throw new HttpsError("failed-precondition", "No refund on this order.");
+    await ref.update({ "refund.status": "refunded", "refund.refundedAt": Date.now(), "refund.by": who.name || "", "refund.method": String(d.method || o.refund.method || "cash").slice(0, 20), "refund.ref": String(d.ref || "").slice(0, 60), updatedAt: FieldValue.serverTimestamp() });
+    return { ok: true };
+  }
+  if (!o.paid && !o.payment) throw new HttpsError("failed-precondition", "Nothing was paid yet — just edit or cancel the order.");
+  const amount = round2(Math.min(Number(o.total) || 0, Math.max(0, Number(d.amount) || 0))); if (!amount) throw new HttpsError("invalid-argument", "Enter the amount to refund.");
+  const items = (Array.isArray(d.items) ? d.items : []).map((x) => String(x).slice(0, 60)).slice(0, 20);
+  const reason = String(d.reason || "Sold out").slice(0, 120); const all = amount >= (Number(o.total) || 0) - 0.01;
+  await ref.update({ refund: { amount, items, reason, status: "due", method: String(d.method || (o.paymentMethod === "cash" ? "cash" : o.payment?.method || "gcash")).slice(0, 20), at: Date.now(), by: who.name || "" }, ...(all ? { status: "cancelled", cancelReason: `${reason} — refund ₱${amount.toLocaleString("en-PH")}` } : {}), updatedAt: FieldValue.serverTimestamp() });
+  await db.collection(`stores/${who.storeId}/audit`).add({ action: "refund", orderId: ref.id, orderNo: o.orderNo || null, amount, reason, by: who.name || "", at: FieldValue.serverTimestamp() }).catch(() => {});
+  return { ok: true, cancelled: all };
+});
 exports.pushSubscribe = onCall(async (req) => {
   const who = await staffFrom(req); const d = req.data || {}; const sub = d.sub || {};
   if (!/^https:\/\/[^\s]+$/.test(String(sub.endpoint || "")) || String(sub.endpoint).length > 900 || !sub.keys?.p256dh || !sub.keys?.auth) throw new HttpsError("invalid-argument", "This phone can't receive notifications.");
@@ -2730,7 +2890,7 @@ exports.salonRemindersTick = onSchedule({ schedule: "every 15 minutes", timeZone
   const tomorrow = new Date(now + 8 * 3600e3 + 86400e3).toISOString().slice(0, 10);
   const snap = await db.collectionGroup("appointments").where("startAt", ">=", Timestamp.fromMillis(now)).where("startAt", "<=", Timestamp.fromMillis(now + 36 * 3600e3)).get();
   for (const d of snap.docs) {
-    const a = d.data(); if (a.test || !["pending", "confirmed"].includes(a.status) || (a.groupPart || 1) > 1) continue;
+    const a = d.data(); if (a.test || a.noSms || !["pending", "confirmed"].includes(a.status) || (a.groupPart || 1) > 1) continue;
     if (a.tentative && a.visitConfirm?.status !== "yes") continue; // next visits are confirmed by the owner (manual contact)
     const num = phPhone(a.customer?.phone); if (!num) continue;
     const sc = await salonSmsCtx(d.ref.parent.parent.id, cache); if (!sc) continue;
@@ -3385,7 +3545,7 @@ exports.syncTables = onDocumentWritten("stores/{storeId}/tables/{id}", async (ev
 // ---------------------------------------------------------------------------
 const SERVICE_TYPES = ["dine_in", "take_out", "pickup", "delivery"];
 /** Test mode: on for a limited time (max 4 h). Test orders are numbered T1, T2… and never count in sales. */
-const SERVER_VERSION = "2026-10-25k"; // keep in sync with src/version.js — the dashboard warns when functions weren't deployed
+const SERVER_VERSION = "2026-10-25z"; // keep in sync with src/version.js — the dashboard warns when functions weren't deployed
 const testOn = (settings) => !!(settings?.demo || (settings?.testMode?.on && Number(settings.testMode.until || 0) > Date.now()));
 
 function dayKey(d = new Date(), cutoff = "00:00") {
@@ -3508,13 +3668,16 @@ exports.placeOrder = onCall(HOT, withIndex("order", async (req) => {
     customer = { name: pSnap.data().customer?.name || customer.name, phone: pSnap.data().customer?.phone || customer.phone, address: pSnap.data().customer?.address || customer.address, messenger: customer.messenger || pSnap.data().customer?.messenger || "" };
   }
 
+  requireOrderAccount(req, pub);
   const svc = pub.service || {};
   const allowed = { dine_in: svc.dineIn !== false, take_out: svc.takeOut !== false, pickup: !!svc.pickup, delivery: !!svc.delivery };
   if (pub.mode !== "table") {
     // laundry/booking (Step 5/6) — pickup only for now
     allowed.pickup = true; allowed.dine_in = false; allowed.take_out = false;
   }
-  if (!allowed[serviceType]) throw new HttpsError("failed-precondition", "This service type is not available.");
+  const popupNow = pub.mode === "table" && popupActive(pub.popup);
+  if (popupNow && !d.tableToken) allowed.dine_in = false; // night market / pop-up stall: order, pay, come back when it's ready
+  if (!allowed[serviceType]) throw new HttpsError("failed-precondition", popupNow && serviceType === "dine_in" ? "This stall takes pick-up orders only right now." : "This service type is not available.");
 
   // --- pre-order for reservation / event / VIP ---
   let resv = null;
@@ -3533,7 +3696,7 @@ exports.placeOrder = onCall(HOT, withIndex("order", async (req) => {
     table = parent.tableId ? { id: parent.tableId, label: parent.tableLabel, roomId: parent.roomId || null } : null;
   } else if (resv) {
     table = resv.tableId ? { id: resv.tableId, label: resv.tableLabel } : null;
-  } else if (serviceType === "dine_in" || (serviceType === "take_out" && !singleQR)) {
+  } else if (serviceType === "dine_in" || (serviceType === "take_out" && !singleQR && !popupNow)) { // night market: take-out from the stall QR, no table
     if (tableToken) {
       const tSnap = await db.collection(`stores/${storeId}/tables`).where("qrToken", "==", tableToken).limit(1).get();
       if (tSnap.empty || tSnap.docs[0].data().active === false) throw new HttpsError("not-found", "Invalid table QR.");
@@ -3563,7 +3726,15 @@ exports.placeOrder = onCall(HOT, withIndex("order", async (req) => {
     if (isNaN(when.getTime())) throw new HttpsError("invalid-argument", "Invalid schedule.");
     const leadMs = (Number(svc.scheduleLeadMin) || 30) * 60000;
     if (when.getTime() < Date.now() + leadMs) throw new HttpsError("failed-precondition", `Pickup/delivery time must be at least ${svc.scheduleLeadMin || 30} minutes from now.`);
-    if (when.getTime() > Date.now() + 7 * 86400000) throw new HttpsError("invalid-argument", "Advance orders are limited to 7 days ahead.");
+    const maxDays = Math.max(1, Math.min(60, Number(svc.preorderDays) || 7));
+    if (when.getTime() > Date.now() + maxDays * 86400000) throw new HttpsError("invalid-argument", `Advance orders are limited to ${maxDays} days ahead.`);
+    const leadH = Math.max(0, Math.min(168, Number(svc.preorderLeadHours) || 0));
+    if (leadH && d.preorder && when.getTime() < Date.now() + leadH * 3600000) throw new HttpsError("failed-precondition", `Pre-orders need at least ${leadH} hours' notice.`);
+    if (Number(svc.preorderDailyLimit) > 0 && when.getTime() > Date.now() + 12 * 3600000) { // catering / bilao: a cap per pickup day
+      const day0 = Date.parse(`${phYmd(when.getTime())}T00:00:00+08:00`);
+      const n = (await db.collection(`stores/${storeId}/orders`).where("scheduledAt", ">=", Timestamp.fromMillis(day0)).where("scheduledAt", "<", Timestamp.fromMillis(day0 + 86400000)).get()).docs.filter((x) => x.data().status !== "cancelled").length;
+      if (n >= Number(svc.preorderDailyLimit)) throw new HttpsError("resource-exhausted", "That day is fully booked for pre-orders — please pick another day.");
+    }
     if (!isOpenAt(pub.hours, when)) throw new HttpsError("failed-precondition", "The store is closed at that time.");
     scheduledAt = Timestamp.fromDate(when);
   }
@@ -3655,7 +3826,7 @@ exports.placeOrder = onCall(HOT, withIndex("order", async (req) => {
     risk: customerRec && ((customerRec.walkouts || 0) + (customerRec.noShows || 0) + (customerRec.failedDeliveries || 0)) ? { walkouts: customerRec.walkouts || 0, noShows: customerRec.noShows || 0, failed: customerRec.failedDeliveries || 0 } : null,
     pack: !!(parent && d.pack && ["dine_in"].includes(parent.serviceType)),
     source: "customer",
-    scheduledAt, isScheduled: !!scheduledAt,
+    scheduledAt, isScheduled: !!scheduledAt, ...(popupNow ? { popup: true, payFirst: true } : {}), ...(scheduledAt && d.preorder ? { preorder: true } : {}),
     reservationId: resv?.id || null, reservationCode: resv?.code || null, reservationKind: resv?.kind || null,
     roomId: table?.roomId || null, sessionId: table?.roomId ? await openSessionId(storeId, table.roomId) : null,
     paid: false, paymentMethod: payment?.method || null, payment, etaMinutes: null,
@@ -3942,6 +4113,47 @@ exports.privateFile = onCall({ memory: "512MiB" }, async (req) => {
 });
 
 /** Retention: delete private customer files older than settings.privacy.retentionDays (default 90). Runs nightly. */
+/** Daily trust upkeep (8 AM PH): permits expiring in 30 days → remind the owner; expired → badge off + tell the owner;
+ *  documents waiting 2+ days → remind the admin (goal: decide within 3 days). */
+exports.trustDaily = onSchedule({ schedule: "0 8 * * *", timeZone: "Asia/Manila", timeoutSeconds: 300 }, async () => {
+  const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10), in30 = new Date(Date.now() + 8 * 3600e3 + 30 * 864e5).toISOString().slice(0, 10);
+  const permits = await db.collection("stores").where("verif.permit.status", "==", "approved").limit(500).get();
+  for (const x of permits.docs) {
+    const p = x.data().verif.permit || {}; if (!p.expires) continue;
+    if (p.expires < today) {
+      await x.ref.set({ verif: { permit: { ...p, status: "expired", at: Date.now() } } }, { merge: true });
+      sendPush(x.id, { roles: ["manager"] }, { title: "⚠️ Your business permit expired", body: "The P badge is hidden until you upload the renewed permit (Settings → Get verified).", url: "/app/#settings" }).catch(() => {});
+      await rebuildPublicStore(x.id).catch(() => {});
+    } else if (p.expires <= in30 && !p.remindedAt) {
+      await x.ref.set({ verif: { permit: { remindedAt: Date.now() } } }, { merge: true });
+      sendPush(x.id, { roles: ["manager"] }, { title: "📅 Business permit expires soon", body: `Valid until ${p.expires}. Upload the renewed permit so your badge stays on.`, url: "/app/#settings" }).catch(() => {});
+    }
+  }
+  let waiting = 0, oldest = 0;
+  for (const kind of VERIF_KINDS) {
+    const snap = await db.collection("stores").where(`verif.${kind}.status`, "==", "pending").limit(100).get();
+    for (const x of snap.docs) { const at = x.data().verif?.[kind]?.at || 0; if (at && Date.now() - at > 2 * 864e5) { waiting++; oldest = Math.max(oldest, Math.floor((Date.now() - at) / 864e5)); } }
+  }
+  if (waiting) notifyAdmin(`🛡 ${waiting} document${waiting > 1 ? "s" : ""} waiting 2+ days (oldest: ${oldest} days). Goal is 3 days — taptayo.com/admin/`);
+});
+
+/** Weekly Firestore backup (Sunday 3 AM PH) → gs://<project>-backups/firestore/<date>. One-time setup in DEPLOY notes. */
+exports.weeklyBackup = onSchedule({ schedule: "0 3 * * 0", timeZone: "Asia/Manila", timeoutSeconds: 540 }, async () => {
+  const projectId = process.env.GCLOUD_PROJECT || process.env.GCP_PROJECT || JSON.parse(process.env.FIREBASE_CONFIG || "{}").projectId;
+  let FirestoreAdminClient; try { ({ v1: { FirestoreAdminClient } } = require("@google-cloud/firestore")); } catch (e) { logger.error("backup: @google-cloud/firestore missing", e); return; }
+  const client = new FirestoreAdminClient();
+  const bucket = `gs://${projectId}-backups/firestore/${new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10)}`;
+  try {
+    const [op] = await client.exportDocuments({ name: client.databasePath(projectId, "(default)"), outputUriPrefix: bucket, collectionIds: [] });
+    logger.info("backup started", op.name, bucket);
+    await db.doc("config/backup").set({ lastAt: Date.now(), lastPath: bucket, ok: true }, { merge: true });
+  } catch (e) {
+    logger.error("backup failed", e);
+    await db.doc("config/backup").set({ lastAt: Date.now(), ok: false, error: String(e.message || e).slice(0, 300) }, { merge: true });
+    notifyAdmin(`⚠️ Weekly backup failed: ${String(e.message || e).slice(0, 200)}`);
+  }
+});
+
 exports.privateFilesCleanup = onSchedule({ schedule: "40 3 * * *", timeZone: "Asia/Manila", timeoutSeconds: 540 }, async () => {
   const bucket = admin.storage().bucket();
   const stores = await db.collection("stores").select("settings.privacy").get();
@@ -4419,7 +4631,7 @@ exports.verifyPin = onCall(HOT, async (req) => {
     if (max < UNLIMITED) {
       const all = (await db.collection(`stores/${storeId}/staff`).where("active", "==", true).get()).docs.sort((a, b) => (a.data().createdAt?.toMillis?.() || 0) - (b.data().createdAt?.toMillis?.() || 0));
       const idx = all.findIndex((x) => x.id === staffId);
-      if (idx >= max) throw new HttpsError("resource-exhausted", max <= 1 ? `The ${PLANS[plan]?.name || "Free"} plan has 1 PIN (the owner's). Upgrade to Starter to add staff.` : `Only ${max} staff PINs can log in on the ${PLANS[plan]?.name} plan. Ask the owner to upgrade or add a staff slot.`);
+      if (idx >= max) throw new HttpsError("resource-exhausted", max <= 1 ? `The ${PLANS[plan]?.name || "Free"} plan has 1 PIN (the owner's). Upgrade to Basic to add staff.` : `Only ${max} staff PINs can log in on the ${PLANS[plan]?.name} plan. Ask the owner to upgrade or add a staff slot.`);
     } }
   const roles = s.roles || [];
   return { staffId, name: s.name, roles, token: await signStaff(storeId, { s: staffId, n: s.name, r: roles }) };
@@ -4943,6 +5155,7 @@ exports.createReservation = onCall(withIndex("resv", async (req) => {
   const pubSnap = await db.doc(`publicStores/${slug}`).get();
   if (!pubSnap.exists) throw new HttpsError("not-found", "Store not found.");
   const pub = pubSnap.data();
+  await requireBookingAccount(req, pub);
   if (pub.mode !== "table") throw new HttpsError("failed-precondition", "This store does not take reservations.");
   if (pub.locked) throw new HttpsError("failed-precondition", "Reservations are not being accepted right now."); if (pub.comingSoon && !(pub.testMode && pub.testMode.until > Date.now())) throw new HttpsError("failed-precondition", "This shop is not open yet — coming soon!");
 
@@ -5202,6 +5415,7 @@ const inquirySendFn = async (req) => {
   await maintGuard(req);
   const { uid } = requireAuth(req); const d = req.data || {};
   const pub = await inqStore(d.slug);
+  if (!d.fromStoreId) await requireBookingAccount(req, pub);
   if (pub.locked || pub.acceptOrders === false) throw new HttpsError("failed-precondition", "Not accepting inquiries right now.");
   const B = d.brief || {}; const C = d.customer || {};
   const brief = { kind: String(B.kind || "").slice(0, 40), brand: String(B.brand || "").trim().slice(0, 80), platform: String(B.platform || "").slice(0, 60), budget: String(B.budget || "").slice(0, 40), deadline: /^\d{4}-\d{2}-\d{2}$/.test(String(B.deadline || "")) ? B.deadline : "", date: /^\d{4}-\d{2}-\d{2}$/.test(String(B.date || "")) ? B.date : "", location: String(B.location || "").slice(0, 120), details: String(B.details || "").trim().slice(0, 1500), deliverables: String(B.deliverables || "").slice(0, 300), rush: !!B.rush };
@@ -5460,15 +5674,18 @@ exports.adminCollabConfig = onCall(async (req) => {
   return { ...c, waitlist: wl.size, waitBusiness: wl.docs.filter((x) => x.data().role === "business").length };
 });
 /** trust: new creators can take X-Deals up to ₱800 item value; ₱2,000 after 3 on-time X-Deals; verified = no cap */
-const xCap = (st) => (st?.creatorVerified ? 1e9 : (st?.stats?.xDone || 0) >= 3 ? 2000 : 800);
+const xCap = (st) => (st?.creatorVerified ? 1e9 : (st?.stats?.xDone || 0) >= 3 && (st?.stats?.xTrust || 0) > -2 ? 2000 : 800); // 2+ cancelled X-Deals keep a creator at the ₱800 limit
 async function xMonthly(storeId, mode) { // X-Deals + swaps started this month by a store vs its plan
   const { lim, plan } = await storeLimits(storeId, mode); const month = phYmd(Date.now()).slice(0, 7);
   const st = (await db.doc(`stores/${storeId}`).get()).data() || {}; const u = st.xUsage?.month === month ? st.xUsage.n || 0 : 0;
-  return { max: lim.xdealsPerMonth ?? 2, used: u, plan, month };
+  return { max: Math.min(lim.xdealsPerMonth ?? 2, xBizCapped(st) ? 2 : 1e9), used: u, plan, month, capped: xBizCapped(st) };
 }
+/** a business that cancels 30%+ of its accepted X-Deals (after 3+) can only send 2 a month */
+const xBizStats = (st) => { const a = st?.stats?.xBizAccepted || 0, c = st?.stats?.xBizCancels || 0; return { accepted: a, cancels: c, rate: a ? Math.round((c / a) * 100) : 0 }; };
+const xBizCapped = (st) => { const b = xBizStats(st); return b.accepted >= 3 && b.rate >= 30; };
 async function xCount(storeId, mode, who) {
   const m = await xMonthly(storeId, mode);
-  if (m.used >= m.max) throw new HttpsError("resource-exhausted", who === "creator" ? `Free plan: ${m.max} X-Deals a month. Creator Pro (₱${PLANS.creator.price}/month) gives you unlimited X-Deals.` : `Limit reached: ${m.max} X-Deals / swaps this month.`);
+  if (m.used >= m.max) throw new HttpsError("resource-exhausted", who === "creator" ? `Free plan: ${m.max} X-Deals a month. Creator Pro (₱${PLANS.creator.price}/month) gives you unlimited X-Deals.` : m.capped ? `Limit reached: ${m.max} X-Deals this month. Your shop cancels 30% or more of its X-Deals, so it can send ${m.max} a month for now.` : `Limit reached: ${m.max} X-Deals / swaps this month.`);
   await db.doc(`stores/${storeId}`).set({ xUsage: { month: m.month, n: m.used + 1 } }, { merge: true });
 }
 const cleanItem = (it) => { const type = XDEAL_TYPES.includes(it?.type) ? it.type : "product"; const desc = String(it?.desc || "").trim().slice(0, 200); const value = Math.max(0, Math.round(Number(it?.value) || 0)); if (desc.length < 3) throw new HttpsError("invalid-argument", "Describe what you'll give (e.g. “Food for 2”, “1 bottle serum”, “1-night staycation for 2”)."); if (!value) throw new HttpsError("invalid-argument", "Add the item's value (₱) — it sets the creator's trust limit and Protect cover."); return { type, desc, value }; };
@@ -5496,7 +5713,7 @@ exports.xdealSend = onCall(async (req) => {
     instructions: String(d.instructions || "").trim().slice(0, 800), deliverables: [], xDeliver: String(d.deliverables || "1 vertical video (30–60 s)").slice(0, 200), deadline: /^\d{4}-\d{2}-\d{2}$/.test(String(d.deadline || "")) ? d.deadline : "",
     fromStoreId: who.storeId, fromStoreName: st.name || "", fromOwnerUid: st.ownerUid || null, brief: { kind: "X-Deal", brand: st.name || "", details: String(d.instructions || item.desc).slice(0, 1500), location: item.type === "food" || item.type === "staycation" ? [st.contact?.address, st.contact?.city].filter(Boolean).join(", ") : "" },
     customer: { name: d.contactName || who.name || st.name, phone: String(d.phone || st.contact?.phone || "").slice(0, 30), email: "", messenger: st.contact?.messenger || "" }, customerUid: req.auth.uid,
-    code: "X-" + Array.from({ length: 5 }, () => CLAIM_ALPHABET[Math.floor(Math.random() * CLAIM_ALPHABET.length)]).join(""), offers: [], x: { log: [{ a: "sent_offer", at: Date.now() }] }, revisionsUsed: 0, createdAt: FieldValue.serverTimestamp(), createdAtMs: Date.now(), updatedAt: FieldValue.serverTimestamp(),
+    code: "X-" + Array.from({ length: 5 }, () => CLAIM_ALPHABET[Math.floor(Math.random() * CLAIM_ALPHABET.length)]).join(""), offers: [], x: { log: [{ a: "sent_offer", at: Date.now() }], biz: xBizStats(st) }, revisionsUsed: 0, createdAt: FieldValue.serverTimestamp(), createdAtMs: Date.now(), updatedAt: FieldValue.serverTimestamp(),
   });
   notifyTelegram(pub.storeId, "reservation", `🎁 X-Deal from ${st.name}: ${item.desc} (₱${item.value})${tip ? ` + ₱${tip} tip` : ""}`);
   sendPush(pub.storeId, { roles: ["manager"] }, { title: "🎁 New X-Deal", body: `${st.name} · ${item.desc}`, url: "/app/#projects", tag: "x-" + ref.id });
@@ -5517,13 +5734,35 @@ exports.xdealAction = onCall(async (req) => {
   const upd = (p) => ref.update({ ...p, updatedAt: FieldValue.serverTimestamp() });
   const need = (s, st) => { if (s === "business" && isBiz) side = "business"; if (s === "creator" && isCreator) side = "creator"; if (side !== s) throw new HttpsError("permission-denied", s === "creator" ? "Only the creator can do that." : "Only the business can do that."); if (st && !st.includes(q.status)) throw new HttpsError("failed-precondition", "Not at this step."); };
   const A = d.action;
-  if (A === "accept") { need("creator", ["negotiating"]); const cst = (await db.doc(`stores/${d.storeId}`).get()).data() || {}; await xCount(d.storeId, "salon", "creator"); const days = Math.max(1, Math.min(30, parseInt(d.releaseDays, 10) || cst.settings?.salon?.freelance?.xdeal?.releaseDays || 5)); await upd({ status: "accepted", releaseDays: days, termsAt: now, ...log("accepted", { releaseDays: days }) }); notifyTelegram(q.fromStoreId, "reservation", `✅ ${cst.name} accepted your X-Deal ${q.code} — video ${days} day(s) after they receive the item.`); return { ok: true }; }
+  if (A === "accept") { need("creator", ["negotiating"]); if (q.fromStoreId) await db.doc(`stores/${q.fromStoreId}`).set({ stats: { xBizAccepted: FieldValue.increment(1) } }, { merge: true }); const cst = (await db.doc(`stores/${d.storeId}`).get()).data() || {}; await xCount(d.storeId, "salon", "creator"); const days = Math.max(1, Math.min(30, parseInt(d.releaseDays, 10) || cst.settings?.salon?.freelance?.xdeal?.releaseDays || 5)); await upd({ status: "accepted", releaseDays: days, termsAt: now, ...log("accepted", { releaseDays: days }) }); notifyTelegram(q.fromStoreId, "reservation", `✅ ${cst.name} accepted your X-Deal ${q.code} — video ${days} day(s) after they receive the item.`); return { ok: true }; }
   if (A === "decline") { if (!["negotiating", "accepted"].includes(q.status) || (side === "business" && q.status !== "negotiating")) throw new HttpsError("failed-precondition", "Too late to decline — use the dispute chat."); await upd({ status: "declined", declinedBy: side, reason: String(d.reason || "").slice(0, 200), ...log("declined") }); return { ok: true }; }
   if (A === "sent") { need("business", ["accepted"]); await upd({ status: "sent", "x.sentAt": now, "x.sentProof": String(d.proof || "").slice(0, 300), "x.tracking": String(d.tracking || "").slice(0, 120), "x.courier": String(d.courier || "").slice(0, 40), ...log("item_sent") }); return { ok: true }; }
   if (A === "received") { need("creator", ["sent", "accepted"]); const due = now + (q.releaseDays || 5) * 86400000; await upd({ status: "received", "x.receivedAt": now, "x.receivedPhoto": String(d.photo || "").slice(0, 300), "x.dueAt": due, ...log("item_received") }); return { ok: true, dueAt: due }; }
   if (A === "notReceived") { need("creator", ["sent"]); await upd({ "x.notReceived": { at: now, note: String(d.note || "").slice(0, 200) }, ...log("not_received") }); notifyAdmin(`📦 X-Deal ${q.code}: creator says the item hasn't arrived.`); return { ok: true }; }
   if (A === "submit") { need("creator", ["received", "revision"]); const link = String(d.link || "").trim().slice(0, 500); const file = typeof d.file === "string" && d.file.startsWith(`xdeal/${d.storeId}/${d.id}/`) ? d.file : null; if (!/^https?:\/\//.test(link) && !file) throw new HttpsError("invalid-argument", "Upload the 1080p preview or paste a Drive link (with watermark)."); const late = X.dueAt && now > X.dueAt; await upd({ status: "submitted", "x.submittedAt": now, "x.preview": { link: link || null, file, at: now }, "x.late": !!late, ...log("video_submitted", { late: !!late }) }); notifyTelegram(q.fromStoreId, "reservation", `🎬 X-Deal ${q.code}: the video is ready to review.`); return { ok: true, late: !!late }; }
   if (A === "revise") { need("business", ["submitted"]); if ((q.revisionsUsed || 0) >= 1) throw new HttpsError("failed-precondition", "The 1 revision in the X-Deal is used."); await upd({ status: "revision", revisionsUsed: (q.revisionsUsed || 0) + 1, "x.revisionNote": String(d.note || "").slice(0, 300), ...log("revision", { note: String(d.note || "").slice(0, 120) }) }); return { ok: true }; }
+  if (A === "cancel") { // business doesn't like the video after a revision → it ends here; the creator keeps the item, trust −1
+    need("business", ["submitted", "revision"]);
+    if ((q.revisionsUsed || 0) < 1) throw new HttpsError("failed-precondition", "Ask for a revision first. You can cancel after the creator sends the revised preview.");
+    if (q.status === "revision") throw new HttpsError("failed-precondition", "Wait for the revised preview, then approve or cancel.");
+    const reason = String(d.reason || "").trim().slice(0, 300); if (reason.length < 5) throw new HttpsError("invalid-argument", "Tell the creator why (at least a few words).");
+    await upd({ status: "cancelled", cancelledBy: "business", cancelledAt: now, reason, "x.cancel": { at: now, reason }, ...log("cancelled", { note: reason }) });
+    await db.doc(`stores/${d.storeId}`).set({ stats: { xTrust: FieldValue.increment(-1), xCancels: FieldValue.increment(1) } }, { merge: true });
+    if (q.fromStoreId) await db.doc(`stores/${q.fromStoreId}`).set({ stats: { xBizCancels: FieldValue.increment(1) } }, { merge: true });
+    sendPush(d.storeId, { roles: ["manager"] }, { title: "X-Deal cancelled", body: `${q.fromStoreName || "The business"} cancelled ${q.code}. You keep the item. You can appeal within 7 days.`, url: "/app/#projects", tag: "x-" + d.id });
+    return { ok: true };
+  }
+  if (A === "appeal") { // creator thinks the cancel was unfair → admin decides
+    need("creator", ["cancelled"]);
+    if (q.cancelledBy !== "business" || !X.cancel) throw new HttpsError("failed-precondition", "Only a cancel by the business can be appealed.");
+    if (X.appeal) throw new HttpsError("already-exists", "You already appealed this X-Deal.");
+    if (now - (X.cancel.at || now) > 7 * 86400000) throw new HttpsError("failed-precondition", "Appeals are open for 7 days after the cancel.");
+    const note = String(d.note || "").trim().slice(0, 500); if (note.length < 10) throw new HttpsError("invalid-argument", "Explain in a sentence or two why the cancel was unfair.");
+    await upd({ "x.appeal": { at: now, note, status: "open" }, ...log("appealed", { note }) });
+    await db.doc(`xAppeals/${d.storeId}_${d.id}`).set({ storeId: d.storeId, inqId: d.id, code: q.code, creatorName: (await db.doc(`stores/${d.storeId}`).get()).data()?.name || "", bizName: q.fromStoreName || "", bizStoreId: q.fromStoreId || null, item: q.item || null, reason: X.cancel.reason || "", note, preview: X.preview?.link || null, status: "open", createdAt: FieldValue.serverTimestamp() });
+    notifyAdmin(`⚖️ X-Deal appeal ${q.code}: ${note.slice(0, 120)}`);
+    return { ok: true };
+  }
   if (A === "approve") { need("business", ["submitted"]); await upd({ status: "approved", "x.approvedAt": now, ...log("approved") }); return { ok: true }; }
   if (A === "release") { need("creator", ["approved"]); const hi = String(d.link || "").trim().slice(0, 500); if (!/^https?:\/\//.test(hi)) throw new HttpsError("invalid-argument", "Paste the Google Drive link of the high-res video."); await upd({ status: "released", "x.releasedAt": now, "x.hiRes": hi, "x.postLink": String(d.postLink || "").slice(0, 500), ...log("released") }); return { ok: true }; }
   if (A === "confirmReleased") { need("business", ["released"]);
@@ -5559,7 +5798,9 @@ exports.creatorKyc = onCall(async (req) => {
   const idUrl = String(req.data?.idUrl || ""); if (!idUrl.startsWith(`priv:stores/${who.storeId}/private/`)) throw new HttpsError("invalid-argument", "Upload a photo of your valid ID.");
   const sel = String(req.data?.selfie || ""); 
   await db.doc(`stores/${who.storeId}/private/kyc`).set({ idUrl, selfie: sel.startsWith(`priv:stores/${who.storeId}/private/`) ? sel : null, at: Date.now(), by: req.auth.uid });
+  const had = (await db.doc(`stores/${who.storeId}`).get()).data()?.kycAt;
   await db.doc(`stores/${who.storeId}`).set({ kycAt: Date.now() }, { merge: true });
+  if (!had) countIdUpload("creator");
   return { ok: true };
 });
 
@@ -5659,6 +5900,91 @@ exports.xfileCleanup = onSchedule({ schedule: "every 6 hours", timeZone: "Asia/M
   const sw = await db.collection("swaps").where("status", "==", "done").limit(200).get();
   for (const x of sw.docs) { const s = x.data(); if (Math.min(s.downloads?.a || Infinity, s.downloads?.b || Infinity) < cut) for (const k of ["a", "b"]) { const f = s.files?.[k]?.file; if (f) { await bucket.file(f).delete().catch(() => {}); await x.ref.update({ [`files.${k}.file`]: null, [`files.${k}.deleted`]: Date.now() }); } } }
 });
+/** anyone: report a shop (scam, fake, unsafe) → TapTayo reviews it. One report per person per shop a day. */
+exports.reportShop = onCall(async (req) => {
+  const uid = req.auth?.uid; if (!uid) throw new HttpsError("unauthenticated", "Open the shop page again.");
+  const d = req.data || {}; const pub = (await db.doc(`publicStores/${String(d.slug || "")}`).get()).data(); if (!pub) throw new HttpsError("not-found", "Shop not found.");
+  const reason = ["scam", "fake", "unsafe", "wrong", "other"].includes(d.reason) ? d.reason : "other"; const details = String(d.details || "").trim().slice(0, 800);
+  if (details.length < 10) throw new HttpsError("invalid-argument", "Tell us what happened (a sentence or two).");
+  const id = `${pub.storeId}_${uid}_${phYmd(Date.now())}`; const ref = db.doc(`shopReports/${id}`);
+  if ((await ref.get()).exists) throw new HttpsError("already-exists", "Thanks — we already got your report today.");
+  await ref.set({ storeId: pub.storeId, slug: pub.slug, storeName: pub.name || "", reason, details, contact: String(d.contact || "").slice(0, 80), uid, status: "open", createdAt: FieldValue.serverTimestamp() });
+  await db.doc(`stores/${pub.storeId}`).set({ stats: { reports: FieldValue.increment(1) } }, { merge: true });
+  notifyAdmin(`⚑ Report on ${pub.name} (${reason}): ${details.slice(0, 140)}`);
+  return { ok: true };
+});
+/** owner: send DTI / BIR / owner ID for checking (private files; only TapTayo admin sees them) */
+exports.verifySubmit = onCall(async (req) => {
+  const who = await staffFrom(req); if (!hasRole(who, "manager")) throw new HttpsError("permission-denied", "Owner only.");
+  const d = req.data || {}; const kind = VERIF_KINDS.includes(d.kind) ? d.kind : null; if (!kind) throw new HttpsError("invalid-argument", "Pick a document.");
+  const path = String(d.file || ""); if (!path.startsWith(`priv:stores/${who.storeId}/private/`)) throw new HttpsError("invalid-argument", "Upload a photo or PDF of the document.");
+  const cur = (await db.doc(`stores/${who.storeId}`).get()).data()?.verif?.[kind] || {};
+  if (cur.status === "approved") throw new HttpsError("failed-precondition", "Already checked ✓");
+  let expires = null;
+  if (kind === "permit") {
+    expires = String(d.expires || (cur.status === "more" ? cur.expires : "") || "").slice(0, 10);
+    const today = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(expires)) throw new HttpsError("invalid-argument", "Enter the permit's expiry date (valid until).");
+    if (expires < today) throw new HttpsError("invalid-argument", "This permit has expired — upload the renewed one.");
+  }
+  const pref = db.doc(`stores/${who.storeId}/private/verif_${kind}`); const prev = (await pref.get()).data() || {};
+  // "send another proof": keep what they sent before so the checker sees everything together
+  const files = cur.status === "more" ? [...(prev.files || (prev.file ? [prev.file] : [])), path].slice(-5) : [path];
+  await pref.set({ file: path, files, number: String(d.number || prev.number || "").slice(0, 40), ownerNote: String(d.note || "").slice(0, 300), at: Date.now(), by: req.auth.uid });
+  await db.doc(`stores/${who.storeId}`).set({ verif: { [kind]: { status: "pending", at: Date.now(), round: (cur.status === "more" ? (cur.round || 1) + 1 : 1), note: "", reason: null, ...(expires ? { expires } : {}) } } }, { merge: true });
+  if (kind === "ownerId") countIdUpload("owner");
+  notifyAdmin(`🪪 ${kind.toUpperCase()} sent for checking by store ${who.storeId}`);
+  return { ok: true };
+});
+const VERIF_KINDS = ["dti", "bir", "permit", "ownerId"];
+/** admin: documents to check, shop reports, the ID counter */
+exports.adminTrust = onCall(async (req) => {
+  requireAdmin(req); const d = req.data || {};
+  if (d.verif && ["approve", "reject", "more"].includes(d.action)) {
+    const kind = VERIF_KINDS.includes(d.kind) ? d.kind : null; if (!kind) throw new HttpsError("invalid-argument", "kind?");
+    if (d.action !== "approve" && String(d.note || "").trim().length < 5) throw new HttpsError("invalid-argument", "Tell the owner what's wrong or what to send.");
+    const sref = db.doc(`stores/${String(d.storeId)}`); const sd = (await sref.get()).data() || {}; const cv = sd.verif?.[kind] || {}; const round = cv.round || 1;
+    if (d.action === "approve" && kind !== "ownerId" && d.nameOk !== true) throw new HttpsError("failed-precondition", "Confirm that the name on the document matches the shop (or the owner) first.");
+    await sref.set({ verif: { [kind]: { status: d.action === "approve" ? "approved" : d.action === "more" ? "more" : "rejected", at: Date.now(), round, note: String(d.note || "").slice(0, 300), reason: null, name: sd.name || "", ...(cv.expires ? { expires: cv.expires } : {}), remindedAt: null } } }, { merge: true });
+    if (d.action === "reject") await db.doc(`stores/${String(d.storeId)}/private/verif_${kind}`).delete().catch(() => {});
+    const KL = { dti: "DTI certificate", bir: "BIR registration", permit: "business permit", ownerId: "valid ID" }[kind];
+    sendPush(String(d.storeId), { roles: ["manager"] }, { title: d.action === "approve" ? `✅ Your ${KL} is checked — badge is live` : d.action === "more" ? `📎 Please send one more proof for your ${KL}` : `❌ Your ${KL} wasn't accepted`, body: d.action === "approve" ? "Customers now see the badge beside your name." : String(d.note || "").slice(0, 140), url: "/app/#settings" }).catch(() => {});
+    await rebuildPublicStore(String(d.storeId)).catch(() => {});
+    return { ok: true };
+  }
+  if (d.report && ["resolve", "dismiss"].includes(d.action)) { await db.doc(`shopReports/${String(d.report)}`).update({ status: d.action === "resolve" ? "resolved" : "dismissed", note: String(d.note || "").slice(0, 300), decidedAt: FieldValue.serverTimestamp() }); return { ok: true }; }
+  const [reps, ids] = await Promise.all([db.collection("shopReports").where("status", "==", "open").limit(50).get(), db.doc("config/idUploads").get()]);
+  const toCheck = [];
+  const sign = async (p) => { const path = String(p || "").replace(/^priv:/, ""); if (!path) return null; try { return (await admin.storage().bucket().file(path).getSignedUrl({ action: "read", expires: Date.now() + 15 * 60000 }))[0]; } catch { return null; } };
+  for (const kind of VERIF_KINDS) {
+    const snap = await db.collection("stores").where(`verif.${kind}.status`, "==", "pending").limit(30).get();
+    for (const x of snap.docs) { const f = (await db.doc(`stores/${x.id}/private/verif_${kind}`).get()).data() || {}; const files = f.files || (f.file ? [f.file] : []); const urls = await Promise.all(files.map(sign)); const v = x.data().verif?.[kind] || {};
+      toCheck.push({ storeId: x.id, name: x.data().name || "", kind, expires: v.expires || null, reason: v.reason || null, oldName: v.oldName || null, ownerName: x.data().ownerName || x.data().settings?.owner?.name || "", creator: x.data().businessType === "freelance", number: f.number || "", url: urls[urls.length - 1] || null, urls, ownerNote: f.ownerNote || "", round: v.round || 1, sentAt: v.at || f.at || null, payName: (x.data().settings?.payments?.methods || []).map((m) => m.accountName || m.name).filter(Boolean).join(", ") }); }
+  }
+  toCheck.sort((a, b) => (a.sentAt || 0) - (b.sentAt || 0));
+  const backup = (await db.doc("config/backup").get().catch(() => null))?.data?.() || null;
+  return { backup, toCheck, reports: reps.docs.map((x) => ({ id: x.id, ...x.data(), createdAt: x.data().createdAt?.toMillis?.() || null })), idUploads: ids.data()?.total || 0 };
+});
+
+/** admin: open X-Deal appeals; decide = "uphold" (the creator was right → trust back, the cancel counts against the business twice) or "reject" */
+exports.adminXdealAppeals = onCall(async (req) => {
+  requireAdmin(req); const d = req.data || {};
+  if (d.id && ["uphold", "reject"].includes(d.decide)) {
+    const ref = db.doc(`xAppeals/${String(d.id)}`); const a = (await ref.get()).data(); if (!a || a.status !== "open") throw new HttpsError("failed-precondition", "Already decided.");
+    const inq = db.doc(`stores/${a.storeId}/inquiries/${a.inqId}`);
+    if (d.decide === "uphold") {
+      await db.doc(`stores/${a.storeId}`).set({ stats: { xTrust: FieldValue.increment(1), xCancels: FieldValue.increment(-1) } }, { merge: true });
+      if (a.bizStoreId) await db.doc(`stores/${a.bizStoreId}`).set({ stats: { xBizCancels: FieldValue.increment(1) } }, { merge: true });
+    }
+    await inq.update({ "x.appeal.status": d.decide === "uphold" ? "upheld" : "rejected", "x.appeal.decidedAt": Date.now(), "x.appeal.adminNote": String(d.note || "").slice(0, 300) }).catch(() => {});
+    await ref.update({ status: d.decide === "uphold" ? "upheld" : "rejected", decidedAt: FieldValue.serverTimestamp(), adminNote: String(d.note || "").slice(0, 300) });
+    sendPush(a.storeId, { roles: ["manager"] }, { title: d.decide === "uphold" ? "Appeal upheld ✓" : "Appeal not upheld", body: `${a.code}: ${d.decide === "uphold" ? "your trust point is back." : "the cancel stays."}`, url: "/app/#projects", tag: "xa-" + a.inqId });
+    return { ok: true };
+  }
+  const snap = await db.collection("xAppeals").where("status", "==", "open").limit(50).get();
+  return snap.docs.map((x) => ({ id: x.id, ...x.data(), createdAt: x.data().createdAt?.toMillis?.() || null }));
+});
+
 exports.inquiryOwner = onCall(async (req) => { // the freelancer: quote, verify DP, deliver drafts, finish, decline
   const who = await staffFrom(req); if (!hasRole(who, "crew", "stylist")) throw new HttpsError("permission-denied", "Not allowed.");
   const d = req.data || {}; const ref = db.doc(`stores/${who.storeId}/inquiries/${String(d.id || "")}`); const q = (await ref.get()).data(); if (!q) throw new HttpsError("not-found", "Inquiry not found.");
@@ -5754,6 +6080,27 @@ exports.supportSend = onCall(async (req) => {
   await ref.update({ status: "open", lastAt: now, lastText: (text || "📷 Photo").slice(0, 120), lastFrom: "user", unreadAdmin: FieldValue.increment(1) });
   notifyAdmin(`💬 Support · ${th.storeName || th.name || "visitor"}${th.mode ? ` (${th.mode})` : ""}: ${(text || "📷 photo").slice(0, 300)}\nReply: taptayo.com/admin/#support`);
   return { threadId: ref.id };
+});
+/** Help page → "Interested in partnering or investing?" — goes to the admin (Admin → Partners & investors) */
+const PARTNER_KINDS = { partner: "Business partner", investor: "Investor", reseller: "Reseller / agent", media: "Media / press", other: "Other" };
+exports.partnerInquiry = onCall(async (req) => {
+  const { uid, token } = requireAuth(req); const d = req.data || {};
+  const name = String(d.name || "").trim().slice(0, 80), contact = String(d.contact || "").trim().slice(0, 100), org = String(d.org || "").trim().slice(0, 100);
+  const kind = PARTNER_KINDS[d.kind] ? d.kind : "other", msg = String(d.message || "").trim().slice(0, 2000);
+  if (name.length < 2) throw new HttpsError("invalid-argument", "Please add your name.");
+  if (!/@|\d{7,}/.test(contact.replace(/[\s-]/g, ""))) throw new HttpsError("invalid-argument", "Add an email or mobile number so we can reply.");
+  if (msg.length < 20) throw new HttpsError("invalid-argument", "Tell us a bit more (at least a sentence or two).");
+  const recent = await db.collection("partnerLeads").where("uid", "==", uid).limit(10).get();
+  if (recent.docs.filter((x) => (x.data().createdAt || 0) > Date.now() - 86400e3).length >= 2) throw new HttpsError("resource-exhausted", "Thanks — we already got your message. We'll reply soon.");
+  const ref = await db.collection("partnerLeads").add({ uid, storeId: token.storeId || null, name, contact, org, kind, message: msg, status: "new", createdAt: Date.now() });
+  notifyAdmin(`🤝 ${PARTNER_KINDS[kind]} · ${name}${org ? ` (${org})` : ""}: ${msg.slice(0, 300)}\nContact: ${contact}\nOpen: taptayo.com/admin/`);
+  return { id: ref.id };
+});
+exports.adminPartners = onCall(async (req) => {
+  requireAdmin(req); const d = req.data || {};
+  if (d.id) { const st = ["new", "replied", "closed"].includes(d.status) ? d.status : "replied"; await db.doc(`partnerLeads/${String(d.id)}`).update({ status: st, note: String(d.note || "").slice(0, 300), updatedAt: Date.now() }); return { ok: true }; }
+  const q = await db.collection("partnerLeads").orderBy("createdAt", "desc").limit(60).get();
+  return q.docs.map((x) => ({ id: x.id, ...x.data(), kindLabel: PARTNER_KINDS[x.data().kind] || "Other" })).filter((x) => d.all || x.status !== "closed");
 });
 exports.supportClose = onCall(async (req) => {
   const { uid } = requireAuth(req); const ref = db.doc(`supportThreads/${String(req.data?.threadId || "")}`); const th = (await ref.get()).data();
@@ -5965,13 +6312,8 @@ exports.adminUpdateSubscription = onCall(async (req) => {
   const patch = { updatedAt: FieldValue.serverTimestamp() };
 
   if (action === "activate") {
-    // owner referral: the first paid month of a referred business gives the referrer 1 free month
-    const st = (await db.doc(`stores/${storeId}`).get()).data() || {};
-    const refStoreId = st.referredBy ? (await db.doc(`publicStores/${st.referredBy}`).get()).data()?.storeId : null;
-    if (refStoreId && refStoreId !== storeId && !st.referralRewarded) {
-      const rRef = db.doc(`stores/${refStoreId}/subscription/current`); const rs = (await rRef.get()).data();
-      if (rs) { await rRef.update({ paidUntil: Timestamp.fromMillis(Math.max(now, rs.paidUntil?.toMillis?.() || 0) + MONTH_DAYS * 86400000), referralMonths: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() }); await db.doc(`stores/${storeId}`).update({ referralRewarded: now }); notifyTelegram(refStoreId, "daily", `🎉 ${st.name || "A business you invited"} just subscribed — you got 1 free month of TapTayo!`, { force: true }).catch(() => {}); }
-    }
+    // owner referral: a referred business that pays (or reaches 20 completed orders) gives the referrer 1 free month
+    { const st = (await db.doc(`stores/${storeId}`).get()).data() || {}; await rewardReferral(storeId, st).catch((e) => logger.warn("referral", e.message)); }
     const plan = PLANS[d.plan];
     if (!plan || d.plan === "trial") throw new HttpsError("invalid-argument", "Invalid plan.");
     const months = Math.max(1, Math.min(12, parseInt(d.months, 10) || 1));
@@ -6472,8 +6814,8 @@ function stayCfg(store) {
     cleaning: { minutes: Math.max(0, Math.min(480, Number(c.cleaning?.minutes ?? 60))), showGuests: c.cleaning?.showGuests !== false },
     promos: (c.promos || []).filter((x) => x && x.name && Number(x.percent) > 0).slice(0, 12).map((x, i) => ({ id: String(x.id || "p" + i), name: String(x.name).slice(0, 40), percent: Math.min(90, Number(x.percent)), days: (x.days || []).filter((d) => STAY_DK.includes(d)), applies: ["night", "short", "both"].includes(x.applies) ? x.applies : "both", from: x.from || "", until: x.until || "", start: x.start || "", end: x.end || "" })),
     loyalty: c.loyalty?.enabled ? { enabled: true, every: Math.max(2, Number(c.loyalty.every) || 5), percent: Math.min(100, Math.max(1, Number(c.loyalty.percent) || 20)) } : { enabled: false },
-    noIdOk: c.noIdOk !== false, kids: { freeUnder: Number(c.kids?.freeUnder ?? 7), countInPax: c.kids?.countInPax === true },
-    amenities: (c.amenities || []).filter((a) => a && a.name).slice(0, 20).map((a, i) => ({ id: String(a.id || "m" + i), name: String(a.name).slice(0, 40), unit: ["free", "head", "hour", "stay"].includes(a.unit) ? a.unit : "free", price: Math.max(0, Number(a.price) || 0) })),
+    reminders: c.reminders === true, noIdOk: c.noIdOk !== false, kids: { freeUnder: Number(c.kids?.freeUnder ?? 7), countInPax: c.kids?.countInPax === true },
+    amenities: ((c.amenities || []).some((a) => a && a.name) ? c.amenities : ["included", "per_head"].includes(c.pool?.mode) ? [{ id: "pool", name: "Swimming pool", unit: c.pool.mode === "per_head" ? "head" : "free", price: Number(c.pool.price) || 0 }] : []).filter((a) => a && a.name).slice(0, 20).map((a, i) => ({ id: String(a.id || "m" + i), name: String(a.name).slice(0, 40), unit: ["free", "head", "hour", "stay"].includes(a.unit) ? a.unit : "free", price: Math.max(0, Number(a.price) || 0), note: String(a.note || "").slice(0, 60) })),
     nearby: (c.nearby || []).filter((x) => x && x.name).slice(0, 20).map((x) => ({ name: String(x.name).slice(0, 50), kind: String(x.kind || "").slice(0, 20), mins: Number(x.mins) || null, map: String(x.map || "").slice(0, 300) })),
     cancel: { fullDays: Math.max(0, Number(c.cancel?.fullDays) || 0), partialDays: Math.max(0, Number(c.cancel?.partialDays) || 0), partialPct: Math.max(0, Math.min(100, Number(c.cancel?.partialPct) || 0)) },
     lastMinute: c.lastMinute?.enabled ? { enabled: true, percent: Math.min(80, Math.max(1, Number(c.lastMinute.percent) || 20)), after: c.lastMinute.after || "18:00" } : { enabled: false },
@@ -6587,7 +6929,7 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
   await maintGuard(req);
   const { uid } = requireAuth(req);
   const d = req.data || {};
-  const { pub, store, storeId, cfg } = await staySetup(d.slug);
+  const { pub, store, storeId, cfg } = await staySetup(d.slug); await requireBookingAccount(req, pub);
   if (pub.locked || pub.acceptOrders === false) throw new HttpsError("failed-precondition", "Not accepting bookings right now."); if (pub.comingSoon && !(pub.testMode && pub.testMode.until > Date.now())) throw new HttpsError("failed-precondition", "This shop is not open yet — coming soon!");
   const roomRef = db.doc(`stores/${storeId}/rooms/${String(d.roomId || "")}`); const room = (await roomRef.get()).data();
   if (!room || room.active === false) throw new HttpsError("not-found", "Room not available.");
@@ -6667,7 +7009,8 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
   const poolGuests = cfg.pool.mode === "per_head" ? Math.max(0, Math.min(guests, parseInt(d.poolGuests, 10) || 0)) : 0;
   const poolFee = round2(poolGuests * (Number(cfg.pool.price) || 0));
   const total = stayTotal({ subtotal, poolFee, addons, discount, noticeDiscount });
-  const downpayment = round2(total * (Number(cfg.downPct) || 0) / 100);
+  const trust = trustOf((await db.doc(`stores/${storeId}`).get()).data() || {});
+  const downpayment = Math.min(round2(total * (Number(cfg.downPct) || 0) / 100), trust.newShop ? NEW_SHOP_DP_CAP : Infinity); // new shops: max ₱1,500 upfront until Verified (anti-scam)
   const pm = (pub.payments || []).find((m) => m.id === d.payment?.methodId) || null;
   const refNo = String(d.payment?.refNo || "").trim().slice(0, 60);
   if (downpayment > 0 && pm && pm.type !== "cash" && pm.askRefBookings !== false && refNo.length < 4 && !d.payment?.proofUrl) throw new HttpsError("invalid-argument", `Enter the ${pm.name} reference number for the downpayment.`);
@@ -6689,6 +7032,7 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
   });
   if (!stayTest) await db.doc(`stores/${storeId}/customers/${phoneKey}`).set({ phone: customer.phone, name: customer.name, orders: FieldValue.increment(1), lastOrderAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   if ((room.icalImports || []).length) notifyTelegram(storeId, "reservation", `📅 Block ${room.name} ${short ? inYmd : `${inYmd} → ${outYmd}`} on ${(room.icalImports || []).map((x) => x.name || "your other sites").join(" / ")} too — their calendars only refresh every few hours.`);
+  if (!stayTest && d.waiver?.idPhotoUrl) countIdUpload("stay");
   notifyTelegram(storeId, "reservation", `${stayTest ? "🧪 TEST · " : ""}🏡 New stay ${code} · ${room.name} · ${short ? `${inYmd} ${short.startTime} · ⏳ ${short.hours}-hour stay` : `${inYmd} → ${outYmd} (${nights.length} night${nights.length > 1 ? "s" : ""})`} · ${customer.name} ${customer.phone} · ₱${total}${needsConfirm ? " (awaiting Messenger)" : ""}`);
   return { id: ref.id, storeId, code, needsConfirm };
 }));
@@ -6867,9 +7211,17 @@ exports.stayStaffAction = onCall(async (req) => {
   const storeId = token.storeId; if (!storeId) throw new HttpsError("permission-denied", "No store.");
   const d = req.data || {}; const now = Date.now(); const by = String(d.staffName || "").slice(0, 40);
   const store = (await db.doc(`stores/${storeId}`).get()).data(); const cfg = stayCfg(store);
-  if (d.action === "roomClean" || d.action === "roomCleaning" || d.action === "roomSkip") {
+  if (d.action === "roomClean" || d.action === "roomCleaning" || d.action === "roomSkip" || d.action === "roomMore") {
     const rRef = db.doc(`stores/${storeId}/rooms/${String(d.roomId || "")}`); const room = (await rRef.get()).data(); if (!room) throw new HttpsError("not-found", "Room not found.");
-    if (d.action === "roomCleaning") { await rRef.set({ housekeeping: { ...(room.housekeeping || {}), status: "cleaning", cleanerName: by, startedAt: now } }, { merge: true }); await nextGuestRoomState(storeId, String(d.roomId), { status: "cleaning", at: now, eta: now + cfg.cleaning.minutes * 60000 }); return { ok: true }; }
+    if (d.action === "roomCleaning") { const eta = now + cfg.cleaning.minutes * 60000; await rRef.set({ housekeeping: { ...(room.housekeeping || {}), status: "cleaning", cleanerName: by, startedAt: now, eta } }, { merge: true }); await nextGuestRoomState(storeId, String(d.roomId), { status: "cleaning", at: now, eta }); return { ok: true, eta }; }
+    if (d.action === "roomMore") { // caretaker needs more time → the guest's "ready around" moves, the owner sees it's still being cleaned
+      if (room.housekeeping?.status !== "cleaning") throw new HttpsError("failed-precondition", "Start cleaning first.");
+      const add = [10, 15, 30, 45, 60].includes(Number(d.minutes)) ? Number(d.minutes) : 15;
+      const eta = Math.max(now, Number(room.housekeeping.eta) || now) + add * 60000;
+      await rRef.set({ housekeeping: { ...room.housekeeping, eta, extraMin: (room.housekeeping.extraMin || 0) + add } }, { merge: true });
+      await nextGuestRoomState(storeId, String(d.roomId), { status: "cleaning", at: room.housekeeping.startedAt || now, eta });
+      return { ok: true, eta };
+    }
     if (d.action === "roomSkip") { // e.g. the guest barely used it / the owner checked it — logged, never blocks bookings
       await rRef.set({ housekeeping: { status: "clean", skipped: true, skipReason: String(d.reason || "").slice(0, 120), cleanerName: by, cleanedAt: now, readyAt: now } }, { merge: true });
       await nextGuestRoomState(storeId, String(d.roomId), { status: "ready", at: now }); return { ok: true };
@@ -7004,8 +7356,25 @@ exports.stayStaffAction = onCall(async (req) => {
 
 // overstay (past check-out + grace) → hourly charge, caretaker alerted (urgent if the next guest is coming);
 // room check not done by the deadline → deposit is returned in full (protects the guest)
+/** stays: SMS the guest the evening before check-in (6 PM+) — only shops with SMS set up; off with settings.stay.reminders = false */
+async function stayReminders(now) {
+  const hour = new Date(now + 8 * 3600e3).getUTCHours(); if (hour < 18 || hour >= 21) return;
+  const tomorrow = new Date(now + 8 * 3600e3 + 86400e3).toISOString().slice(0, 10); const ctx = new Map();
+  const snap = await db.collectionGroup("stays").where("checkIn", ">=", Timestamp.fromMillis(now)).where("checkIn", "<=", Timestamp.fromMillis(now + 40 * 3600e3)).get();
+  for (const d of snap.docs) {
+    const s = d.data(); if (s.test || s.remDay || s.noSms || s.status !== "confirmed") continue;
+    const ci = s.checkIn.toMillis(); if (new Date(ci + 8 * 3600e3).toISOString().slice(0, 10) !== tomorrow) continue;
+    const num = phPhone(s.customer?.phone); if (!num) continue;
+    const storeId = d.ref.parent.parent.id;
+    if (!ctx.has(storeId)) { let v = null; try { const store = (await db.doc(`stores/${storeId}`).get()).data(); if (store?.settings?.stay?.reminders === true && (await storeEntitled(storeId, "sms"))) { const key = (await db.doc(`stores/${storeId}/private/semaphore`).get()).data()?.apiKey; if (key && !inQuiet(store.settings?.sms)) v = { store, key, sender: store.settings?.sms?.senderName || "" }; } } catch {} ctx.set(storeId, v); }
+    const c = ctx.get(storeId); if (!c) continue;
+    const msg = `Hi ${(s.customer?.name || "").split(" ")[0]}! See you tomorrow at ${c.store.name}: ${s.roomName || "your room"}, check-in ${phHM(ci)} (${s.code}). Booking page: ${SITE}/m/${c.store.slug}`;
+    try { await semSend(c.key, [num], msg.slice(0, 300), c.sender); await d.ref.update({ remDay: Date.now() }); } catch (e) { logger.warn("stay reminder", e.message); }
+  }
+}
 exports.stayTick = onSchedule({ schedule: "every 10 minutes", timeZone: "Asia/Manila" }, async () => {
   const now = Date.now(); const cfgs = new Map();
+  await stayReminders(now).catch((e) => logger.warn("stay reminders", e));
   const cfgOf = async (storeId) => { if (!cfgs.has(storeId)) cfgs.set(storeId, stayCfg((await db.doc(`stores/${storeId}`).get()).data() || {})); return cfgs.get(storeId); };
   for (const x of (await db.collectionGroup("stays").where("status", "==", "checked_in").get()).docs) {
     const s = { id: x.id, ...x.data() }; const storeId = x.ref.parent.parent.id; const cfg = await cfgOf(storeId);

@@ -1,5 +1,7 @@
 import { FAQ, FAQ_CATS, faqSearch } from "./faq.js";
 import { mountSupportButton, openSupport } from "./support.js";
+import { auth, call } from "./firebase.js";
+import { signInAnonymously } from "firebase/auth";
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 let cat = "", q = "";
 const list = document.getElementById("list"), chips = document.getElementById("chips");
@@ -15,3 +17,14 @@ document.getElementById("q").oninput = (e) => { q = e.target.value.trim(); draw(
 document.getElementById("chat").onclick = () => openSupport({ start: "new" });
 mountSupportButton();
 draw();
+// 🤝 partner / investor form → Admin
+const pf = document.getElementById("pform"), pmsg = document.getElementById("pmsg");
+if (location.hash === "#partner") pf?.closest("details")?.setAttribute("open", "");
+pf?.addEventListener("submit", async (e) => {
+  e.preventDefault(); const f = new FormData(pf), btn = pf.querySelector("button"); btn.disabled = true; pmsg.textContent = "Sending…"; pmsg.style.color = "";
+  try {
+    await auth.authStateReady?.(); if (!auth.currentUser) await signInAnonymously(auth);
+    await call("partnerInquiry", Object.fromEntries(f.entries()));
+    pf.innerHTML = `<p class="msg">✓ Thank you! We got your message and will reply within a few days.</p>`;
+  } catch (x) { pmsg.textContent = x.message || "Couldn't send. Please try again."; pmsg.style.color = "#B91C1C"; btn.disabled = false; }
+});

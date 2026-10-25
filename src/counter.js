@@ -46,7 +46,7 @@ const busyExtra = () => (kst() === "busy" || kst() === "paused") ? Number(store?
 const prepDefault = () => Number(store?.settings?.service?.prepDefault) || 15;
 const busyPrep = () => Number(store?.settings?.service?.busyPrep) || 35;
 /** pick the prep time (10 / 15 / 20, +5 per tap; busy adds its extra); later-scheduled orders are accepted for their time instead */
-const payFirstHold = (o) => !!store.settings?.service?.payFirst && ["dine_in", "take_out"].includes(o.serviceType) && !o.paid && !o.parentPaidFirst;
+const payFirstHold = (o) => !!(store.settings?.service?.payFirst || o.payFirst) && ["dine_in", "take_out"].includes(o.serviceType) && !o.paid && !o.parentPaidFirst;
 function acceptPicker(o, extra = {}) {
   if (payFirstHold(o)) { if (confirm(`Pay first is on.\n\nOrder #${o.orderNo} (${money(o.total)}) isn't paid yet. Collect the payment now?`)) askMethod([o]); return; }
   const later = isLater(o);
@@ -318,6 +318,22 @@ function orderCard(o, compact = false) {
   if (o.status === flow[0][0] && store.mode !== "table") { const b = html(`<button class="k-btn prep">Accept</button>`); b.onclick = () => set({ status: flow[1][0], acceptedAt: serverTimestamp() }); acts.appendChild(b); }
   if (store.mode === "table" && feat("editorder") && !["completed", "delivered", "picked_up", "cancelled"].includes(o.status) && (isManager() || !o.paid)) {
     const e = html(`<button class="k-btn">✏️ Edit</button>`); e.onclick = () => editOrder(o); acts.appendChild(e);
+  }
+  // paid, then an item ran out (night market, pre-order) → record the refund; the customer sees it on their order page
+  if (store.mode === "table" && (o.paid || o.payment) && !o.refund && o.status !== "cancelled") {
+    const rf = html(`<button class="k-btn">↩️ Sold out → refund</button>`);
+    rf.onclick = async () => {
+      const names = (o.items || []).map((l) => `${l.qty}× ${l.name}`);
+      const which = prompt(`What ran out? (the customer sees this)\n\n${names.join("\n")}`, names.length === 1 ? names[0] : ""); if (which === null) return;
+      const amt = prompt(`Refund amount (₱) — the whole order is ${money(o.total)}:`, String(o.total)); if (amt === null) return;
+      try { const me = getActiveStaff(storeId); const r = await call("orderRefund", { orderId: o.id, amount: Number(amt), items: which ? [which] : [], reason: "Sold out", staffToken: me?.token || null }); toastMsg(r.cancelled ? "Order cancelled — refund due" : "Refund recorded — mark it refunded when you hand it back"); } catch (e) { alert(e.message); }
+    };
+    acts.appendChild(rf);
+  }
+  if (o.refund && o.refund.status !== "refunded") {
+    const rd = html(`<button class="k-btn ready">✓ Refund ${money(o.refund.amount)} given</button>`);
+    rd.onclick = async () => { const how = prompt("How did you refund? (cash / gcash + reference)", o.refund.method || "cash"); if (how === null) return; try { const me = getActiveStaff(storeId); await call("orderRefund", { orderId: o.id, step: "refunded", method: how.split(/\s+/)[0], ref: how.split(/\s+/).slice(1).join(" "), staffToken: me?.token || null }); toastMsg("Refund marked as given"); } catch (e) { alert(e.message); } };
+    acts.appendChild(rd);
   }
   if (store.mode === "table" && feat("editorder") && !["completed", "delivered", "picked_up", "cancelled"].includes(o.status)) {
     const due = o.acceptedAt?.toMillis?.() && o.etaMinutes ? o.acceptedAt.toMillis() + o.etaMinutes * 60000 : 0;

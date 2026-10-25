@@ -16,7 +16,7 @@ export function renderBranchesPage(root, ctx) {
     const list = root.querySelector("#list");
     const branches = (org?.branches || []).filter((b) => !b.archived);
     const allowed = branchesAllowed(ctx.sub);
-    root.querySelector("#quota").innerHTML = `${branches.length} of ${allowed} branch${allowed > 1 ? "es" : ""} used${branches.length >= allowed ? ` — <a href="#billing">add “+1 branch”</a> (₱${ADDONS.branch.price}/mo each, Starter plan and up)` : ""}.`;
+    root.querySelector("#quota").innerHTML = `${branches.length} of ${allowed} branch${allowed > 1 ? "es" : ""} used${branches.length >= allowed ? ` — <a href="#billing">add “+1 branch”</a> (₱${ADDONS.branch.price}/mo each, Basic plan and up)` : ""}.`;
     list.innerHTML = "";
     branches.forEach((b) => {
       const isMain = b.storeId === org.mainStoreId, isCur = b.storeId === storeId;

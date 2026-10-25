@@ -2,13 +2,13 @@
 // createStore is functions/presets.js — keep the two in sync.
 export const PRESETS = {
   cafe: {
-    title: "Café / Restaurant",
+    title: "Food business",
     icon: "☕",
     mode: "table",
     labels: { items: "Menu", unit: "Table", order: "Order" },
     categories: ["Drinks", "Food", "Desserts"],
     theme: { preset: "taptayo" },
-    blurb: "QR per table, kitchen & counter screens, delivery, reservations, events & VIP rooms",
+    blurb: "Café, resto, karinderya, food stall, night market, home-based or catering — QR orders, kitchen screens, pay first, ready alerts",
   },
   restaurant: {
     hidden: true,

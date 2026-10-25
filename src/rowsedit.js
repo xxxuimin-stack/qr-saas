@@ -13,8 +13,8 @@ function cell(f, v) {
 }
 
 /** mount into host; returns () => rows (values read from the DOM) */
-export function rowsEditor(host, rows, fields, { addLabel = "+ Add", max = 30 } = {}) {
-  host.innerHTML = `<div data-list></div><button type="button" class="btn sm ghost" data-add>${esc(addLabel)}</button>`;
+export function rowsEditor(host, rows, fields, { addLabel = "+ Add", max = 30, presets = [] } = {}) {
+  host.innerHTML = `<div data-list></div>${presets.length ? `<div class="row wrap" style="gap:6px;margin:4px 0 8px"><span class="small muted" style="align-self:center">Quick add:</span>${presets.map((p, i) => `<button type="button" class="btn sm ghost" data-pre="${i}">${esc(p.label)}</button>`).join("")}</div>` : ""}<button type="button" class="btn sm ghost" data-add>${esc(addLabel)}</button>`;
   const list = host.querySelector("[data-list]");
   const add = (r = {}) => {
     if (list.children.length >= max) return;
@@ -27,6 +27,7 @@ export function rowsEditor(host, rows, fields, { addLabel = "+ Add", max = 30 } 
   };
   (rows || []).forEach(add);
   host.querySelector("[data-add]").onclick = () => add({});
+  host.querySelectorAll("[data-pre]").forEach((b) => (b.onclick = () => { const p = presets[Number(b.dataset.pre)]; if ([...list.querySelectorAll('[data-f="name"]')].some((i) => i.value.trim().toLowerCase() === String(p.row.name || "").toLowerCase())) return; add({ ...p.row }); }));
   return () => [...list.children].map((el) => {
     const o = { id: el.dataset.id };
     fields.forEach((f) => {

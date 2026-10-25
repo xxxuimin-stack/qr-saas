@@ -191,7 +191,7 @@ export function mountCalendar(el, o) {
       <p><b>${fmtWhen(d.getTime())}</b> → ${fmtTime(d.getTime() + dur * 60000)} · ~${dur} min${a.providerName ? ` · ${esc(a.providerName)}` : ""}</p>
       <p><b>${esc(a.customer?.name || "")}</b>${a.customer?.phone ? ` · ${esc(a.customer.phone)}` : ""} ${msgrBtn(a.customer?.messenger)}</p>
       <ul>${(a.items || []).map((l) => `<li>${esc(l.name)} · ${money(l.price)}</li>`).join("")}</ul>
-      ${a.homeService ? `<p>🏠 ${esc(a.homeService.address || "")}${a.homeService.landmark ? ` · ${esc(a.homeService.landmark)}` : ""}${a.homeService.area ? ` · <b>${esc(a.homeService.area)}</b>` : ""} · fee ${money(a.homeFee || 0)}${map ? ` · <a href="${esc(map)}" target="_blank" rel="noopener">Open map ↗</a>` : ""}</p><p class="small">🚗 ${a.travelBefore || 0} min travel before & after is blocked.</p>` : ""}
+      ${a.homeService?.prep?.bring?.length ? `<div class="small" style="color:#b45309;font-weight:600">🧺 Bring: ${esc(a.homeService.prep.bring.join(", "))}</div>` : ""}${a.homeService ? `<p>🏠 ${esc(a.homeService.address || "")}${a.homeService.landmark ? ` · ${esc(a.homeService.landmark)}` : ""}${a.homeService.area ? ` · <b>${esc(a.homeService.area)}</b>` : ""} · fee ${money(a.homeFee || 0)}${map ? ` · <a href="${esc(map)}" target="_blank" rel="noopener">Open map ↗</a>` : ""}</p><p class="small">🚗 ${a.travelBefore || 0} min travel before & after is blocked.</p>` : ""}
       ${a.onTheWay ? `<p class="small">🚗 On the way · ETA ${fmtTime(a.onTheWay.etaAt)}</p>` : ""}
       ${a.notes ? `<p class="small">📝 ${esc(a.notes)}</p>` : ""}
       <p><b>${money((a.total || 0) + (a.homeFee || 0))}</b> ${a.paid ? "· paid" : ""}</p>

@@ -1,4 +1,8 @@
 // Customer ordering page: /m/{slug}?t={tableToken}
+import { receiptHTML, receiptFoot, apptReceiptData } from "./receipt.js";
+import { trustChips, nameWithBadge, enableTrust } from "./trust.js";
+import { enableDesktop } from "./desktop.js";
+import { ensureAccount, isRealAccount, saveDraft, restoreDraft } from "./accountgate.js";
 import { applyWording } from "./wording.js";
 import { intakeForm } from "./intake.js";
 import { calcSalonPromos, salonPromoTag, promoHits } from "./salonpromo.js";
@@ -35,6 +39,31 @@ function mountPowered() {
   a.innerHTML = `<img src="/logo/favicon.svg" alt="" width="16" height="16"/><span>Powered by <b>taptayo</b></span><em>Get your own free QR ${store.mode === "salon" || store.mode === "laundry" ? "booking page" : "menu"} →</em>`;
   app.after(a);
 }
+function mountReport() {
+  if (!store || store.demo || document.getElementById("ttReport")) return;
+  const b = document.createElement("button"); b.id = "ttReport"; b.type = "button"; b.className = "c-report"; b.textContent = "⚑ Report this shop";
+  b.onclick = () => {
+    const body = html(`<div><p class="small muted" style="margin-top:0">Something wrong? Tell TapTayo — we check every report. The shop doesn't see who reported.</p>
+      <label>What happened?</label><select data-r><option value="scam">I paid and didn't get it / scam</option><option value="fake">Fake shop or fake photos</option><option value="unsafe">Unsafe or abusive</option><option value="wrong">Wrong prices or info</option><option value="other">Something else</option></select>
+      <label>Details</label><textarea data-d rows="4" maxlength="800" placeholder="What happened, when, how much you paid (and the GCash reference if any)"></textarea>
+      <label>Your contact <span class="muted small">(optional — so we can follow up)</span></label><input data-c maxlength="80" placeholder="Phone, email or Messenger"/>
+      <p class="small muted">⚠️ Never pay outside the app to a number someone sends you in chat.</p></div>`);
+    const foot = html(`<div><button class="c-btn brand block">Send report</button></div>`);
+    foot.querySelector("button").onclick = async (e) => { e.target.disabled = true; try { await call("reportShop", { slug: store.slug, reason: body.querySelector("[data-r]").value, details: body.querySelector("[data-d]").value, contact: body.querySelector("[data-c]").value }); closeSheet(); toast("Thanks — TapTayo will check it."); } catch (x) { toast(x.message); e.target.disabled = false; } };
+    openSheet("Report this shop", body, foot);
+  };
+  (document.getElementById("ttPowered") || app).after(b);
+}
+
+/** "A+ Bigger text" — for lolos and lolas; remembered on this phone */
+function mountTextSize() {
+  if (document.getElementById("ttText")) return;
+  const KEY = "taptayo:bigtext"; let on = false; try { on = localStorage.getItem(KEY) === "1"; } catch {}
+  const apply = () => { document.documentElement.classList.toggle("c-big", on); b.textContent = on ? "A− Normal text" : "A+ Bigger text"; b.setAttribute("aria-pressed", String(on)); };
+  const b = document.createElement("button"); b.id = "ttText"; b.type = "button"; b.className = "c-report";
+  b.onclick = () => { on = !on; try { localStorage.setItem(KEY, on ? "1" : "0"); } catch {} apply(); };
+  apply(); (document.getElementById("ttReport") || document.getElementById("ttPowered") || app).after(b);
+}
 
 /** Demo stores (taptayo-cafe, …): a slim bar on top — pretend orders, sample reviews, get your own */
 function mountDemo() {
@@ -55,6 +84,7 @@ const DAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 const isOpenNow = (hours) => openStatus(hours).open;
 let toastTimer;
 function toast(msg) {
+  if (/^LOGIN_REQUIRED:/.test(msg || "")) { msg = String(msg).slice(15); ensureAccount({ openSheet, closeSheet, html, toast }, "continue").then((ok) => ok && toast("✓ Logged in — tap the button again")); }
   let el = document.querySelector(".c-toast");
   if (!el) { el = html(`<div class="c-toast"></div>`); document.body.appendChild(el); }
   el.textContent = msg; el.classList.add("show");
@@ -180,10 +210,10 @@ function start() {
     }
     if (snap.data().redirectTo) { location.replace(location.href.replace(`/m/${slug}`, `/m/${snap.data().redirectTo}`)); return; }
     const first = !store;
-    store = snap.data(); applyWording(store);
+    store = snap.data(); applyWording(store); enableTrust(() => store); enableDesktop({ app, slug, call, loadLocal, isReal: () => isRealAccount(), openTab: (t) => { uiTab = t; renderMenu(); }, bookWith: (id) => { bookPrefProvider = id; uiTab = "book"; renderMenu(); window.scrollTo({ top: 0 }); }, viewLast: (kind, rec) => { if (kind === "stay") { location.search = "?my=stay:" + encodeURIComponent(rec.id); return; } if (kind === "appt") return renderApptStatus(rec); return renderStatus(rec); }, getStore: () => store, openCart: () => openCart(), getCart: () => ({ count: cartCount(), total: cartSubtotal(), lines: cart.map((l) => ({ name: l.name, qty: l.qty, amt: lineInfo(l).net })), label: serviceType ? ({ dine_in: `Dine-in${table?.name || table?.label ? " · " + (table.name || table.label) : ""}`, take_out: "Take-out", pickup: "Pickup", delivery: "Delivery" }[serviceType] || "") : "" }) });
     CUR = store.currency || "PHP";
     document.title = store.name;
-    mountPowered(); if (store.hideBranding) document.getElementById("ttPowered")?.remove(); mountDemo();
+    mountPowered(); if (store.hideBranding) document.getElementById("ttPowered")?.remove(); mountReport(); mountDemo(); mountTextSize();
     const th = applyTheme(store.theme, undefined, store.name);
     document.querySelector('meta[name=theme-color]')?.setAttribute("content", th.header[0]);
     // not launched yet → "Coming soon" (Test mode lets the owner try everything)
@@ -234,12 +264,20 @@ function advanceOnly() {
   const s = store.service || {};
   return !isOpenNow(store.hours) && (s.pickup || s.delivery) && s.allowSchedule !== false;
 }
+/** night market / pop-up mode on right now? (same rule as the server: days + hours, PH time, can cross midnight) */
+function popupNow(now = Date.now()) {
+  const c = store?.popup; if (!c?.on) return false;
+  const ph = new Date(now + 8 * 3600e3); const hm = ph.toISOString().slice(11, 16); let di = ph.getUTCDay();
+  if (c.from && c.to) { const inWin = c.to > c.from ? hm >= c.from && hm < c.to : hm >= c.from || hm < c.to; if (!inWin) return false; if (c.to < c.from && hm < c.to) di = (di + 6) % 7; }
+  return !(c.days || []).length || c.days.includes(["sun", "mon", "tue", "wed", "thu", "fri", "sat"][di]);
+}
 function availableServices() {
   const s = store.service || {};
   const out = [];
   if (store.mode === "table") {
     const single = store.qrMode === "single";
     if (preorderFor) return [["dine_in", "📅 Pre-order"]];
+    if (popupNow() && !table) { out.push(["take_out", "🌙 Order now, pick up at the stall"]); if (s.pickup) out.push(["pickup", "🛍️ Pick up later"]); if (s.delivery) out.push(["delivery", "🛵 Delivery"]); return out; }
     const later = advanceOnly(); // closed → only "order for later" services
     if ((table || single || testing()) && s.dineIn !== false && !later) out.push(["dine_in", "🍽️ Dine-in"]);
     if ((table || single || testing()) && s.takeOut !== false && !later) out.push(["take_out", "🥡 Take-out"]);
@@ -323,9 +361,10 @@ function renderLanding() {
   const single = store.qrMode === "single";
   const opts = [];
   for (const [k, l] of services) {
-    const sub = { dine_in: single && !table ? "You'll pick your table number" : table ? table.label : "", take_out: "Pick up at the counter", pickup: "Order ahead, pick up in store", delivery: "Delivered to your address" }[k];
+    const sub = { dine_in: single && !table ? "You'll pick your table number" : table ? table.label : "", take_out: popupNow() && !table ? "Pay first, walk around — we'll alert you when it's ready" : "Pick up at the counter", pickup: "Order ahead, pick up in store", delivery: "Delivered to your address" }[k];
     opts.push(`<button class="c-land" data-svc="${k}"><span class="ic">${l.split(" ")[0]}</span><span><b>${l.slice(l.indexOf(" ") + 1)}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>`);
   }
+  if (popupNow() && !table) opts.unshift(`<div class="c-alert ok" style="text-align:left;margin-bottom:10px">🌙 <b>Night market mode</b> — order here and pay first, then walk around. We'll alert you the moment it's ready.${store.popup?.note ? `<br><span class="small">📍 ${esc(store.popup.note)}</span>` : ""}</div>`);
   if (feats.length) opts.push(`<button class="c-land" data-reserve><span class="ic">📅</span><span><b>Reserve / Book</b><small>${feats.map((f) => ({ table: "Table", event: "Event", vip: "VIP room" }[f])).join(" · ")}</small></span><span class="chev">›</span></button>`);
   opts.push(`<button class="c-land ghost" data-browse><span class="ic">📋</span><span><b>Just browse the ${esc((store.labels?.items || "menu").toLowerCase())}</b><small>Just take a look</small></span><span class="chev">›</span></button>`);
 
@@ -369,8 +408,9 @@ function floaties(t) {
 }
 function infoCard(tag, extra = "") {
   return `<header class="c-cover ${store.coverUrl ? "has-cover" : ""}">${store.coverUrl ? `<img class="cover" src="${esc(store.coverUrl)}" alt=""/>` : ""}<div class="decor">${(resolveTheme(store.theme || {}, store.name).decor || []).map((e, i) => `<span class="dc d${i % 6}">${e}</span>`).join("")}</div></header>
-    <section class="c-info"><div class="ci-top"><div class="ci-logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div class="ci-name"><h1>${esc(store.name)}</h1><div class="ci-tag">${esc(tag)}</div></div></div>${extra}</section>`;
+    <section class="c-info"><div class="ci-top"><div class="ci-logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div class="ci-name"><h1>${nameWithBadge(store)}</h1><div class="ci-tag">${esc(tag)}</div>${trustHTML()}</div></div>${extra}</section>`;
 }
+const trustHTML = () => trustChips(store);
 const layoutOf = () => store.theme?.layout || "list";
 function sizePill(it) {
   const g = (it.options || []).find((o) => !o.multi && /size|serving/i.test(o.name || ""));
@@ -662,6 +702,7 @@ const cartPromoDiscount = () => cart.reduce((a, l) => a + lineInfo(l).discount, 
 let voucher = null; // { code, discount }
 
 function renderCartBar() {
+  window.dispatchEvent(new Event("tt:cart"));
   document.querySelector(".c-cartbar")?.remove();
   if (!cartCount()) return;
   const bar = html(`<div class="c-cartbar"><button><span class="cnt">${cartCount()}</span><span class="lbl">Review order</span><span class="tot">${money(cartSubtotal())}</span></button></div>`);
@@ -670,6 +711,7 @@ function renderCartBar() {
 }
 
 function openCart() {
+  if (!store.demo && store.service?.guestOrders === false && !isRealAccount()) { ensureAccount({ openSheet, closeSheet, html, toast }, "order").then((ok) => ok && openCart()); return; }
   const svc = store.service || {};
   const isAdd = !!addTo;
   const freeDelOf = (sub) => (serviceType === "delivery" && !isAdd ? freeDeliveryPromo(store.promos || [], sub) : null);
@@ -752,7 +794,8 @@ function openCart() {
   if (slotsEl) {
     const lead = (Number(svc.scheduleLeadMin) || 30) * 60000;
     const dsel = body.querySelector("[data-sdate]"), tsel = body.querySelector("[data-stime]");
-    const days = Array.from({ length: 7 }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; });
+    const days = Array.from({ length: Math.max(1, Math.min(60, Number(svc.preorderDays) || 7)) }, (_, i) => { const d = new Date(); d.setDate(d.getDate() + i); return d; });
+    const preLead = (Number(svc.preorderLeadHours) || 0) * 3600000; // cakes / bilao: notice needed for future-day pre-orders
     dsel.innerHTML = days.map((d, i) => `<option value="${i}">${i === 0 ? "Today" : i === 1 ? "Tomorrow" : d.toLocaleDateString("en-PH", { weekday: "short", month: "short", day: "numeric" })}</option>`).join("");
     const fillTimes = () => {
       const d = days[Number(dsel.value)];
@@ -764,6 +807,7 @@ function openCart() {
         if (!inRange(t)) continue;
         const when = new Date(d); when.setHours(Math.floor(m / 60), m % 60, 0, 0);
         if (when.getTime() < Date.now() + lead) continue;
+        if (Number(dsel.value) > 0 && preLead && when.getTime() < Date.now() + preLead) continue;
         opts.push(`<option value="${when.toISOString()}">${when.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}</option>`);
       }
       tsel.innerHTML = opts.join("") || `<option value="">No available times</option>`;
@@ -875,6 +919,7 @@ function openCart() {
         items: cart.map((l) => ({ itemId: l.itemId, qty: l.qty, choices: l.choices.map((c) => ({ group: c.group, label: c.label })), note: l.note })),
         customer, note: body.querySelector("[data-onote]").value.trim(),
         scheduledAt: slotsEl && whenMode === "later" ? body.querySelector("[data-stime]").value || null : null,
+        preorder: !!(slotsEl && whenMode === "later" && Number(body.querySelector("[data-sdate]")?.value) > 0 && svc.preorderDays),
         payment: payMethodId ? { methodId: payMethodId, changeFor, refNo, sent: !!(pm && !["cash", "card"].includes(pm.type) && isRemote() && sendsNow()) } : null,
         voucherCode: voucher?.code || null, useReward: !!useReward,
         reservationId: preorderFor?.id || null,
@@ -989,7 +1034,7 @@ function renderGiftStatus(rec) {
     if (!snap.exists()) { giftUnsub?.(); return renderMenu(); }
     const x = snap.data(); await lp;
     const st = x.status === "active" && x.expires < Date.now() ? "expired" : x.status;
-    app.innerHTML = `<div><header class="c-head"><div class="top"><div class="logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div><h1>${esc(store.name)}</h1><div class="sub">Gift card</div></div></div></header>${seasonBar()}
+    app.innerHTML = `<div><header class="c-head"><div class="top"><div class="logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div><h1>${nameWithBadge(store)}</h1><div class="sub">Gift card</div></div></div></header>${seasonBar()}
       <div class="c-status">
         <canvas data-card style="width:100%;border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.18)"></canvas>
         ${st === "pending" ? `<div class="c-alert warn">⏳ Waiting for the salon to check your ${esc(x.payment?.methodName || "")} payment (ref ${esc(x.payment?.refNo || "")}). This page updates by itself — your code appears here once it's confirmed.</div>`
@@ -1074,6 +1119,7 @@ function renderSalonBook(body) {
       <label>Landmark <span class="muted small">(optional)</span></label><input data-landmark placeholder="e.g. green gate beside the sari-sari store" value="${esc(saved.landmark || "")}"/>
       <label>Map pin <span class="muted small">(required — so the stylist can find you)</span></label><div style="display:flex;gap:6px"><input data-map placeholder="Paste a Google Maps link" value="${esc(saved.mapUrl || "")}" style="flex:1"/><button type="button" class="c-btn ghost sm" data-loc>📍 My location</button></div>
       <div data-idbox ${saved.homeIdOk ? 'style="display:none"' : ""}><label>Valid ID <span class="muted small">(first home service only)</span></label><input type="file" accept="image/*" data-hsid/><p class="muted small" style="margin:4px 0 0">🔒 ${esc(PRIVACY_NOTE)}</p></div>
+      ${(hs.prep || []).length ? `<div class="c-prep" data-prepbox><div class="eyebrow" style="margin-top:10px">🧺 What to prepare</div><p class="muted small" style="margin:0 0 6px">Tell us what you have, so we bring the rest.</p>${hs.prep.map((x, i) => x.bring ? `<div class="c-prep-row" data-prep="${i}"><span><b>${esc(x.name)}</b>${x.fee ? ` <span class="muted small">· bring: +${money(x.fee)}</span>` : ` <span class="muted small">· bring: free</span>`}</span><span class="c-chips" role="radiogroup" aria-label="${esc(x.name)}"><button type="button" class="chip on" data-pc="have" role="radio" aria-checked="true">I have it</button><button type="button" class="chip" data-pc="bring" role="radio" aria-checked="false">Please bring</button></span></div>` : `<label class="c-agree c-prep-row" data-prep="${i}"><input type="checkbox" data-pready/> <span><b>${esc(x.name)}</b> <span class="muted small">· please prepare this</span></span></label>`).join("")}<p class="small" data-prepsum style="margin:6px 0 0"></p></div>` : ""}
       <p class="muted small">${hs.minSpend ? `Minimum ${money(hs.minSpend)} in services. ` : ""}${areas.length ? "The transport fee is added to your bill." : esc(hs.note || "Transport fee depends on your area; the final fee is confirmed by the salon and shown on your status page.")}${areas.length && hs.note ? " " + esc(hs.note) : ""}</p>
     </div>
     <label>Notes (optional)</label><input data-notes placeholder="e.g. reference photo on Messenger, allergies"/>
@@ -1082,11 +1128,15 @@ function renderSalonBook(body) {
     ${store.pro?.promos !== false ? `<div><label>Promo code <span class="muted small">(optional)</span></label><div style="display:flex;gap:6px"><input data-pcode placeholder="e.g. SPA50" style="text-transform:uppercase;flex:1" autocapitalize="characters" value="${esc(bookCode?.code || "")}"/><button type="button" class="c-btn ghost" data-pcheck>Apply</button></div><div data-pcmsg class="small"></div></div>` : ""}
     <div data-promosum></div>
     <div data-dpbox></div>
-    ${store.policies?.salon ? `<label>Policy</label><div class="waiver-text">${esc(store.policies.salon)}</div><label class="c-agree"><input type="checkbox" data-agree/> I have read and agree</label>` : ""}
+    ${store.policies?.salon ? `<div class="c-step"><span>✓</span> Before you book</div><div class="s-policy"><div><span>📋</span><span>${esc(String(store.policies.salon).split("\n").map((x) => x.replace(/^[•\-*]\s*/, "").trim()).filter(Boolean)[0] || "Shop policy")}</span></div>${store.bookingPolicy ? `<div><span>📅</span><span>${store.bookingPolicy.refundable === false ? "Non-refundable" : "Refundable per shop policy"}${store.bookingPolicy.reschedule?.allowed === false ? " · no rescheduling" : " · you can reschedule"}</span></div>` : ""}</div><details class="s-more"><summary>Read the full policy</summary><div class="waiver-text">${esc(store.policies.salon)}</div></details><label class="c-agree"><input type="checkbox" data-agree/> I have read and agree</label>` : ""}
     <p class="muted small">${store.confirm?.mode && store.confirm.mode !== "off" ? `You'll need to confirm via Messenger within ${cfg.confirmMinutes || 60} minutes or the slot is released.` : ""}</p>
     ${protectHTML(true)}
-    <div class="c-bookbar"><button class="c-btn brand block" data-book disabled>Choose a time slot</button></div></div>`;
+    <div class="c-bookbar s-foot"><div class="s-tot"><small>Services</small><b data-btot>—</b><span data-bsub>Pick services</span></div><button class="c-btn brand" data-book disabled>Choose a time slot</button></div></div>`;
   const g = (sel) => body.querySelector(sel);
+  { // What to prepare: "I have it" / "Please bring" (+fee) — the total of items to bring shows under the list
+    const sum = () => { const box = body.querySelector("[data-prepbox]"); if (!box) return; const bring = [...box.querySelectorAll("[data-prep]")].filter((r) => r.querySelector("[data-pc].on")?.dataset.pc === "bring").map((r) => (store.salon?.homeService?.prep || [])[Number(r.dataset.prep)]).filter(Boolean); const fee = bring.reduce((a, x) => a + (Number(x.fee) || 0), 0); box.querySelector("[data-prepsum]").textContent = bring.length ? `We'll bring: ${bring.map((x) => x.name).join(", ")}${fee ? ` · +${money(fee)}` : ""}` : ""; };
+    body.querySelectorAll("[data-prep] [data-pc]").forEach((b) => (b.onclick = () => { b.parentElement.querySelectorAll("[data-pc]").forEach((x) => { const on = x === b; x.classList.toggle("on", on); x.setAttribute("aria-checked", String(on)); }); sum(); }));
+  }
   let chosen = null, dayIdx = 0, provider = bookPrefProvider, plans = null; bookPrefProvider = null;
   const prodQty = {}; body.querySelectorAll("[data-pq]").forEach((b) => (b.onclick = () => { const id = b.dataset.pq; const p = (store.products || []).find((x) => x.id === id); prodQty[id] = Math.max(0, Math.min(p?.stock ?? 50, (prodQty[id] || 0) + Number(b.dataset.d))); body.querySelector(`[data-pqn="${id}"]`).textContent = prodQty[id]; }));
   // reservation fee (DP): shown up-front for bigger bookings, or when the server asks for it (e.g. after a no-show)
@@ -1111,7 +1161,7 @@ function renderSalonBook(body) {
   // live status under each staff chip (free now / free at …)
   const paintLive = () => { const st = liveAv?.staff || []; g("[data-staff]")?.querySelectorAll("[data-p]").forEach((b) => { const x = st.find((y) => y.id === b.dataset.p); b.querySelector(".live")?.remove(); if (x) b.insertAdjacentHTML("beforeend", `<small class="live">${esc(staffLiveText(x))}</small>`); }); };
   loadLive().then(paintLive);
-  const sum = () => { const keys = [...body.querySelectorAll("[data-svc]:checked")].map((c) => c.dataset.svc).filter((k) => svcOf(k)); const sel = keys.map(svcOf); bookSel = new Set(keys); g("[data-sum]").textContent = sel.length ? `${sel.length} service${sel.length > 1 ? "s" : ""} · ${money(sel.reduce((a, i) => a + i.price, 0))} · ~${sel.reduce((a, i) => a + (i.durationMinutes || 30), 0)} min` : ""; };
+  const sum = () => { const keys = [...body.querySelectorAll("[data-svc]:checked")].map((c) => c.dataset.svc).filter((k) => svcOf(k)); const sel = keys.map(svcOf); bookSel = new Set(keys); g("[data-sum]").textContent = sel.length ? `${sel.length} service${sel.length > 1 ? "s" : ""} · ${money(sel.reduce((a, i) => a + i.price, 0))} · ~${sel.reduce((a, i) => a + (i.durationMinutes || 30), 0)} min` : ""; const bt = g("[data-btot]"); if (bt) { bt.textContent = sel.length ? money(sel.reduce((a, i) => a + i.price, 0)) : "—"; g("[data-bsub]").textContent = sel.length ? `${sel.length} service${sel.length > 1 ? "s" : ""} · ~${sel.reduce((a, i) => a + (i.durationMinutes || 30), 0)} min` : "Pick services"; } };
   const drawPromo = () => {
     const box = g("[data-promosum]"); if (!box) return;
     const sel = [...bookSel].map(svcOf).filter(Boolean); if (!sel.length) { box.innerHTML = ""; return; }
@@ -1188,6 +1238,7 @@ function renderSalonBook(body) {
     if (home && customer.address.length < 5) { g("[data-address]").focus(); return toast("Enter your address for home service"); }
     if (home && !customer.mapUrl) { g("[data-map]")?.focus(); return toast("Add your map pin — tap 📍 My location"); }
     if (home && customer.mapUrl && !/^https:\/\//.test(customer.mapUrl)) return toast("The map pin should be a Google Maps link");
+    if (!store.demo && !isRealAccount()) { saveDraft(body, "salon:" + slug); if (await ensureAccount({ openSheet, closeSheet, html, toast }, "book")) e.target.click(); return; }
     let idUrl = null;
     const idFile = home ? g("[data-hsid]")?.files?.[0] : null;
     if (idFile) { e.target.disabled = true; e.target.textContent = "Uploading ID…"; try { idUrl = await uploadPrivateImage(store.storeId, auth.currentUser.uid, idFile, { max: 1400, name: "home-id" }); } catch (x) { e.target.disabled = false; e.target.textContent = "Book"; return toast("Couldn't upload the ID: " + x.message); } }
@@ -1205,9 +1256,12 @@ function renderSalonBook(body) {
         payment = { methodId: box.querySelector("[data-dpm].on")?.dataset.dpm || dpPay[0]?.id, refNo, proofUrl };
       }
       const birthday = g("[data-bm]")?.value && g("[data-bd]")?.value ? `${g("[data-bm]").value}-${g("[data-bd]").value}` : null;
+      const prepRows = home ? [...body.querySelectorAll("[data-prep]")] : [];
+      if (prepRows.some((r) => r.querySelector("[data-pready]") && !r.querySelector("[data-pready]").checked)) { e.target.disabled = false; e.target.textContent = "Book"; return toast("Tick the items you'll prepare (What to prepare)."); }
+      const prep = prepRows.length ? prepRows.map((r) => { const x = hs.prep[Number(r.dataset.prep)]; return { name: x.name, choice: r.querySelector("[data-pready]") ? "ready" : r.querySelector("[data-pc].on")?.dataset.pc || "have" }; }) : null;
       const intake = cfg.intake?.enabled ? bookIntake : null;
       if (intake) saveLocal({ intake });
-      const r = await call("bookAppointment", { slug, atShop, intake, products: Object.entries(prodQty).filter(([, n]) => n > 0).map(([id, qty]) => ({ id, qty })), promoCode: bookCode?.code || (g("[data-pcode]")?.value.trim() || null), itemIds: [...bookSel], providerId: bookPax === 2 ? null : provider, pax: bookPax, gender: bookGender || null, walkIn, startAt: walkIn ? null : new Date(chosen).toISOString(), notes: g("[data-notes]").value.trim(), customer, homeService: home ? { area: customer.area || "" } : false, idUrl, payment, birthday, refCode: g("[data-ref]")?.value.trim() || null });
+      const r = await call("bookAppointment", { slug, atShop, intake, products: Object.entries(prodQty).filter(([, n]) => n > 0).map(([id, qty]) => ({ id, qty })), promoCode: bookCode?.code || (g("[data-pcode]")?.value.trim() || null), itemIds: [...bookSel], providerId: bookPax === 2 ? null : provider, pax: bookPax, gender: bookGender || null, walkIn, startAt: walkIn ? null : new Date(chosen).toISOString(), notes: g("[data-notes]").value.trim(), customer, homeService: home ? { area: customer.area || "", prep }  : false, idUrl, payment, birthday, refCode: g("[data-ref]")?.value.trim() || null });
       if (birthday) customer.birthday = birthday;
       const rec = { id: r.id, storeId: r.storeId, at: Date.now() }; bookSel = new Set();
       saveLocal({ customer: { ...customer, ...(home ? { homeIdOk: true } : {}) }, lastAppt: rec, appts: [...(loadLocal().appts || []), rec] });
@@ -1221,6 +1275,7 @@ function renderSalonBook(body) {
       e.target.disabled = false; e.target.textContent = "Book";
     }
   };
+  if (restoreDraft(body, "salon:" + slug)) toast("✓ We kept what you filled in");
 }
 const APPT_STAGES = { unconfirmed: ["Confirm via Messenger", "Message us to confirm your slot"], pending: ["Requested", "Waiting for the salon to confirm"], confirmed: ["Confirmed", "See you then!"], in_progress: ["In progress", "Enjoy your service"], done: ["Done", "Thank you! Please rate us"], cancelled: ["Cancelled", ""], no_show: ["No-show", "You didn't arrive within the grace period"] };
 // ---------------- next visit link from the salon: confirm / change / cancel ----------------
@@ -1235,7 +1290,7 @@ async function renderVisit(v) {
 function drawVisit(info, v) {
   const when = new Date(info.startAt); const vc = info.visitConfirm?.status;
   const closed = ["cancelled", "no_show", "done"].includes(info.status);
-  app.innerHTML = `<div><header class="c-head"><div class="top"><div class="logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div><h1>${esc(store.name)}</h1><div class="sub">Your ${info.homeService ? "home service" : "appointment"}</div></div></div></header>
+  app.innerHTML = `<div><header class="c-head"><div class="top"><div class="logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div><h1>${nameWithBadge(store)}</h1><div class="sub">Your ${info.homeService ? "home service" : "appointment"}</div></div></div></header>
     <div class="c-status"><div class="c-ticket main c-visit">
       <div class="eyebrow">Hi ${esc(info.customerName || "")}! ${info.tentative && vc === "waiting" ? "Are we still on?" : ""}</div>
       <div style="font-size:1.15rem;margin:6px 0">📅 <b>${when.toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric" })}</b><br>🕒 <b>${when.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}</b></div>
@@ -1338,7 +1393,7 @@ function renderApptStatus(rec) {
     const canChange = ["unconfirmed", "pending", "confirmed"].includes(a.status) && start && start - Date.now() > (cfg.cancelHours || 0) * 3600000;
     const dur = a.durationConfirmed || a.durationEst;
     app.innerHTML = `<div>
-      <header class="c-head"><div class="top"><div class="logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div><h1>${esc(store.name)}</h1><div class="sub">Appointment</div></div></div></header>${seasonBar()}
+      <header class="c-head"><div class="top"><div class="logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div><h1>${nameWithBadge(store)}</h1><div class="sub">Appointment</div></div></div></header>${seasonBar()}
       <div class="c-status">
         ${a.waiting ? ticketHTML(a) : a.source === "walkin" && ["pending", "confirmed"].includes(a.status) && a.startAt?.toDate && a.startAt.toDate() - Date.now() > 5 * 60000 ? `<div class="c-alert ok"><b>Estimated start: ${a.startAt.toDate().toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}</b> — set by the counter. Please be back a few minutes before.</div>` : ""}
         ${a.status === "unconfirmed" ? `<div class="c-alert warn"><b>⏳ Confirm your booking on Messenger</b> — reply to us within <b data-countdown>${cfg.confirmMinutes || 60}:00</b> or this slot is released to other clients.<br>${store.confirm?.messengerLink ? `<a class="c-btn brand block" style="margin-top:8px" href="${esc(store.confirm.messengerLink)}" target="_blank">Open Messenger</a>` : ""}<button class="c-btn ghost block" style="margin-top:6px" data-copymsg>Copy message</button></div>` : ""}
@@ -1375,12 +1430,16 @@ function renderApptStatus(rec) {
         ${!bad && store.incidents?.enabled !== false && ["in_progress", "done"].includes(a.status) ? `<button class="c-btn ghost block" data-report style="margin-bottom:8px">⚠️ Report a problem <span class="small">(photo required)</span></button>` : ""}
         ${!bad ? smsCardHTML(rec, a, "appt") : ""}
         ${protectHTML()}
+        ${done || a.paid ? `<button class="c-btn ghost block" data-apptreceipt style="margin-bottom:8px">🧾 View receipt</button>` : ""}
+        ${(store.salon?.reminders?.dayBefore || store.salon?.reminders?.hoursBefore) && ["pending", "confirmed"].includes(a.status) ? `<label class="c-agree small" style="margin:0 0 8px"><input type="checkbox" data-nosms ${a.noSms ? "checked" : ""}/> 🔕 Don't text me reminders for this booking</label>` : ""}
         <button class="c-btn block ${done || bad ? "" : "ghost"}" data-more style="margin-top:8px">${done || bad ? "Book again" : "Back to services"}</button>
         <p class="muted small" style="text-align:center;margin-top:16px">This page updates on its own.</p>
       </div></div>`;
     saveLocal({ lastActive: done || bad ? null : { id: rec.id, storeId: rec.storeId, at: Date.now(), orderNo: a.code, status: title, kind: "appt" } });
     app.querySelector("[data-vgo]")?.addEventListener("click", () => { apptUnsub?.(); renderVisit(`${snap.id}.${a.visitToken}`); });
     bindProtect(app, rec.id);
+    app.querySelector("[data-apptreceipt]")?.addEventListener("click", () => openApptReceipt(a));
+    app.querySelector("[data-nosms]")?.addEventListener("change", async (e) => { try { await call("reminderOptOut", { storeId: rec.storeId, kind: "appt", id: rec.id, off: e.target.checked }); toast(e.target.checked ? "OK — no SMS reminders" : "Reminders on"); } catch (x) { e.target.checked = !e.target.checked; toast(x.message); } });
     app.querySelector("[data-more]").onclick = () => { apptUnsub?.(); if (done || bad) saveLocal({ lastAppt: null }); else saveLocal({ lastAppt: null, lastActiveAppt: rec }); uiTab = done || bad ? "book" : "menu"; renderMenu(); };
     startCountdown(a.status === "unconfirmed" ? dl?.getTime() : null);
     bindTicket(app, rec, a);
@@ -1464,6 +1523,7 @@ function renderLaundryBook(body) {
     if (!customer.name || !customer.phone || !customer.address) return toast("Name, phone and address are required");
     const mode = body.querySelector("[name=lbmode]:checked")?.value;
     if (g("[data-agree]") && !g("[data-agree]").checked) return toast("Please agree to the shop policy");
+    if (!store.demo && store.service?.guestOrders === false && !isRealAccount()) { if (await ensureAccount({ openSheet, closeSheet, html, toast }, "book")) e.target.click(); return; }
     e.target.disabled = true; e.target.textContent = "Booking…";
     try {
       if (store.laundry?.busy && !g("[data-busywait]")?.checked && !g("[data-busyrush]")?.checked) { e.target.disabled = false; e.target.textContent = "Book now"; return toast("We're busy — choose 'willing to wait' or Rush"); }
@@ -1545,7 +1605,7 @@ function renderStatus(rec) {
     const doneNow = ["completed", "delivered", "picked_up", "claimed", "cancelled"].includes(o.status);
     saveLocal({ lastActive: doneNow ? null : { id: rec.id, storeId: rec.storeId, at: Date.now(), orderNo: o.orderNo, status: (stages.find((s) => s[0] === o.status) || [])[1] || o.status } });
     app.innerHTML = `<div>
-      <header class="c-head"><div class="top"><div class="logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div><h1>${esc(store.name)}</h1><div class="sub">${svcLabel}${o.tableLabel ? " — " + esc(o.tableLabel) : ""}</div></div></div></header>${seasonBar()}
+      <header class="c-head"><div class="top"><div class="logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div><h1>${nameWithBadge(store)}</h1><div class="sub">${svcLabel}${o.tableLabel ? " — " + esc(o.tableLabel) : ""}</div></div></div></header>${seasonBar()}
       <div class="c-status">
         <div data-roombar>${roomBarHTML()}</div>
         ${o.type === "laundry" ? laundryCardHTML(o) : ""}
@@ -1557,7 +1617,7 @@ function renderStatus(rec) {
           ${o.status === "unconfirmed" ? `<div class="c-alert warn" style="margin-top:12px;text-align:left"><b>To confirm your order</b>, message us on Messenger within <b data-countdown>${store.confirm?.minutes || 15}:00</b> — otherwise it is cancelled automatically and the slot is released.</div><button class="c-btn brand block" data-msgr>💬 Confirm via Messenger</button>` : ""}
           ${o.payment ? `<div class="c-when small">${o.payment.method === "cash" ? `💵 ${esc(o.payment.methodName)}${o.payment.switchedFrom ? ` (instead of ${esc(o.payment.switchedFrom)})` : ""}${o.payment.changeFor && o.payment.changeFor > o.total ? ` · change for ${money(o.payment.changeFor)}` : ""}` : `📱 ${esc(o.payment.methodName)}${o.payment.refNo ? ` · ref ${esc(o.payment.refNo)}` : ""} · ${o.paid ? "received ✓" : o.payment.status === "at_counter" ? "pay at the counter" : o.payment.status === "on_arrival" ? "send it when the rider arrives" : o.payment.status === "not_received" ? "not received yet" : "sent — the store is checking"}`}</div>` : ""}
           ${o.loyaltyReward ? `<div class="c-when small">🎁 Loyalty reward used: ${esc(o.loyaltyReward.text || "")} (−${money(o.loyaltyReward.value)})</div>` : ""}${o.loyaltyStamp === "earned" ? `<div class="c-alert ok" style="margin-top:10px;text-align:left">⭐ <b>You earned a loyalty stamp!</b></div>` : store.loyalty && !cancelled && !o.loyaltyStamp && o.customer?.phone && (o.total || 0) >= (store.loyalty.minTotal || 0) ? `<div class="c-when small">⭐ You'll get a loyalty stamp once this order is paid and completed.</div>` : ""}
-          ${store.service?.payFirst && ["dine_in", "take_out"].includes(o.serviceType) && !o.paid && o.status === "pending" && !cancelled ? `<div class="c-alert warn" style="margin-top:12px;text-align:left">💵 <b>Please pay ${money(o.total)} at the counter.</b><br><span class="small">We start preparing your order once it's paid.</span></div>` : ""}
+          ${(store.service?.payFirst || o.payFirst) && ["dine_in", "take_out"].includes(o.serviceType) && !o.paid && o.status === "pending" && !cancelled ? `<div class="c-alert warn" style="margin-top:12px;text-align:left">💵 <b>Please pay ${money(o.total)} at the counter.</b><br><span class="small">We start preparing your order once it's paid.</span></div>` : ""}
           ${o.payment && !o.paid && o.payment.status === "not_received" && !cancelled ? `<div class="c-alert error" style="margin-top:12px;text-align:left"><b>We haven't received your ${esc(o.payment.methodName)} payment yet.</b>${o.payment.note ? `<br><span class="small">${esc(o.payment.note)}</span>` : ""}<br><span class="small">Please check your ${esc(o.payment.methodName)} app. Your order is on hold until it's received.</span>
             <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><button class="c-btn sm brand" data-payagain>I sent it again</button>${(store.payments || []).some((m) => m.type === "cash") ? `<button class="c-btn sm ghost" data-paycash>I'll pay cash instead</button>` : ""}</div></div>` : ""}
           ${(o.comps || []).map((c) => `<div class="c-alert ok" style="margin-top:12px;text-align:left">🎁 <b>FREE for you:</b> ${esc(c.text)}</div>`).join("")}
@@ -1587,6 +1647,8 @@ function renderStatus(rec) {
         ${!cancelled ? smsCardHTML(rec, o, "order") : ""}
         <div data-incident></div>
         ${(() => { if (cancelled || store.incidents?.enabled === false || o.status === "unconfirmed") return ""; if (o.type === "laundry" && o.laundry?.claimedAt?.toDate) { const hrs = store.laundry?.complaintHours || 24; const left = hrs * 3600000 - (Date.now() - o.laundry.claimedAt.toDate()); if (left <= 0) return `<p class="muted small" style="text-align:center">Complaint window (${hrs} h after claiming) has closed.</p>`; return `<button class="c-btn ghost block" data-report style="margin-bottom:8px">⚠️ Report a problem <span class="small">(${Math.ceil(left / 3600000)} h left · photo required)</span></button>`; } return `<button class="c-btn ghost block" data-report style="margin-bottom:8px">⚠️ Report a problem</button>`; })()}
+        ${o.refund ? `<div class="c-alert ${o.refund.status === "refunded" ? "ok" : "warn"}" style="text-align:left;margin-bottom:8px">↩️ <b>${o.refund.status === "refunded" ? "Refunded" : "Refund due"}: ${money(o.refund.amount)}</b>${o.refund.items?.length ? ` · ${esc(o.refund.items.join(", "))}` : ""} — ${esc(o.refund.reason || "sold out")}.${o.refund.status === "refunded" ? ` Sent by ${esc(o.refund.method || "")}${o.refund.ref ? ` · ref ${esc(o.refund.ref)}` : ""}.` : " Please get it at the counter, or we'll send it back the way you paid."}</div>` : ""}
+        ${!done && (o.popup || ["take_out", "pickup"].includes(o.serviceType)) && !["ready", "picked_up", "completed"].includes(o.status) ? readyNotifyHTML(o) : ""}
         <button class="c-btn ghost block" data-receipt style="margin-bottom:8px">🧾 View receipt</button>
         <button class="c-btn block ${done ? "" : "ghost"}" data-more>${o.type === "laundry" ? "View services & news" : done ? "Order again" : "Back to menu"}</button>
         ${myOrders.length > 1 ? `<button class="c-btn ghost block" style="margin-top:8px" data-myorders>My orders</button>` : ""}
@@ -1594,6 +1656,9 @@ function renderStatus(rec) {
       </div></div>`;
     app.querySelector("[data-more]").onclick = () => { statusUnsub?.(); if (o.type === "laundry" && !doneNow) saveLocal({ lastActive: { id: rec.id, storeId: rec.storeId, at: Date.now(), orderNo: o.laundry?.ticketNo || o.orderNo, status: stage[1] } }); saveLocal({ lastOrder: null }); renderMenu(); };
     app.querySelector("[data-receipt]").onclick = () => openReceipt(o);
+    app.querySelector("[data-readypush]")?.addEventListener("click", async (e) => { e.target.disabled = true; try { await turnOnReadyPush(rec); toast("✓ We'll alert this phone when it's ready"); } catch (x) { toast(x.message); e.target.disabled = false; } });
+    if (lastSeenStatus[rec.id] && lastSeenStatus[rec.id] !== "ready" && o.status === "ready" && (o.popup || ["take_out", "pickup", "dine_in"].includes(o.serviceType))) readyAlert(o);
+    lastSeenStatus[rec.id] = o.status;
     app.querySelector("[data-payagain]")?.addEventListener("click", async (e) => { const refNo = prompt(`Sent it again? Add the ${o.payment.methodName} reference no. (optional):`, "") ; if (refNo === null) return; e.target.disabled = true; try { await call("customerPayAgain", { storeId: rec.storeId, orderId: rec.id, refNo }); toast("Thanks! The store will check again."); } catch (x) { toast(x.message); e.target.disabled = false; } });
     app.querySelector("[data-paycash]")?.addEventListener("click", async (e) => { e.target.disabled = true; try { await call("customerPayAgain", { storeId: rec.storeId, orderId: rec.id, cash: true }); toast("Okay — pay in cash when you get your order."); } catch (x) { toast(x.message); e.target.disabled = false; } });
     app.querySelector("[data-callstaff]")?.addEventListener("click", () => openCallSheet());
@@ -1650,6 +1715,7 @@ function roomPriceText(r) {
   return `${money(r.ratePerHour)} / hour`;
 }
 function openReserve(kind = "table") {
+  if (!store.demo && !isRealAccount()) { ensureAccount({ openSheet, closeSheet, html, toast }, "reserve").then((ok) => ok && openReserve(kind)); return; }
   const rs = store.reservations || {}, ev = store.events || {}, vp = store.vip || {};
   const saved = loadLocal().customer || {};
   const todayPH = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
@@ -1679,7 +1745,7 @@ function openReserve(kind = "table") {
     <label>Occasion (optional)</label><input data-occ placeholder="${kind === "event" ? "Birthday, christening, team meeting…" : "Birthday, meeting, date…"}" maxlength="60"/>
     <label>Notes (optional)</label><input data-notes placeholder="${kind === "vip" ? "Song requests, decorations…" : "Window seat, high chair, allergies…"}" maxlength="300"/>
     <div class="c-est" data-est></div>
-    ${store.policies?.[kind] || kind === "vip" ? `<label>Booking policy</label><div class="waiver-text">${esc([store.policies?.[kind], kind === "vip" ? overtimeClause(store.vip?.overtime) : "", kind === "vip" && (store.vip?.cleanMin ?? 30) ? `🧹 The room is cleaned for ${store.vip?.cleanMin ?? 30} minutes between bookings, so please finish on time — your room may still be getting ready a few minutes before your start.` : ""].filter(Boolean).join("\n\n"))}</div><label class="c-agree"><input type="checkbox" data-agree/> I have read and agree to the booking policy</label>` : ""}
+    ${store.policies?.[kind] || kind === "vip" ? `<details class="s-more" open><summary>Booking policy</summary><div class="waiver-text">${esc([store.policies?.[kind], kind === "vip" ? overtimeClause(store.vip?.overtime) : "", kind === "vip" && (store.vip?.cleanMin ?? 30) ? `🧹 The room is cleaned for ${store.vip?.cleanMin ?? 30} minutes between bookings, so please finish on time — your room may still be getting ready a few minutes before your start.` : ""].filter(Boolean).join("\n\n"))}</div></details><label class="c-agree"><input type="checkbox" data-agree/> I have read and agree to the booking policy</label>` : ""}
     ${store.waiver?.[kind] ? `<p class="small muted" style="margin-top:8px">📝 After requesting, you'll sign a waiver on your phone (you'll get a PDF copy).</p>` : ""}
     <div data-err></div>
   </div>`);
@@ -1757,7 +1823,7 @@ function renderResvStatus(rec) {
     const order = ["pending", "confirmed", "seated", "done"];
     const idx = order.indexOf(r.status);
     app.innerHTML = `<div>
-      <header class="c-head"><div class="top"><div class="logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div><h1>${esc(store.name)}</h1><div class="sub">Table reservation</div></div></div></header>${seasonBar()}
+      <header class="c-head"><div class="top"><div class="logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div><h1>${nameWithBadge(store)}</h1><div class="sub">Table reservation</div></div></div></header>${seasonBar()}
       <div class="c-status">
         <div class="c-ticket main">
           <div class="eyebrow">${{ event: "Event booking", vip: "VIP room booking" }[r.kind] || "Reservation"} code</div>
@@ -1982,28 +2048,46 @@ function drawCallThread() {
     <div class="c-thread">${(r.messages || []).map((m) => `<div class="msg ${m.from}"><span>${esc(m.text)}</span><small>${m.from === "customer" ? "You" : esc(m.staffName || "Staff")} · ${new Date(m.at).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}</small></div>`).join("") || `<p class="muted small">No messages yet.</p>`}</div>`;
 }
 
+// ---------------- READY ALERT (night market / take-out) ----------------
+const lastSeenStatus = {};
+const isIOSDev = () => /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const standaloneApp = () => matchMedia("(display-mode: standalone)").matches || navigator.standalone === true;
+function readyNotifyHTML(o) {
+  if (o.readyPush) return `<p class="small" style="text-align:center;margin:0 0 10px;color:var(--ok)">🔔 We'll alert this phone when it's ready — you can walk around.</p>`;
+  const ios = isIOSDev() && !standaloneApp();
+  return `<div class="c-ticket" style="text-align:left;margin-bottom:10px"><b>🔔 Get an alert when it's ready</b><p class="small muted" style="margin:4px 0 8px">${ios ? "On iPhone: tap <b>Share</b> → <b>Add to Home Screen</b>, open TapTayo from your home screen, then tap the button. Or keep this page open — it beeps when your order is ready." : "So you can walk around. Keep this page open too — it beeps and vibrates when your order is ready."}</p><button class="c-btn brand block" data-readypush ${ios ? "disabled" : ""}>Alert me when it's ready</button></div>`;
+}
+async function turnOnReadyPush(rec) {
+  if (!("serviceWorker" in navigator && "PushManager" in window && "Notification" in window)) throw new Error(isIOSDev() && !standaloneApp() ? "On iPhone: Share → Add to Home Screen, open it from the icon, then tap again." : "This browser can't receive alerts — keep this page open.");
+  if ((await Notification.requestPermission()) !== "granted") throw new Error("Alerts are blocked — allow notifications for this site in your phone settings.");
+  const reg = await navigator.serviceWorker.register("/sw.js"); await navigator.serviceWorker.ready;
+  const { publicKey } = await call("pushKey", {});
+  const raw = atob((publicKey + "=".repeat((4 - (publicKey.length % 4)) % 4)).replace(/-/g, "+").replace(/_/g, "/")); const key = Uint8Array.from(raw, (c) => c.charCodeAt(0));
+  const sub = (await reg.pushManager.getSubscription()) || (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }));
+  await call("orderReadyPush", { storeId: rec.storeId, orderId: rec.id, sub: sub.toJSON() });
+}
+function readyAlert(o) {
+  try { navigator.vibrate?.([400, 150, 400, 150, 600]); } catch {}
+  try { const ac = new (window.AudioContext || window.webkitAudioContext)(); [0, 0.35, 0.7].forEach((t) => { const osc = ac.createOscillator(), g = ac.createGain(); osc.frequency.value = 880; osc.connect(g); g.connect(ac.destination); g.gain.setValueAtTime(0.25, ac.currentTime + t); g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + t + 0.3); osc.start(ac.currentTime + t); osc.stop(ac.currentTime + t + 0.3); }); } catch {}
+  const t0 = document.title; let n = 0; const flash = setInterval(() => { document.title = n++ % 2 ? t0 : `🔔 #${o.orderNo} READY`; if (n > 20) { clearInterval(flash); document.title = t0; } }, 800);
+  document.getElementById("readyPop")?.remove();
+  const pop = document.createElement("div"); pop.id = "readyPop"; pop.className = "c-ready-pop"; pop.setAttribute("role", "alertdialog"); pop.setAttribute("aria-label", "Your order is ready");
+  pop.innerHTML = `<div><div style="font-size:3rem">🔔</div><b>Order #${esc(String(o.orderNo))} is ready!</b><p>${o.serviceType === "dine_in" ? "We're bringing it to your table." : "Please pick it up now."}</p><button class="c-btn brand block" type="button">OK</button></div>`;
+  pop.querySelector("button").onclick = () => { pop.remove(); clearInterval(flash); document.title = t0; };
+  document.body.appendChild(pop);
+}
+
 // ---------------- RECEIPT ----------------
 function openReceipt(o) {
   const paidAt = o.paidAt?.toDate?.();
-  const body = html(`<div class="c-receipt">
-    <div class="rh">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : ""}<b>${esc(store.name)}</b>${store.contact?.address ? `<div>${esc(store.contact.address)}</div>` : ""}${store.contact?.phone ? `<div>${esc(store.contact.phone)}</div>` : ""}</div>
-    <div class="rl"><span>Order</span><span>#${o.orderNo}</span></div>
-    <div class="rl"><span>Date</span><span>${(o.createdAt?.toDate?.() || new Date()).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}</span></div>
-    <div class="rl"><span>Type</span><span>${{ dine_in: "Dine-in", take_out: "Take-out", pickup: "Pickup", delivery: "Delivery" }[o.serviceType] || ""}${o.tableLabel ? " · " + esc(o.tableLabel) : ""}</span></div>
-    <hr/>${o.items.map((l) => `<div class="rl"><span>${l.qty}× ${esc(l.name)}${l.choices?.length ? `<br><small>${l.choices.map((c) => esc(c.label)).join(", ")}</small>` : ""}</span><span>${money(l.subtotal)}</span></div>`).join("")}<hr/>
-    ${o.discounts?.promo ? `<div class="rl"><span>Promo savings</span><span>−${money(o.discounts.promo)}</span></div>` : ""}
-    ${o.voucher ? `<div class="rl"><span>Voucher ${esc(o.voucher.code)}</span><span>−${money(o.voucher.discount)}</span></div>` : ""}
-    ${o.deliveryFee ? `<div class="rl"><span>Delivery fee</span><span>${money(o.deliveryFee)}</span></div>` : ""}
-    ${o.smallOrderFee ? `<div class="rl"><span>Small-order fee</span><span>${money(o.smallOrderFee)}</span></div>` : ""}
-    <div class="rl big"><span>TOTAL</span><span>${money(o.total)}</span></div>
-    ${o.paid ? `<div class="rpaid">PAID${o.paymentMethodName || o.paymentMethod ? " · " + esc((o.paymentMethodName || o.paymentMethod).toUpperCase()) : ""}${paidAt ? " · " + paidAt.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" }) : ""}</div>` : `<div class="rl muted"><span>Payment</span><span>Unpaid</span></div>`}
-    <p class="muted small" style="text-align:center;margin-top:14px">This is your digital receipt. Thank you!</p>
-  </div>`);
-  const foot = html(`<div class="c-ftrow"><button class="c-btn ghost" data-print>🖨 Print / Save PDF</button>${navigator.share ? `<button class="c-btn" data-share>Share</button>` : ""}</div>`);
-  foot.querySelector("[data-print]").onclick = () => { document.body.classList.add("print-receipt"); window.print(); setTimeout(() => document.body.classList.remove("print-receipt"), 500); };
-  foot.querySelector("[data-share]")?.addEventListener("click", () => navigator.share({ title: `${store.name} receipt #${o.orderNo}`, text: `Order #${o.orderNo} · ${money(o.total)} · ${o.paid ? "PAID" : "Unpaid"}`, url: location.href }).catch(() => {}));
-  openSheet("Receipt", body, foot, `#${o.orderNo}`);
+  const r = { kind: "Order", code: o.orderNo, date: o.createdAt?.toDate?.() || new Date(),
+    rows: [["Type", `${{ dine_in: "Dine-in", take_out: "Take-out", pickup: "Pickup", delivery: "Delivery" }[o.serviceType] || ""}${o.tableLabel ? " · " + o.tableLabel : ""}`]],
+    lines: (o.items || []).map((l) => ({ name: `${l.qty}× ${l.name}`, sub: (l.choices || []).map((c) => c.label).join(", "), amt: l.subtotal })),
+    adj: [["Promo savings", -(o.discounts?.promo || 0)], [o.voucher ? `Voucher ${o.voucher.code}` : "Voucher", -(o.voucher?.discount || 0)], ["Delivery fee", o.deliveryFee || 0], ["Small-order fee", o.smallOrderFee || 0], ["Sorry discount", -(o.discounts?.incident || 0)], ["Refunded (sold out)", -(o.refund?.amount || 0)]],
+    total: o.total, paid: !!o.paid, paidText: `PAID${o.paymentMethodName || o.paymentMethod ? " · " + String(o.paymentMethodName || o.paymentMethod).toUpperCase() : ""}${paidAt ? " · " + paidAt.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" }) : ""}` };
+  openSheet("Receipt", html(receiptHTML(store, r)), receiptFoot(html, store, r), `#${o.orderNo}`);
 }
+function openApptReceipt(a) { const r = apptReceiptData(a); openSheet("Receipt", html(receiptHTML(store, r)), receiptFoot(html, store, r), a.code || ""); }
 
 // ---------------- FEEDBACK ----------------
 function openRate(rec, o, initial) {

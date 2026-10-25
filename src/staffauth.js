@@ -198,12 +198,12 @@ export function watchFeatures(slug, onChange) {
   onSnapshot(doc(db, "publicStores", slug), (d) => { const x = d.data() || {}; FEAT = { ...(x.addons || {}), ...(x.pro || {}) }; onChange?.(FEAT); }, () => {});
 }
 export const feat = (k) => !FEAT || FEAT[k] !== false;
-/** Screens that need a paid plan (Kitchen/Barista = Starter, Dispatch/Rider = Pro). On a lower plan → shows a notice and never opens. */
+/** Screens that need a paid plan (Kitchen/Barista = Basic, Dispatch/Rider = Pro). On a lower plan → shows a notice and never opens. */
 export async function requireFeature(slug, key, screen) {
   let ok = true;
   try { const d = await getDoc(doc(db, "publicStores", slug)); const x = d.data() || {}; ok = (x.pro || {})[key] !== false; } catch {}
   if (ok) return true;
-  const plan = { stations: "Starter (₱99/mo)", dispatch: "Pro (₱499/mo)", delivery: "Pro (₱499/mo) or the Delivery add-on" }[key] || "a paid plan";
+  const plan = { stations: "Basic (₱99/mo)", dispatch: "Pro (₱499/mo)", delivery: "Pro (₱499/mo) or the Delivery add-on" }[key] || "a paid plan";
   document.body.innerHTML = `<div style="min-height:100vh;display:grid;place-items:center;padding:24px;font-family:Poppins,system-ui,sans-serif;background:#F5F6F8"><div style="max-width:420px;background:#fff;border-radius:20px;padding:26px;text-align:center;box-shadow:0 10px 30px rgba(0,0,0,.08)">
     <div style="font-size:2.4rem">🔒</div><h2 style="margin:8px 0 6px">${screen} isn't on your plan</h2>
     <p style="color:#6B7280;margin:0 0 16px">On the Free plan the <b>Counter</b> does everything — take orders, prepare, serve and get paid. ${screen} comes with <b>${plan}</b>.</p>

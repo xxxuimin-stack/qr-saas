@@ -86,9 +86,13 @@ service cloud.firestore {
       allow create: if false;  // createStore Cloud Function lang
       allow delete: if false;
       // Owner lang ang puwedeng mag-edit ng store settings; hindi puwedeng palitan ang ownerUid, slug, mode
+      // server-only fields (badges, counts, credits, trust, referral, demo) can't be written from the app — Cloud Functions only
       allow update: if isOwner(storeId)
                     && !request.resource.data.diff(resource.data).affectedKeys()
-                          .hasAny(['ownerUid', 'slug', 'mode', 'businessType', 'createdAt']);
+                          .hasAny(['ownerUid', 'slug', 'mode', 'businessType', 'createdAt',
+                                   'verif', 'stats', 'kycAt', 'credits', 'xUsage', 'xStrikes', 'verifyReq', 'collabUsage',
+                                   'referredBy', 'referralRewarded', 'notice', 'trust', 'orgId', 'demo'])
+                    && request.resource.data.get('settings', {}).get('demo', false) == resource.data.get('settings', {}).get('demo', false);
 
       match /categories/{id} {
         allow read: if inStore(storeId);

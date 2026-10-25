@@ -80,6 +80,7 @@ function roomsBoard(list, compact) {
     const a = el.querySelector(".acts");
     if (st === "to_clean") { const b = html(`<button class="k-btn prep">🧽 Start cleaning</button>`); b.onclick = () => act("roomCleaning", { roomId: r.id }); a.appendChild(b); }
     if (st === "to_clean" || st === "cleaning") { const b = html(`<button class="k-btn ready">✓ Finished cleaning</button>`); b.onclick = () => act("roomClean", { roomId: r.id }); a.appendChild(b); const sk = html(`<button class="k-btn">⏭ Skip</button>`); sk.onclick = () => { const why = prompt("Skip cleaning — why? (e.g. guest didn't use it, checked by owner)", "Not used"); if (why !== null) act("roomSkip", { roomId: r.id, reason: why }); }; a.appendChild(sk); }
+    if (st === "cleaning") { const m = html(`<button class="k-btn" title="Cleaning needs more time — the guest sees the new time">+15 min</button>`); m.onclick = () => act("roomMore", { roomId: r.id, minutes: 15 }); a.appendChild(m); }
     if (st === "clean" && r.housekeeping?.readyAt) a.appendChild(html(`<span class="small muted">${r.housekeeping.skipped ? "⏭ Skipped" : "✅ Ready"} since ${new Date(r.housekeeping.readyAt).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}</span>`));
     g.appendChild(el);
   });

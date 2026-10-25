@@ -303,3 +303,33 @@ body.dash .page-head h1 { font-size: 1.55rem; }
 .demo-banner .btn { color: inherit; }
 body.dash .demo-banner a.btn, body.dash .demo-banner button.btn { text-decoration: none; }
 .demo-banner .btn.ghost, .demo-banner a.btn:not(.brand) { background: transparent; border: 1px solid rgba(255,255,255,.4); color: #fff; }
+
+/* wide screens: shortcuts column on the right */
+body.dash .side-r { display: none; }
+@media (min-width: 1500px) {
+  body.dash .shell { grid-template-columns: 240px minmax(0, 1fr) 290px; }
+  body.dash .main { max-width: none; }
+  body.dash .side-r { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 20px; }
+  .sr-box h3 { margin: 0 0 8px; font-size: 15px; }
+  .sr-share { display: flex; gap: 12px; align-items: center; } .sr-share svg { flex: none; background: #fff; border-radius: 8px; }
+}
+
+/* ⚡ glowing upgrade — plan sticker (left) */
+body.dash .plan-sticker.glow { position: relative; overflow: hidden; border: 0; color: #fff; padding: 14px; background: linear-gradient(135deg, #7C3AED, #C62828 55%, #F59E0B); box-shadow: 0 8px 26px rgba(198,40,40,.35); isolation: isolate; }
+body.dash .plan-sticker.glow::before { content: ""; position: absolute; inset: -40%; background: conic-gradient(from 0deg, transparent 0 70%, rgba(255,255,255,.55) 80%, transparent 90%); animation: ttSpin 4s linear infinite; opacity: .6; z-index: -2; }
+body.dash .plan-sticker.glow::after { content: ""; position: absolute; inset: 2px; border-radius: 16px; background: linear-gradient(135deg, #6D28D9, #B91C1C 55%, #D97706); z-index: -1; }
+body.dash .plan-sticker.glow b, body.dash .plan-sticker.glow .small { color: #fff; }
+body.dash .plan-sticker.glow .btn { background: #fff; color: #B91C1C; border: 0; font-weight: 800; box-shadow: 0 0 18px rgba(255,255,255,.6); }
+/* ⚡ big upgrade card — right column */
+body.dash .upr { position: relative; border-radius: 18px; padding: 18px; color: #fff; overflow: hidden; isolation: isolate; background: #1f1147; }
+body.dash .upr::before { content: ""; position: absolute; inset: -50%; background: conic-gradient(from 0deg, #7C3AED, #C62828, #F59E0B, #22C55E, #3B82F6, #7C3AED); animation: ttSpin 6s linear infinite; z-index: -2; }
+body.dash .upr::after { content: ""; position: absolute; inset: 3px; border-radius: 16px; background: radial-gradient(120% 90% at 0% 0%, #4C1D95 0%, #1f1147 55%, #111 100%); z-index: -1; }
+body.dash .upr h3 { margin: 0 0 4px; font-size: 17px; color: #fff; }
+.upr-price { font-size: 13px; color: #FDE68A; margin-bottom: 6px; }
+.upr-bar { height: 6px; border-radius: 9px; background: rgba(255,255,255,.15); overflow: hidden; margin: 6px 0 2px; } .upr-bar i { display: block; height: 100%; background: linear-gradient(90deg, #FACC15, #F59E0B); }
+.upr-use { font-size: 12px; color: #C4B5FD; }
+body.dash .upr ul { margin: 8px 0 12px; padding-left: 18px; font-size: 13px; line-height: 1.7; color: #E9D5FF; }
+.upr-go { display: block; background: linear-gradient(90deg, #FACC15, #F59E0B); color: #111 !important; border-radius: 12px; padding: 11px; text-align: center; font-weight: 800; text-decoration: none; box-shadow: 0 0 22px rgba(250,204,21,.65); animation: ttPulse 2.2s ease-in-out infinite; }
+@keyframes ttSpin { to { transform: rotate(360deg); } }
+@keyframes ttPulse { 50% { box-shadow: 0 0 34px rgba(250,204,21,.95); } }
+@media (prefers-reduced-motion: reduce) { body.dash .plan-sticker.glow::before, body.dash .upr::before, .upr-go { animation: none; } }

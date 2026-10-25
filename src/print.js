@@ -53,7 +53,7 @@ export function printReceipt(store, orders, { cur = "PHP", cashTendered = null, 
     ${staffName ? `<div class="sm mt">Served by: ${esc(staffName)}</div>` : ""}
     <hr/><div class="c sm">${esc(cfg.footer || "Thank you!").replace(/\n/g, "<br>")}</div>
     <div class="c sm mt">This is not an official receipt.</div>
-    <div class="c sm">Order online · taptayo.com</div>`;
+    ${store.settings?.hideBranding || store.hideBranding ? "" : `<div class="c sm">Powered by TapTayo · taptayo.com</div>`}`;
   return printHTML(html, { paper: cfg.paper, title: `Receipt #${first.orderNo}` });
 }
 

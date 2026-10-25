@@ -60,8 +60,8 @@ export function resizeImage(file, max = 1200, quality = 0.85, { webp = false } =
  */
 export async function uploadImage(storeId, name, file, { max = 1200 } = {}) {
   if (!file.type.startsWith("image/")) throw new Error("Image files only (JPG/PNG).");
-  const blob = await resizeImage(file, max);
-  const ext = blob.type === "image/png" ? "png" : "jpg";
+  const blob = await resizeImage(file, max, 0.82, { webp: name !== "logo" }); // smaller on mobile data; the logo stays JPEG/PNG (QR posters / PDFs embed it)
+  const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
   const path = `stores/${storeId}/${name}.${ext}`;
   const r = ref(storage, path);
   await uploadBytes(r, blob, { contentType: blob.type, cacheControl: "public,max-age=31536000" });

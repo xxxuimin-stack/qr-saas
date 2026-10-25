@@ -3,7 +3,7 @@ try { const r = new URLSearchParams(location.search).get("ref"); if (r && /^[a-z
 // TapTayo landing page — edition picker + live phone mockups
 const E = {
   cafe: {
-    icon: "☕", name: "Café & Restaurant", short: "QR menu per table", color: "#ff7a2f", soft: "#fff0e4",
+    icon: "☕", name: "Food business", short: "QR menu per table", color: "#ff7a2f", soft: "#fff0e4",
     title: "Orders fly from the table to the kitchen.",
     lead: "Every table gets its own QR. Customers order and add more anytime — the counter accepts, the kitchen and barista get their tickets, and you see it all live.",
     feats: ["QR per table, pickup & delivery", "Counter, kitchen, barista & dispatch screens", "Busy mode with live wait times", "18+ menu, VIP rooms & events", "Promos, combos & free delivery", "Rider app with COD & change-for"],

@@ -25,6 +25,20 @@
     details p { margin: 8px 0 0; color: #3B3633; line-height: 1.55; }
     .cta { margin-top: 30px; background: #141414; color: #fff; border-radius: 20px; padding: 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; }
     .cta button { border: 0; background: #fff; color: #141414; border-radius: 999px; padding: 12px 18px; font: 800 15px Poppins, system-ui; cursor: pointer; }
+    .partner { margin-top: 18px; background: #fff; border: 2px solid #141414; border-radius: 20px; padding: 18px 20px; }
+    .partner details { border: 0; padding: 0; margin: 0; background: none; }
+    .partner summary { font-size: 17px; }
+    .partner p { margin: 0 0 12px; color: #57534E; }
+    .partner form { display: grid; gap: 10px; }
+    .partner label { font-weight: 700; font-size: 14px; display: grid; gap: 4px; }
+    .partner input, .partner select, .partner textarea { width: 100%; box-sizing: border-box; border: 2px solid #141414; border-radius: 12px; padding: 11px 12px; font: 500 15px Poppins, system-ui; background: #fff; color: #141414; }
+    .partner .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 560px) { .partner .two { grid-template-columns: 1fr; } }
+    .partner button { justify-self: start; border: 0; background: #141414; color: #fff; border-radius: 999px; padding: 12px 20px; font: 800 15px Poppins, system-ui; cursor: pointer; }
+    .partner button:disabled { opacity: .6; }
+    .partner .msg { font-weight: 600; margin: 0; }
+    .legal { margin-top: 26px; font-size: 14px; color: #57534E; }
+    .legal a { color: #141414; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -36,6 +50,18 @@
     <div class="chips" id="chips"></div>
     <div id="list"></div>
     <div class="cta"><div><b>Still stuck?</b><div style="opacity:.8;font-size:14px">Send us a message with a screenshot. We'll fix it — and if it was our fault, we add free days to your plan.</div></div><button id="chat">💬 Message TapTayo</button></div>
+    <section class="partner" id="partner">
+      <details><summary>🤝 Interested in partnering or investing?</summary>
+      <p style="margin-top:10px">Business groups, resellers, media and investors — tell us about yourself and we'll get back to you.</p>
+      <form id="pform" novalidate>
+        <div class="two"><label>Your name<input name="name" autocomplete="name" maxlength="80" required/></label><label>Email or mobile<input name="contact" autocomplete="email" maxlength="100" required/></label></div>
+        <div class="two"><label>Company or group <span style="font-weight:500;color:#78716C">(optional)</span><input name="org" maxlength="100"/></label>
+        <label>I'm a…<select name="kind"><option value="partner">Business partner</option><option value="investor">Investor</option><option value="reseller">Reseller / agent</option><option value="media">Media / press</option><option value="other">Other</option></select></label></div>
+        <label>Message<textarea name="message" rows="4" maxlength="2000" placeholder="What do you have in mind?" required></textarea></label>
+        <button type="submit">Send</button><p class="msg" id="pmsg" role="status"></p>
+      </form></details>
+    </section>
+    <p class="legal"><a href="/terms/">Terms of Use</a> · <a href="/privacy/">Privacy Policy</a></p>
   </div>
   <script type="module" src="/src/help.js"></script>
 </body>

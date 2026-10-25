@@ -17,7 +17,7 @@ export async function enablePush(storeId, app, { test = true } = {}) {
   if (perm !== "granted") throw new Error("Notifications are blocked. Allow them in your phone's settings for this site/app.");
   const reg = await navigator.serviceWorker.register("/sw.js");
   await navigator.serviceWorker.ready;
-  const { data } = await call("pushKey", {});
+  const data = await call("pushKey", {});
   let sub = await reg.pushManager.getSubscription();
   if (sub && sub.options?.applicationServerKey) {
     const cur = new Uint8Array(sub.options.applicationServerKey); const want = b64ToBytes(data.publicKey);

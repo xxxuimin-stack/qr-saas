@@ -1,0 +1,11 @@
+TapTayo Phase 1 — files that are NEW (they must exist in your project, or the build breaks)
+Copy them together with the changed files.
+
+src/accountgate.js        (log in with one tap before booking)
+src/receipt.js            (digital receipt with "Powered by TapTayo")
+src/trust.js              (New / Active / Verified / DTI / BIR badges)
+public/terms/index.html   (Terms of Use page  -> taptayo.com/terms/)
+public/privacy/index.html (Privacy Policy page -> taptayo.com/privacy/)
+
+All other files in taptayo-phase1-changed.zip replace your existing files (same path).
+Never copy .env files into the zip or GitHub.

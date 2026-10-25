@@ -60,6 +60,10 @@ export function bootCleaner({ app, storeId, store, me }) {
       if (r.housekeeping.needsCheck && sty && !sty.roomCheck && ((sty.inventory || []).length || sty.deposit?.amount)) { el.insertBefore(checkForm(r, sty), a); main.appendChild(el); return; }
       if (st === "to_clean") { const b = html(`<button class="k-btn prep" style="flex:1">🧽 Start cleaning</button>`); b.onclick = () => act("roomCleaning", r.id); a.appendChild(b); const sk = html(`<button class="k-btn">⏭ Skip</button>`); sk.onclick = () => { const why = prompt("Skip cleaning — why? (e.g. guest didn't use it)", "Not used"); if (why !== null) act("roomSkip", r.id, { reason: why }); }; a.appendChild(sk); }
       else { const b = html(`<button class="k-btn ready" style="flex:1" disabled>✓ Finished cleaning — room ready</button>`); b.onclick = () => act("roomClean", r.id); a.appendChild(b);
+        // need more time? the guest's "ready around" moves and the owner sees it's still being cleaned
+        const more = html(`<div class="row" style="gap:6px;width:100%;margin-top:6px;align-items:center"><span class="small muted" style="flex:1">${r.housekeeping.eta ? `Ready around ${new Date(r.housekeeping.eta).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}${r.housekeeping.extraMin ? ` (+${r.housekeeping.extraMin} min)` : ""}` : "Need more time?"}</span><button class="k-btn sm" data-more="15">+15 min</button><button class="k-btn sm" data-more="30">+30 min</button></div>`);
+        more.querySelectorAll("[data-more]").forEach((m) => (m.onclick = () => act("roomMore", r.id, { minutes: Number(m.dataset.more) })));
+        a.style.flexWrap = "wrap"; a.appendChild(more);
         el.querySelectorAll("[data-c]").forEach((c) => (c.onchange = () => { c.closest(".d-comp").classList.toggle("on", c.checked); b.disabled = ![...el.querySelectorAll("[data-c]")].every((x) => x.checked); })); }
       main.appendChild(el);
     });

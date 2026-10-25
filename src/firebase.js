@@ -25,7 +25,7 @@ if (!firebaseConfig.apiKey) {
 // Read-only owner demo (/app/?demo=taptayo-spa): its own Firebase app with an in-memory login,
 // so it never touches the visitor's real TapTayo login in this browser.
 export const DEMO_VIEW = (() => { try { const q = new URLSearchParams(location.search).get("demo"); return /^\/(app|counter|kitchen|staff|rider)(\/|$)/.test(location.pathname) && /^taptayo-[a-z]+$/.test(q || "") ? q : null; } catch { return null; } })();
-export const DEMO_MSG = "This is a read-only demo — start your free trial to try it on your own shop.";
+export const DEMO_MSG = "This is a read-only demo — create a free account to try it on your own shop.";
 export const app = initializeApp(firebaseConfig, DEMO_VIEW ? "demo-viewer" : undefined);
 export const auth = DEMO_VIEW ? initializeAuth(app, { persistence: inMemoryPersistence, popupRedirectResolver: browserPopupRedirectResolver }) : getAuth(app);
 // Offline cache (IndexedDB): reopening the app shows the last data instantly, then updates live.

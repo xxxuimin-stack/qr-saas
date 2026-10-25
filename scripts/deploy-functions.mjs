@@ -28,3 +28,5 @@ for (let i = 0; i < list.length; i += size) {
 }
 if (failed.length) { console.log(`\nNot deployed (${failed.length}): ${failed.join(",")}\nRetry with: node scripts/deploy-functions.mjs --only ${failed.join(",")}`); process.exit(1); }
 console.log("\nAll functions deployed ✓");
+// remember what's live so "npm run deploy:changed" only sends what changes from now on
+if (!arg("--only") && from === 1) spawnSync("node scripts/deploy-changed.mjs --mark", { stdio: "inherit", shell: true });

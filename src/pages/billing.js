@@ -3,7 +3,7 @@
 import { db, call, auth } from "../firebase.js";
 import { collection, getCountFromServer, onSnapshot, query, orderBy, limit, where, doc, getDoc, Timestamp } from "firebase/firestore";
 import { esc, html, toast, money } from "../ui.js";
-import { PLANS, SELLABLE, sellableFor, LIMITS, LIMIT_LABEL, FEATURE_TIER, PRO_FEATURES, ADDONS, UNLIMITED, planOf, tierOf, addonQty, limitsFor, limitMode } from "../plans.js";
+import { packFor, PLANS, SELLABLE, sellableFor, LIMITS, LIMIT_LABEL, FEATURE_TIER, PRO_FEATURES, ADDONS, UNLIMITED, planOf, tierOf, addonQty, limitsFor, limitMode } from "../plans.js";
 import { uploadPrivateImage } from "../upload.js";
 
 const fmtLim = (v) => (v >= UNLIMITED ? "Unlimited" : v === 0 ? "—" : String(v));
@@ -31,7 +31,7 @@ export function renderBillingPage(root, ctx) {
   const days = until ? Math.ceil((until - Date.now()) / 86400000) : null;
   const prov = sub?.provisional && ms(sub.provisional.until) > Date.now() ? sub.provisional : null;
   const L = LIMITS[limitMode(store)] || LIMITS.table;
-  // freelancers & creators only see Free vs Creator Pro (no Starter / Business tiers)
+  // freelancers & creators only see Free vs Creator Pro (no Basic / Business tiers)
   const isCreator = store.businessType === "freelance";
   const COLS = isCreator ? ["free", "creator"] : TIER_COLS; const SELL = sellableFor(store);
   const tierIdx = (k) => PLANS[k].tier;
@@ -48,17 +48,17 @@ export function renderBillingPage(root, ctx) {
     </div>
 
     <h3 style="margin:22px 0 6px">Plans for your ${esc(labels.order === "Booking" ? "business" : "shop")} <span class="small muted" style="font-weight:500">· per business, per month</span></h3>
-    <div class="tile" style="padding:0;overflow:auto"><table class="tbl plans-tbl"><thead><tr><th></th>${COLS.map((k) => `<th class="${k === cur || (cur === "trial" && k === (isCreator ? "creator" : "business")) ? "cur" : ""}"><div>${esc(PLANS[k].name)}</div><div class="pp">${PLANS[k].price ? money(PLANS[k].price) : "₱0"}</div>${k === cur ? `<span class="pill active">Current</span>` : ""}</th>`).join("")}</tr></thead><tbody>
+    <div class="tile" style="padding:0;overflow:auto"><table class="tbl plans-tbl"><thead><tr><th></th>${COLS.map((k) => `<th class="${k === cur || (cur === "trial" && k === (isCreator ? "creator" : "starter")) ? "cur" : ""}"><div>${esc(PLANS[k].name)}</div><div class="pp">${PLANS[k].price ? money(PLANS[k].price) : "₱0"}</div>${k === cur ? `<span class="pill active">Current</span>` : ""}</th>`).join("")}</tr></thead><tbody>
       ${Object.entries(L).map(([k, arr]) => `<tr><td>${esc(k === "items" ? labels.items : LIMIT_LABEL[k] || k)}</td>${COLS.map((c) => [arr[tierIdx(c)], tierIdx(c)]).map(([v, i]) => `<td>${fmtLim(v)}${k === "staff" && i === 0 ? " (you)" : ""}</td>`).join("")}</tr>`).join("")}
       ${Object.entries(FEATURE_TIER).filter(([k]) => relevant(k, mode)).map(([k, t]) => `<tr><td>${esc(PRO_FEATURES[k])}</td>${COLS.map((c) => tierIdx(c)).map((i) => `<td>${i >= t ? "✓" : ""}</td>`).join("")}</tr>`).join("")}
       <tr><td>Free plan</td><td colspan="${COLS.length}" class="small muted" style="text-align:left">${esc(FREE_WORDS[limitMode(store)] || FREE_WORDS[mode] || FREE_WORDS.table)}</td></tr>
     </tbody></table></div>
 
     <h3 style="margin:22px 0 6px">Add-ons <span class="small muted" style="font-weight:500">· monthly, on top of your plan</span></h3>
-    <div class="grid" id="addons">${Object.entries(ADDONS).filter(([, a]) => !a.legacy && relevantAddon(a, mode) && a.notFor !== store.businessType && !(isCreator && ["staff1", "tables4", "delivery", "queuetv", "giftcards", "events_vip", "branch"].some((x) => ADDONS[x] === a))).map(([k, a]) => { const q = addonQty(sub, k); return `<div class="tile ${q ? "plan-current" : ""}">
+    <div class="grid" id="addons">${Object.entries(ADDONS).filter(([, a]) => !a.legacy && relevantAddon(a, mode) && a.notFor !== store.businessType && !(isCreator && ["staff1", "tables4", "delivery", "queuetv", "giftcards", "events_vip", "branch", "opsPack"].some((x) => ADDONS[x] === a))).map(([k, a]) => { const q = addonQty(sub, k); return `<div class="tile ${q ? "plan-current" : ""}">
       <div class="row between"><b>${esc(a.name)}</b>${q ? `<span class="pill active">${a.qty ? `× ${q}` : "On"}</span>` : ""}</div>
       <div style="font-weight:700;margin:4px 0">₱${a.price}<span class="small muted" style="font-weight:500">/month${a.qty ? " each" : ""}</span></div>
-      <p class="small muted" style="margin:0">${esc(a.blurb || "")}${a.minTier ? ` · from ${esc(PLANS[TIER_COLS[a.minTier]].name)}` : " · any plan"}</p></div>`; }).join("")}</div>
+      <p class="small muted" style="margin:0">${esc(a.blurb || "")}${a.minTier ? ` · from ${esc(PLANS[TIER_COLS[a.minTier]].name)}` : " · any plan"}</p>${a.pack ? `<p class="small" style="margin:6px 0 0"><span class="pill active">Bundle</span> Includes ${a.pack.map((x) => esc(ADDONS[x]?.name || x)).join(" · ")}</p>` : packFor(k) && ADDONS[packFor(k)] && ADDONS[packFor(k)].notFor !== store.businessType ? `<p class="small" style="margin:6px 0 0;color:#15803d">Cheaper in the ${esc(ADDONS[packFor(k)].name)}</p>` : ""}</div>`; }).join("")}</div>
 
     <div class="tile" style="margin-top:16px" id="payBox">
       <h3>Upgrade / renew</h3>
@@ -66,7 +66,7 @@ export function renderBillingPage(root, ctx) {
         <div><label>Plan</label><select name="plan">${SELL.map((k) => `<option value="${k}" ${k === (isCreator ? "creator" : tierOf(sub) >= 1 && PLANS[cur]?.tier ? TIER_COLS[Math.min(3, PLANS[cur].tier)] : "starter") ? "selected" : ""}>${esc(PLANS[k].name)} — ${money(PLANS[k].price)}/month</option>`).join("")}<option value="none">Add-ons only (stay on Free)</option></select></div>
         <div><label>Months</label><select name="months">${[1, 3, 6, 12].map((m) => `<option value="${m}">${m} month${m > 1 ? "s" : ""}${m === 12 ? " (2 months free)" : ""}</option>`).join("")}</select></div>
       </div>
-      <div style="margin-top:10px"><label>Add-ons</label><div class="addon-pick">${Object.entries(ADDONS).filter(([, a]) => !a.legacy && relevantAddon(a, mode) && a.notFor !== store.businessType && !(isCreator && ["staff1", "tables4", "delivery", "queuetv", "giftcards", "events_vip", "branch"].some((x) => ADDONS[x] === a))).map(([k, a]) => `<label class="ap"><span><b>${esc(a.name)}</b> <span class="muted small">₱${a.price}/mo</span></span>${a.qty ? `<input type="number" min="0" max="10" value="${addonQty(sub, k)}" data-q="${k}"/>` : `<input type="checkbox" data-c="${k}" ${addonQty(sub, k) ? "checked" : ""}/>`}</label>`).join("")}</div><p class="small muted" data-addonnote></p></div>
+      <div style="margin-top:10px"><label>Add-ons</label><div class="addon-pick">${Object.entries(ADDONS).filter(([, a]) => !a.legacy && relevantAddon(a, mode) && a.notFor !== store.businessType && !(isCreator && ["staff1", "tables4", "delivery", "queuetv", "giftcards", "events_vip", "branch", "opsPack"].some((x) => ADDONS[x] === a))).map(([k, a]) => `<label class="ap"><span><b>${esc(a.name)}</b> <span class="muted small">₱${a.price}/mo</span></span>${a.qty ? `<input type="number" min="0" max="10" value="${addonQty(sub, k)}" data-q="${k}"/>` : `<input type="checkbox" data-c="${k}" ${addonQty(sub, k) ? "checked" : ""}/>`}</label>`).join("")}</div><p class="small muted" data-addonnote></p></div>
       <div class="pay-how" data-how><div class="skel" style="height:60px"></div></div>
       <div class="form2" style="margin-top:10px">
         <div><label>Paid with</label><select name="method"><option value="gcash">GCash</option><option value="maya">Maya</option><option value="bank">Bank transfer</option></select></div>
@@ -112,7 +112,8 @@ export function renderBillingPage(root, ctx) {
     root.querySelector("#payTotal").textContent = money(total());
     const tier = g("plan").value === "none" ? 0 : PLANS[g("plan").value].tier;
     const bad = Object.keys(picked()).filter((k) => (ADDONS[k].minTier || 0) > tier);
-    root.querySelector("[data-addonnote]").textContent = bad.length ? `${bad.map((k) => ADDONS[k].name).join(", ")} need${bad.length > 1 ? "" : "s"} the ${PLANS[TIER_COLS[Math.max(...bad.map((k) => ADDONS[k].minTier))]].name} plan or higher.` : "";
+    const dup = Object.keys(picked()).filter((k) => packFor(k) && picked()[packFor(k)]);
+    root.querySelector("[data-addonnote]").textContent = dup.length ? `${dup.map((k) => ADDONS[k].name).join(", ")} ${dup.length > 1 ? "are" : "is"} already in the ${ADDONS[packFor(dup[0])].name} — untick ${dup.length > 1 ? "them" : "it"} to save.` : bad.length ? `${bad.map((k) => ADDONS[k].name).join(", ")} need${bad.length > 1 ? "" : "s"} the ${PLANS[TIER_COLS[Math.max(...bad.map((k) => ADDONS[k].minTier))]].name} plan or higher.` : "";
   };
   root.querySelectorAll("select, [data-q], [data-c]").forEach((e) => (e.oninput = e.onchange = upd)); upd();
   root.querySelector("#submitPay").onclick = async (e) => {

@@ -6,6 +6,9 @@ import { msgrField, readMsgr } from "./msgr.js";
 import { uploadCustomerImage, uploadPrivateImage } from "./upload.js";
 import { hydratePrivate } from "./privfiles.js";
 import { rateRows } from "./ratecats.js";
+import { receiptHTML, receiptFoot, stayReceiptData } from "./receipt.js";
+import { trustChips, nameWithBadge, enableTrust } from "./trust.js";
+import { ensureAccount, isRealAccount } from "./accountgate.js";
 
 let C = null;          // context from menu.js
 let store = null, view = "home", stayUnsub = null, tickTimer = null;
@@ -56,7 +59,7 @@ function renderHome(keep) {
   C.app.innerHTML = "";
   const root = html(`<div class="c-page s-page">
     <header class="s-hero" style="${store.coverUrl ? `background-image:linear-gradient(180deg,rgba(0,0,0,.1),rgba(0,0,0,.65)),url('${bg(store.coverUrl)}')` : ""}">
-      <div class="s-hero-in">${store.logoUrl ? `<img class="s-logo" src="${esc(store.logoUrl)}" alt=""/>` : ""}<h1>${esc(store.name)}</h1>${store.tagline ? `<p>${esc(store.tagline)}</p>` : ""}
+      <div class="s-hero-in">${store.logoUrl ? `<img class="s-logo" src="${esc(store.logoUrl)}" alt=""/>` : ""}<h1>${nameWithBadge(store)}</h1>${store.tagline ? `<p>${esc(store.tagline)}</p>` : ""}${trustChips(store)}
         <div class="s-chips"><span>🕑 Check-in ${fmt12(store.stay?.checkIn)}</span><span>Check-out ${fmt12(store.stay?.checkOut)}</span>${fb.count ? `<span>★ ${fb.avg} (${fb.count})</span>` : ""}</div></div>
     </header>
     <div class="s-body">
@@ -73,7 +76,7 @@ function renderHome(keep) {
           ${(r.notices || []).length ? `<div class="small" style="color:#b45309;font-weight:600">⚠️ ${esc(r.notices.map((n) => n.label).join(" · "))} · ${Math.max(...r.notices.map((n) => n.percent || 0))}% off</div>` : ""}
           <div class="s-ams">${(r.amenities || []).slice(0, 4).map((a) => `<span>${esc(a)}</span>`).join("")}</div>
           <button class="c-btn brand block" style="margin-top:10px">View &amp; book</button></div></article>`; }).join("") || `<p class="muted">Rooms are being set up. Please check back soon.</p>`}</div>
-      ${(store.stay?.amenities || []).length ? `<div class="c-card-soft"><h2>Use of amenities</h2>${store.stay.amenities.map((a) => `<div class="c-mini"><span>${esc(a.name)}</span><span class="amt">${a.unit === "free" ? "Free" : `${money(a.price)} ${a.unit === "head" ? "/ person" : a.unit === "hour" ? "/ hour" : "/ stay"}`}</span></div>`).join("")}</div>` : ""}
+      ${(store.stay?.amenities || []).length ? `<div class="c-card-soft"><h2>Amenities</h2>${store.stay.amenities.map((a) => `<div class="c-mini"><span>${esc(a.name)}${a.note ? ` <small class="muted">· ${esc(a.note)}</small>` : ""}</span><span class="amt">${a.unit === "free" ? "Free" : `${money(a.price)} ${a.unit === "head" ? "/ person" : a.unit === "hour" ? "/ hour" : "/ stay"}`}</span></div>`).join("")}</div>` : ""}
       ${(store.stay?.nearby || []).length ? `<div class="c-card-soft"><h2>Nearby</h2>${store.stay.nearby.map((x) => `<div class="c-mini"><span>${esc(x.kind || "📍")} ${x.map ? `<a href="${esc(x.map)}" target="_blank" rel="noopener">${esc(x.name)}</a>` : esc(x.name)}</span><span class="amt">${x.mins ? `${x.mins} min` : ""}</span></div>`).join("")}</div>` : ""}
       ${store.stay?.policy ? `<div class="c-card-soft"><h2>House policy</h2><div class="s-policy">${esc(store.stay.policy)}</div></div>` : ""}
       ${(fb.reviews || []).length ? `<div class="c-card-soft"><h2>Guest reviews · ★ ${fb.avg} (${fb.count})</h2>${fb.reviews.map((r) => `<div class="s-review"><div style="color:var(--accent)">${"★".repeat(r.rating)}</div><div>“${esc(r.comment)}”</div><div class="muted small">— ${esc(r.name)}</div></div>`).join("")}</div>` : ""}
@@ -168,6 +171,7 @@ function calendar(el, booked, onPick, initial = {}) {
 
 // ---------------- BOOKING ----------------
 async function openBooking(room) {
+  if (!store.demo && !isRealAccount()) { if (await ensureAccount({ openSheet: C.openSheet, closeSheet: C.closeSheet, html: C.html, toast: C.toast }, "book your stay")) return openBooking(room); return; }
   const { esc, html, money } = C;
   const cfg = store.stay || {};
   const saved = C.loadLocal().customer || {};
@@ -176,8 +180,10 @@ async function openBooking(room) {
   let mode = "night", sh = { date: null, hours: pkgs[0]?.hours || null, time: null }, busy = [];
   const addq = {}, amq = {}; let kids = 0;
   let dates = { a: null, b: null }, guests = Math.min(2, room.capacity || 2), swimmers = 0, payId = gcash[0]?.id || null;
-  const body = html(`<div class="s-book">
-    <h3 class="s-step">1 · ${pkgs.length ? "When" : "Dates"}</h3>
+  const body = html(`<div class="s-book s-wiz">
+    <ol class="s-prog" data-prog>${["When", "Guests", "Details", "Confirm"].map((l, i) => `<li data-pg="${i + 1}"><i>${i + 1}</i><span>${l}</span></li>`).join("")}</ol>
+    <section data-pane="1">
+    <h3 class="s-step">${pkgs.length ? "When are you staying?" : "Pick your dates"}</h3>
     ${pkgs.length ? `<div class="c-chips" data-modes style="margin-bottom:10px"><button type="button" class="chip on" data-mode="night">🌙 Overnight</button><button type="button" class="chip" data-mode="short">⏳ By the hour</button></div>` : ""}
     <div data-cal><p class="muted small">Loading availability…</p></div>
     <div data-short hidden>
@@ -187,39 +193,62 @@ async function openBooking(room) {
       <p class="small muted">Great if you only need the room for a few hours — no need to pay for the whole night.</p>
     </div>
     <div data-sum class="s-sum"></div>
-    <h3 class="s-step">2 · Guests</h3>
+    </section>
+    <section data-pane="2" hidden>
+    <h3 class="s-step">Who's coming?</h3>
     <div class="row between"><span>Adults <span class="muted small">(max ${room.capacity}${cfg.kids?.countInPax ? " incl. kids" : ""})</span></span><div class="c-qty"><button type="button" data-gm>−</button><span data-g>${guests}</span><button type="button" data-gp>+</button></div></div>
     <div class="row between" style="margin-top:8px"><span>Kids <span class="muted small">${cfg.kids?.freeUnder ? `(below ${cfg.kids.freeUnder} free)` : ""}</span></span><div class="c-qty"><button type="button" data-km>−</button><span data-k>0</span><button type="button" data-kp>+</button></div></div>
-    ${(cfg.amenities || []).length ? `<h3 class="s-step">Use of amenities</h3><div class="s-amen">${cfg.amenities.map((a) => `<div style="display:flex;align-items:center;gap:10px;margin:8px 0"><span style="flex:1;min-width:0"><b>${esc(a.name)}</b><br><span class="muted small">${a.unit === "free" ? "Free for guests" : `${money(a.price)} ${a.unit === "head" ? "per person" : a.unit === "hour" ? "per hour" : "per stay"}`}</span></span>${a.unit === "free" ? `<span class="pill ok">included</span>` : `<div class="c-qty" style="flex:none"><button type="button" data-mm="${a.id}">−</button><span data-mq="${a.id}">0</span><button type="button" data-mp="${a.id}">+</button></div>`}</div>`).join("")}</div>` : ""}
-    ${(cfg.amenities || []).length ? "" : cfg.pool?.mode === "per_head" ? `<div class="row between" style="margin-top:8px"><span>🏊 Swimmers <span class="muted small">(${money(cfg.pool.price)} each)</span></span><div class="c-qty"><button type="button" data-sm>−</button><span data-s>0</span><button type="button" data-sp>+</button></div></div>` : cfg.pool?.mode === "included" ? `<div class="small muted" style="margin-top:6px">🏊 Pool use is included.</div>` : cfg.pool?.mode === "ask" ? `<div class="small muted" style="margin-top:6px">🏊 Want to swim? Add it in your request — the caretaker will tell you the price.</div>` : ""}
+    ${(cfg.amenities || []).length ? `<h3 class="s-step">Amenities <span class="muted small">(pick what you'll use)</span></h3><div class="s-amen">${cfg.amenities.map((a) => `<div style="display:flex;align-items:center;gap:10px;margin:8px 0"><span style="flex:1;min-width:0"><b>${esc(a.name)}</b><br><span class="muted small">${a.unit === "free" ? "Free for guests" : `${money(a.price)} ${a.unit === "head" ? "per person" : a.unit === "hour" ? "per hour" : "per stay"}`}${a.note ? ` · ${esc(a.note)}` : ""}</span></span>${a.unit === "free" ? `<span class="pill ok">included</span>` : `<div class="c-qty" style="flex:none"><button type="button" data-mm="${a.id}">−</button><span data-mq="${a.id}">0</span><button type="button" data-mp="${a.id}">+</button></div>`}</div>`).join("")}</div>` : ""}
+    ${(cfg.amenities || []).length ? "" : cfg.pool?.mode === "ask" ? `<div class="small muted" style="margin-top:6px">🏊 Want to swim? Add it in your request — the caretaker will tell you the price.</div>` : ""}
     ${(cfg.addons || []).length ? `<h3 class="s-step">Extras <span class="muted small">(optional)</span></h3><div class="s-addons">${cfg.addons.map((a) => `<div style="display:flex;align-items:center;gap:10px;margin:8px 0"><span style="flex:1;min-width:0"><b>${esc(a.name)}</b><br><span class="muted small">${money(a.price)}${a.per === "night" ? " / night" : ""}${a.approval ? " · if available" : ""}</span></span><div class="c-qty" style="flex:none"><button type="button" data-am="${a.id}">−</button><span data-aq="${a.id}">0</span><button type="button" data-ap="${a.id}">+</button></div></div>`).join("")}<p class="small muted">Items marked "if available" are confirmed by the caretaker. Kits are ready in the room when you arrive.</p></div>` : ""}
     <div data-gids></div>
-    <h3 class="s-step">3 · Request <span class="muted small">(optional)</span></h3>
-    <textarea data-req rows="2" maxlength="300" placeholder="e.g. early check-in, extra towels, swimming for 4"></textarea>
-    <h3 class="s-step">4 · Your details</h3>
+    <h3 class="s-step">Request <span class="muted small">(optional)</span></h3>
+    <textarea data-req rows="2" maxlength="300" placeholder="e.g. early check-in, extra towels, celebrating a birthday"></textarea>
+    </section>
+    <section data-pane="3" hidden>
+    <h3 class="s-step">Your details</h3>
     <label>Full name (as on your ID)</label><input data-name value="${esc(saved.name || "")}"/>
     <label>Phone</label><input data-phone type="tel" value="${esc(saved.phone || "")}" placeholder="09XX XXX XXXX"/>
     ${msgrField(saved)}
-    <h3 class="s-step">5 · Downpayment</h3>
+    <h3 class="s-step">Downpayment</h3>
     <div data-pay></div>
-    <h3 class="s-step">6 · Policy &amp; waiver</h3>
+    </section>
+    <section data-pane="4" hidden>
+    <h3 class="s-step">Before you book</h3>
+    <div class="s-policy">
+      <div><span>🕑</span><span>Check-in <b>${fmt12(cfg.checkIn || "14:00")}</b> · Check-out <b>${fmt12(cfg.checkOut || "12:00")}</b></span></div>
+      <div><span>💸</span><span>${store.bookingPolicy?.refundable !== false && (cfg.cancel?.fullDays || cfg.cancel?.partialDays) ? `${cfg.cancel.fullDays ? `Full refund ${cfg.cancel.fullDays}+ days before` : ""}${cfg.cancel.fullDays && cfg.cancel.partialDays ? " · " : ""}${cfg.cancel.partialDays ? `${cfg.cancel.partialPct}% refund ${cfg.cancel.partialDays}+ days before` : ""}` : "<b>Non-refundable</b> — you may ask to move your dates"}</span></div>
+      ${ovRate(cfg) ? `<div><span>⏰</span><span>Late check-out: ${money(ovRate(cfg))} per hour${cfg.overstay?.graceMin ? ` after ${cfg.overstay.graceMin} min` : ""}</span></div>` : ""}
+      ${(room.deposit ?? cfg.deposit?.amount) ? `<div><span>🔐</span><span>Security deposit ${money(room.deposit ?? cfg.deposit.amount)} — refundable</span></div>` : ""}
+      <div><span>🪪</span><span>Valid ID ${cfg.requireId !== false ? "needed" : "optional"} · seen only by the staff</span></div>
+    </div>
     ${store.bookingPolicy ? `<div class="small muted" style="margin:6px 0">📅 ${C.esc((() => { const bp = store.bookingPolicy, R = bp.reschedule || {}; return [bp.refundable === false ? "Non-refundable" : "", R.allowed === false ? "No rescheduling" : `Reschedule${R.max ? ` up to ${R.max}×` : ""}${R.cutoffHours ? ` until ${R.cutoffHours} h before` : ""}`, R.allowed !== false && R.fee ? `${R.feeType === "percent" ? R.fee + "%" : money(R.fee)} moving date fee` : ""].filter(Boolean).join(" · "); })())}</div>` : ""}
     ${(room.notices || []).length ? `<div class="c-alert warn" style="text-align:left"><b>⚠️ Room notice</b>${room.notices.map((n) => `<div>• ${esc(n.label)}</div>`).join("")}<div class="small">That's why this room is <b>${Math.max(...room.notices.map((n) => n.percent || 0))}% off</b> right now.</div><label class="c-agree" style="margin-top:6px"><input type="checkbox" data-noticeok/> I know about this and still want to book</label></div>` : ""}
-    ${cfg.policy ? `<div class="waiver-text">${esc(cfg.policy)}</div>` : ""}
+    ${cfg.policy ? `<details class="s-more"><summary>Read the house policy</summary><div class="waiver-text">${esc(cfg.policy)}</div></details>` : ""}
     <label class="c-agree"><input type="checkbox" data-ok1/> I have read and agree to the house policy</label>
-    ${cfg.houseRules ? `<div class="waiver-text">${esc(cfg.houseRules)}</div><label class="c-agree"><input type="checkbox" data-rules/> I accept the house rules</label>` : ""}
+    ${cfg.houseRules ? `<details class="s-more"><summary>Read the house rules</summary><div class="waiver-text">${esc(cfg.houseRules)}</div></details><label class="c-agree"><input type="checkbox" data-rules/> I accept the house rules</label>` : ""}
     ${ovRate(cfg) ? `<label class="c-agree"><input type="checkbox" data-ovack/> <span>I understand: staying past check-out costs <b>${money(ovRate(cfg))} per hour</b>${cfg.overstay?.graceMin ? ` after a ${cfg.overstay.graceMin}-minute grace period` : ""}${cfg.deposit?.amount ? " (taken from the security deposit if unpaid)" : ""}.</span></label>` : ""}
     ${cfg.cleaning?.minutes ? `<p class="small muted" style="margin:4px 0 0">🧹 Rooms are cleaned between guests (about ${cfg.cleaning.minutes} min) — you'll see on your booking page when your room is ready.</p>` : ""}
     <label class="c-agree"><input type="checkbox" data-ok2/> <span>${store.bookingPolicy?.refundable !== false && (cfg.cancel?.fullDays || cfg.cancel?.partialDays) ? `<b>Refund policy:</b> ${cfg.cancel.fullDays ? `full refund if cancelled ${cfg.cancel.fullDays}+ days before` : ""}${cfg.cancel.fullDays && cfg.cancel.partialDays ? ", " : ""}${cfg.cancel.partialDays ? `${cfg.cancel.partialPct}% refund ${cfg.cancel.partialDays}+ days before` : ""}; no refund after that. I may request to reschedule.` : `<b>No refund.</b> I understand payments are non-refundable; I may request to reschedule.`}</span></label>
-    ${cfg.waiverText ? `<div class="waiver-text" style="margin-top:10px">${esc(cfg.waiverText)}</div>` : ""}
+    ${cfg.waiverText ? `<details class="s-more"><summary>Read the waiver you're signing</summary><div class="waiver-text">${esc(cfg.waiverText)}</div></details>` : ""}
     <label>Valid ID photo ${cfg.requireId !== false ? "" : "(optional)"}</label><input type="file" accept="image/*" data-id/>${cfg.noIdOk !== false ? `<label class="c-agree"><input type="checkbox" data-noid/> I don't have a valid ID right now — the owner will decide</label>` : ""}<div class="small muted">🔒 Seen only by the staff · deleted automatically after 90 days · never shown publicly.</div>
     <label>Signature</label><div data-sig></div>
+    </section>
     <div data-err></div></div>`);
-  const foot = html(`<div class="c-ftrow"><button class="c-btn brand block" data-go><span>Book</span><b data-ft></b></button></div>`);
+  const foot = html(`<div class="s-foot"><div class="s-tot"><small>Total</small><b data-ft>—</b><span data-fdown></span></div><button class="c-btn ghost" type="button" data-back hidden>Back</button><button class="c-btn brand" type="button" data-fwd>Next</button><button class="c-btn brand" data-go hidden><span>Book</span></button></div>`);
+  let step = 1;
+  const goStep = (n) => {
+    step = Math.max(1, Math.min(4, n));
+    body.querySelectorAll("[data-pane]").forEach((p) => (p.hidden = Number(p.dataset.pane) !== step));
+    body.querySelectorAll("[data-pg]").forEach((li) => { const i = Number(li.dataset.pg); li.classList.toggle("on", i === step); li.classList.toggle("done", i < step); });
+    foot.querySelector("[data-back]").hidden = step === 1; foot.querySelector("[data-fwd]").hidden = step === 4; foot.querySelector("[data-go]").hidden = step !== 4;
+    body.querySelector("[data-err]").innerHTML = ""; body.closest(".c-sheet-body, .c-sheet, [data-sheet-body]")?.scrollTo?.({ top: 0 }); body.scrollIntoView?.({ block: "start" });
+  };
+  body.querySelectorAll("[data-pg]").forEach((li) => (li.onclick = () => { if (Number(li.dataset.pg) < step) goStep(Number(li.dataset.pg)); }));
   const pad = signaturePad(); body.querySelector("[data-sig]").appendChild(pad.el);
   const extras = (n) => [...(cfg.addons || []).filter((a) => addq[a.id]).map((a) => ({ ...a, qty: addq[a.id], amount: a.price * addq[a.id] * (a.per === "night" ? Math.max(1, n) : 1) })), ...(cfg.amenities || []).filter((a) => a.unit !== "free" && amq[a.id]).map((a) => ({ ...a, name: `${a.name}${a.unit === "head" ? "" : a.unit === "hour" ? " (hours)" : ""}`, qty: amq[a.id], amount: a.price * (a.unit === "stay" ? 1 : amq[a.id]) }))];
   const noticePct = Math.max(0, ...(room.notices || []).map((n) => n.percent || 0));
-  const finish = (o) => { const ex = extras(o.nights.length); const exT = ex.reduce((x, y) => x + y.amount, 0); const disc = promoFor({ nights: o.nights, short: o.short, startMs: o.startMs, sub: o.sub }); const nd = Math.round(o.sub * noticePct) / 100; const tot = o.sub + o.pool + exT - (disc?.amount || 0) - nd; return { ...o, ex, disc, nd, tot, down: Math.round(tot * (cfg.downPct ?? 50)) / 100 }; };
+  const finish = (o) => { const ex = extras(o.nights.length); const exT = ex.reduce((x, y) => x + y.amount, 0); const disc = promoFor({ nights: o.nights, short: o.short, startMs: o.startMs, sub: o.sub }); const nd = Math.round(o.sub * noticePct) / 100; const tot = o.sub + o.pool + exT - (disc?.amount || 0) - nd; return { ...o, ex, disc, nd, tot, down: Math.min(Math.round(tot * (cfg.downPct ?? 50)) / 100, store.trust?.newShop ? 1500 : Infinity) }; };
   const total = () => { if (mode === "short") { const p = pkgs.find((x) => x.hours === sh.hours); if (!p || !sh.date || !sh.time) return { nights: [], sub: 0, pool: 0, tot: 0, down: 0, ex: [] }; const pool = cfg.pool?.mode === "per_head" ? swimmers * (cfg.pool.price || 0) : 0; return finish({ nights: [], short: p, sub: p.price, pool, startMs: phMs(sh.date, sh.time) }); }
     if (!dates.a || !dates.b) return { nights: [], sub: 0, pool: 0, tot: 0, down: 0, ex: [] }; const n = nightsOf(room, dates.a, dates.b); const sub = n.reduce((x, y) => x + y.price, 0); const pool = cfg.pool?.mode === "per_head" ? swimmers * (cfg.pool.price || 0) : 0; return finish({ nights: n, sub, pool, startMs: phMs(dates.a, cfg.checkIn || "14:00") }); };
   const depAmt = room.deposit ?? cfg.deposit?.amount ?? 0;
@@ -240,14 +269,14 @@ async function openBooking(room) {
     const kq = body.querySelector("[data-k]"); if (kq) kq.textContent = kids;
     const gw = body.querySelector("[data-gids]"); const need = cfg.guestIds ? guests - 1 : 0; void 0;
     if (gw && gw.childElementCount !== need) { const keep = [...gw.querySelectorAll("input[type=file]")].map((i) => i.files?.[0]); gw.innerHTML = need ? `<h3 class="s-step">Valid ID of each guest</h3>${Array.from({ length: need }, (_, i) => `<label>Guest ${i + 2} — valid ID photo</label><input type="file" accept="image/*" data-gid="${i}"/>`).join("")}<div class="small muted">🔒 Seen only by the staff · deleted after 90 days.</div>` : ""; void keep; }
-    const s = body.querySelector("[data-s]"); if (s) s.textContent = swimmers;
-    body.querySelector("[data-pay]").innerHTML = t.tot ? `<div class="c-mini"><span>Downpayment (${cfg.downPct ?? 50}%)</span><b>${money(t.down)}</b></div><div class="c-mini small muted"><span>Balance at check-in</span><span>${money(t.tot - t.down)}</span></div>
+    body.querySelector("[data-pay]").innerHTML = t.tot ? `${store.trust?.newShop ? `<div class="c-alert" style="text-align:left;margin:0 0 6px">🌱 <b>New on TapTayo</b> — to keep you safe, the downpayment is at most ${money(1500)} until this place is verified. Pay the rest at check-in.</div>` : ""}<div class="c-mini"><span>Downpayment${store.trust?.newShop && t.down >= 1500 ? "" : ` (${cfg.downPct ?? 50}%)`}</span><b>${money(t.down)}</b></div><div class="c-mini small muted"><span>Balance at check-in</span><span>${money(t.tot - t.down)}</span></div>
       ${gcash.length ? `<div class="c-pick" data-pays style="margin-top:8px">${gcash.map((m) => `<button type="button" data-pm="${m.id}" class="${payId === m.id ? "on" : ""}"><b>${esc(m.name)}</b><span>${esc(m.number || "")}${m.accountName ? " · " + esc(m.accountName) : ""}</span></button>`).join("")}</div>
       ${(() => { const m = gcash.find((x) => x.id === payId); return m?.qrUrl ? `<img src="${esc(m.qrUrl)}" alt="QR" style="width:170px;display:block;margin:8px auto;border-radius:10px"/>` : ""; })()}
       <label>Reference number</label><input data-ref placeholder="e.g. 1234 567 890" maxlength="60"/>
       <label>Screenshot of payment (optional)</label><input type="file" accept="image/*" data-proof/>` : `<p class="small muted">Pay the downpayment as instructed by the caretaker on Messenger.</p>`}` : `<p class="muted small">Pick your dates first.</p>`;
     body.querySelectorAll("[data-pm]").forEach((b) => (b.onclick = () => { payId = b.dataset.pm; draw(); }));
-    foot.querySelector("[data-ft]").textContent = t.tot ? money(t.tot) : "";
+    foot.querySelector("[data-ft]").textContent = t.tot ? money(t.tot) : "—";
+    foot.querySelector("[data-fdown]").textContent = t.tot && t.down ? `Downpayment ${money(t.down)}` : t.short ? `${t.short.hours} hours` : t.nights.length ? `${t.nights.length} night${t.nights.length > 1 ? "s" : ""}` : "Pick your dates";
   };
   const sc = store.stay?.short || {};
   const drawShort = () => {
@@ -264,7 +293,7 @@ async function openBooking(room) {
   body.querySelectorAll("[data-mode]").forEach((b) => (b.onclick = () => { mode = b.dataset.mode; body.querySelectorAll("[data-mode]").forEach((x) => x.classList.toggle("on", x === b)); body.querySelector("[data-cal]").hidden = mode === "short"; body.querySelector("[data-short]").hidden = mode !== "short"; draw(); }));
   body.querySelectorAll("[data-h]").forEach((b) => (b.onclick = () => { sh.hours = Number(b.dataset.h); draw(); }));
   body.querySelector("[data-sdate]")?.addEventListener("change", (e) => { sh.date = e.target.value || null; sh.time = null; draw(); });
-  body.querySelectorAll("[data-mp]").forEach((b) => (b.onclick = () => { amq[b.dataset.mp] = Math.min(50, (amq[b.dataset.mp] || 0) + 1); draw(); }));
+  body.querySelectorAll("[data-mp]").forEach((b) => (b.onclick = () => { const a = cfg.amenities.find((x) => x.id === b.dataset.mp); const cap = a?.unit === "head" ? guests + kids : a?.unit === "stay" ? 1 : 24; amq[b.dataset.mp] = Math.min(cap, (amq[b.dataset.mp] || 0) + 1); draw(); }));
   body.querySelectorAll("[data-mm]").forEach((b) => (b.onclick = () => { amq[b.dataset.mm] = Math.max(0, (amq[b.dataset.mm] || 0) - 1); draw(); }));
   body.querySelector("[data-kp]")?.addEventListener("click", () => { if (cfg.kids?.countInPax && guests + kids >= (room.capacity || 20)) return; kids = Math.min(10, kids + 1); draw(); });
   body.querySelector("[data-km]")?.addEventListener("click", () => { kids = Math.max(0, kids - 1); draw(); });
@@ -272,9 +301,21 @@ async function openBooking(room) {
   body.querySelectorAll("[data-am]").forEach((b) => (b.onclick = () => { addq[b.dataset.am] = Math.max(0, (addq[b.dataset.am] || 0) - 1); draw(); }));
   body.querySelector("[data-gm]").onclick = () => { guests = Math.max(1, guests - 1); swimmers = Math.min(swimmers, guests); draw(); };
   body.querySelector("[data-gp]").onclick = () => { guests = Math.min(room.capacity || 20, guests + 1); draw(); };
-  body.querySelector("[data-sm]")?.addEventListener("click", () => { swimmers = Math.max(0, swimmers - 1); draw(); });
-  body.querySelector("[data-sp]")?.addEventListener("click", () => { swimmers = Math.min(guests, swimmers + 1); draw(); });
-  draw();
+  const stepFail = (m) => { body.querySelector("[data-err]").innerHTML = `<div class="c-alert error">${esc(m)}</div>`; };
+  foot.querySelector("[data-back]").onclick = () => goStep(step - 1);
+  foot.querySelector("[data-fwd]").onclick = () => {
+    const t = total();
+    if (step === 1 && mode === "short" && (!sh.date || !sh.time || !t.short)) return stepFail("Pick the package, date and check-in time.");
+    if (step === 1 && mode !== "short" && (!dates.a || !dates.b)) return stepFail("Pick your check-in and check-out dates.");
+    if (step === 2 && cfg.guestIds && [...body.querySelectorAll("[data-gid]")].some((i) => !i.files?.[0])) return stepFail("Please upload a valid ID for each guest.");
+    if (step === 3) {
+      const name = body.querySelector("[data-name]").value.trim(), phone = body.querySelector("[data-phone]").value.trim();
+      if (name.length < 2 || phone.replace(/\D/g, "").length < 7) return stepFail("Enter your full name and phone number.");
+      if (gcash.length && t.down > 0 && gcash.some((m) => m.askRefBookings !== false) && (body.querySelector("[data-ref]")?.value.trim() || "").length < 4 && !body.querySelector("[data-proof]")?.files?.[0]) return stepFail("Enter the reference number of your downpayment, or attach the screenshot.");
+    }
+    goStep(step + 1);
+  };
+  draw(); goStep(1);
   C.openSheet(room.name, body, foot, "Book your stay");
   try {
     const r = await C.call("getStayCalendar", { slug: C.slug, roomId: room.id });
@@ -284,7 +325,7 @@ async function openBooking(room) {
 
   foot.querySelector("[data-go]").onclick = async () => {
     const err = body.querySelector("[data-err]"); err.innerHTML = "";
-    const fail = (m) => { err.innerHTML = `<div class="c-alert error">${esc(m)}</div>`; err.scrollIntoView({ behavior: "smooth", block: "center" }); };
+    const fail = (m) => { const back = /dates|package|check-in time/i.test(m) ? 1 : /valid ID for each guest/i.test(m) ? 2 : /name and phone|reference number/i.test(m) ? 3 : 4; if (back !== step) goStep(back); err.innerHTML = `<div class="c-alert error">${esc(m)}</div>`; err.scrollIntoView({ behavior: "smooth", block: "center" }); };
     const name = body.querySelector("[data-name]").value.trim(), phone = body.querySelector("[data-phone]").value.trim();
     const t = total();
     if (mode === "short" && (!sh.date || !sh.time || !t.short)) return fail("Pick the package, date and check-in time.");
@@ -372,11 +413,15 @@ function renderStatus(rec) {
           <div class="c-mini"><span><b>Balance</b></span><span class="amt"><b>${money(balance)}</b></span></div>
         </div>
         ${finished && store.feedback?.enabled !== false ? (s.rating ? `<div class="c-ticket main"><div class="eyebrow">Your rating</div><div style="font-size:1.6rem;color:var(--accent)">${"★".repeat(s.rating)}</div><div class="muted small">Thank you for staying with us!</div></div>` : `<div class="c-ticket main"><div class="eyebrow">How was your stay?</div><div class="c-stars">${[1, 2, 3, 4, 5].map((n) => `<button type="button" data-star="${n}">★</button>`).join("")}</div></div>`) : ""}
+        ${(s.paidAmount || 0) > 0 || ["checked_in", "checked_out", "done"].includes(s.status) ? `<button class="c-btn ghost block" data-stayreceipt style="margin-bottom:10px">🧾 View receipt</button>` : ""}
+        ${store.stay?.reminders && ["pending", "confirmed"].includes(s.status) ? `<label class="c-agree small" style="margin:0 0 10px"><input type="checkbox" data-nosms ${s.noSms ? "checked" : ""}/> 🔕 Don't text me a reminder before check-in</label>` : ""}
         <p class="muted small" style="text-align:center">🔒 No refund · reschedule with approval. This page updates on its own and stays on this phone.</p>
       </div></div>`);
     C.app.appendChild(root);
     root.querySelector("[data-rooms]").onclick = () => { stayUnsub?.(); renderHome(); };
     bindStayExtras(root, rec, s);
+    root.querySelector("[data-nosms]")?.addEventListener("change", async (e) => { try { await C.call("reminderOptOut", { storeId: rec.storeId, kind: "stay", id: rec.id, off: e.target.checked }); C.toast(e.target.checked ? "OK — no SMS reminders" : "Reminders on"); } catch (x) { e.target.checked = !e.target.checked; C.toast(x.message); } });
+    root.querySelector("[data-stayreceipt]")?.addEventListener("click", () => { const r = stayReceiptData(s); C.openSheet("Receipt", C.html(receiptHTML(store, r)), receiptFoot(C.html, store, r), s.code || ""); });
     root.querySelector("[data-out]")?.addEventListener("click", async () => { if (!confirmBox(`Check out now?\n\nTap only when you have LEFT the room — the cleaner comes to check it.${s.deposit?.amount ? " Your deposit is returned after the room check." : ""}\nIf you're found still inside, overstay is charged.`)) return; try { await C.call("stayGuestAction", { storeId: rec.storeId, id: rec.id, action: "checkout" }); C.toast("Thank you! Safe travels 👋"); } catch (e) { C.toast(e.message); } });
     root.querySelector("[data-req]")?.addEventListener("click", () => openRequest(rec));
     root.querySelector("[data-ext]")?.addEventListener("click", () => openExtend(rec));

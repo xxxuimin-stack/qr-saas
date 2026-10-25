@@ -2,16 +2,17 @@
 // (functions/plans.js and src/plans.js are generated from the same text — keep them identical.)
 //
 //  Free ₱0      small use: café = menu + counter only · salon = solo / home-service freelancer, 2 bookings a day · 15 a month · massage/spa 3 a day · 20 a month · laundry 15 jobs/day · stay 30 bookings/month
-//  Starter ₱99  kitchen & barista screens, 2 staff, shifts, reports, call staff, ratings
+//  Basic ₱99    kitchen & barista screens, 2 staff, shifts, reports, call staff, ratings  (key "starter" kept for existing data)
+//  New accounts get Basic free for 14 days ("trial"), then go back to Free unless they upgrade.
 //  Pro ₱499     dispatch, delivery + rider, promos, loyalty, reservations, client card, packages…
 //  Business ₱999  everything: gift cards, events/VIP, memberships, Telegram, SMS, white-label (no "Powered by")
 const PLANS = {
-  trial:    { name: "Free trial", price: 0,   tier: 3, days: 14 },
+  trial:    { name: "Basic (free for 14 days)", price: 0, tier: 1, days: 14 },
   free:     { name: "Free",       price: 0,   tier: 0, blurb: "For small use — try it for real, no time limit" },
-  starter:  { name: "Starter",    price: 99,  tier: 1, blurb: "Your own kitchen screen and a small team" },
+  starter:  { name: "Basic",      price: 99,  tier: 1, blurb: "Your own kitchen screen and a small team" },
   plus:     { name: "Pro",        price: 499, tier: 2, blurb: "Delivery, promos, loyalty and the full toolkit" },
   business: { name: "Business",   price: 999, tier: 3, blurb: "Everything, bigger limits, your brand only" },
-  // freelancers & creators: one cheap plan (no Starter / Business tiers — it's a raket, not a shop)
+  // freelancers & creators: one cheap plan (no Basic / Business tiers — it's a raket, not a shop)
   creator:  { name: "Creator Pro", price: 79, tier: 2, only: "freelance", blurb: "Unlimited deals, portfolio, promos, rush & contracts" },
   // older plans (kept so existing subscribers keep what they paid for)
   basic:    { name: "Pro",        price: 499, tier: 2, legacy: true },
@@ -25,7 +26,7 @@ const TIER_KEYS = ["free", "starter", "plus", "business"];
 const UNLIMITED = 1e9;
 const U = UNLIMITED;
 
-// LIMITS per business type: [Free, Starter, Pro, Business]
+// LIMITS per business type: [Free, Basic, Pro, Business]
 const LIMITS = {
   table:   { items: [10, 25, 80, 300], tables: [2, 4, 12, 40], staff: [1, 3, 6, 16], ordersPerDay: [20, U, U, U], creatorOffers: [1, 3, 10, U], collabPosts: [0, 0, 1, U], xdealsPerMonth: [U, U, U, U] },
   salon:   { items: [8, 20, 60, 200], staff: [1, 2, 5, 15], bookingsPerDay: [2, U, U, U], bookingsPerMonth: [15, U, U, U], homeAreas: [2, 3, 5, U], creatorOffers: [1, 3, 10, U], collabPosts: [0, 0, 1, U], xdealsPerMonth: [U, U, U, U] },
@@ -38,7 +39,7 @@ const LIMITS = {
 };
 const LIMIT_LABEL = { items: "items", tables: "tables", staff: "staff PINs (incl. you)", ordersPerDay: "orders a day", dealsPerMonth: "brand deals a month", portfolio: "portfolio samples", creatorOffers: "offers to creators a month", collabPosts: "open collab posts", xdealsPerMonth: "X-Deals & B2B swaps a month (free for businesses)", bookingsPerMonth: "bookings a month", bookingsPerDay: "bookings a day", jobsPerDay: "jobs a day", homeAreas: "home-service areas", rooms: "rooms", photos: "photos per room" };
 
-// FEATURES: the lowest plan that includes it (0 Free · 1 Starter · 2 Pro · 3 Business). An add-on unlocks it earlier.
+// FEATURES: the lowest plan that includes it (0 Free · 1 Basic · 2 Pro · 3 Business). An add-on unlocks it earlier.
 const FEATURE_TIER = {
   stations: 1,     // café: Kitchen & Barista screens (Free = the counter does everything)
   staffpins: 1,    // staff PIN accounts (Free = owner only; salon Free = the owner as the only stylist)
@@ -72,6 +73,9 @@ const ADDONS = {
   sms:       { name: "SMS promos",            price: 99,  unlocks: ["sms"], minTier: 1, blurb: "Text promos (your own Semaphore credits)" },
   protect:   { name: "TapTayo Protect",       price: 149, minTier: 0, notFor: "freelance", blurb: "If a creator ghosts an X-Deal, we cover the declared item value (up to ₱1,500 a claim) as TapTayo credits" },
   collab:    { name: "Creator Collab",        price: 199, adds: { creatorOffers: 1e9, collabPosts: 1e9 }, minTier: 0, notFor: "freelance", blurb: "Unlimited offers to creators + open collab posts" },
+  // BUNDLES — related add-ons together for less. pack = what it includes (shown in Billing). Special features stay single.
+  opsPack:   { name: "Operations Pack",       price: 149, unlocks: ["delivery", "queuetv", "telegram"], pack: ["delivery", "queuetv", "telegram"], minTier: 1, blurb: "Delivery + Rider app, Queue TV and Telegram alerts (save ₱48)" },
+  mktPack:   { name: "Marketing Pack",        price: 249, unlocks: ["giftcards", "sms"], pack: ["giftcards", "sms", "collab"], adds: { creatorOffers: 1e9, collabPosts: 1e9 }, minTier: 1, notFor: "freelance", blurb: "Gift cards, SMS promos and Creator Collab (save ₱148)" },
   branch:    { name: "+1 branch",             price: 149, qty: true, minTier: 1, blurb: "Another branch under the same account" },
   // older add-ons (existing subscribers)
   branches3: { name: "Branches: up to 4", price: 90,  legacy: true, group: "branches" },
@@ -80,6 +84,8 @@ const ADDONS = {
   vouchersOld: { name: "Voucher codes", price: 149, legacy: true },
 };
 
+/** the bundle that includes this add-on (for "save with the pack" hints), or null */
+const packFor = (key) => Object.entries(ADDONS).find(([, a]) => a.pack?.includes(key))?.[0] || null;
 /** The plan in effect: trial/paid/provisional (payment being checked) → else Free. Never "locked" for Free. */
 function planOf(sub) {
   if (!sub) return "free";
@@ -106,7 +112,7 @@ function entitled(sub, key) {
   if (key === "feedback" && sub?.addons?.feedback) return true;
   const tier = tierOf(sub);
   if (ADDONS[key] && addonQty(sub, key) > 0) return true;
-  for (const [k, a] of Object.entries(ADDONS)) if (a.unlocks?.includes(key) && addonQty(sub, k) > 0) return true;
+  for (const [k, a] of Object.entries(ADDONS)) if ((a.unlocks?.includes(key) || a.pack?.includes(key)) && addonQty(sub, k) > 0) return true;
   const need = FEATURE_TIER[key];
   return need == null ? true : tier >= need;
 }
@@ -123,4 +129,4 @@ const limitMode = (store) => (store?.businessType === "spa" ? "spa" : store?.bus
 const GRACE_DAYS = 3;
 const MONTH_DAYS = 30;
 
-module.exports = { PLANS, SELLABLE, CREATOR_SELLABLE, sellableFor, TIER_KEYS, LIMITS, LIMIT_LABEL, FEATURE_TIER, PRO_FEATURES, ADDONS, UNLIMITED, planOf, tierOf, addonQty, entitled, limitsFor, limitMode, branchesAllowedFor, GRACE_DAYS, MONTH_DAYS };
+module.exports = { packFor, PLANS, SELLABLE, CREATOR_SELLABLE, sellableFor, TIER_KEYS, LIMITS, LIMIT_LABEL, FEATURE_TIER, PRO_FEATURES, ADDONS, UNLIMITED, planOf, tierOf, addonQty, entitled, limitsFor, limitMode, branchesAllowedFor, GRACE_DAYS, MONTH_DAYS };

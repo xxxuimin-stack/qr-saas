@@ -117,6 +117,11 @@ const SETUPS = {
   table: { title: "How do you sell?", choices: [["shop", "🏪", "I have a shop and staff", "Dine-in tables with QR, take-out, and staff with roles (counter, kitchen, barista, rider)."], ["home", "🏠", "Home-based (delivery / pickup only)", "No tables. Staff optional — you can still use the Kitchen, Dispatch (check before sending out) and Rider screens yourself."]] },
 };
 const setupMode = () => PRESETS[wiz.businessType]?.mode;
+// Food business: more than one way to sell (shop on weekdays, night market on weekends, pre-order bilao…)
+const FOOD = [["dinein", "🍽", "Dine-in shop", "Café, karinderya, resto — table QR, kitchen & counter screens"], ["takeout", "🥤", "Take-out counter / kiosk", "Milk tea, shawarma stand — order numbers and ready alerts"], ["popup", "🌙", "Pop-up / night market / bazaar", "Pay first, waiting timer, “come back when it's ready”"], ["home", "🏠", "Home-based", "Lutong-bahay, baked goods — pickup and delivery"], ["preorder", "🎂", "Pre-orders / catering", "Bilao, cakes, party trays — pickup date and a daily limit"], ["online", "🛵", "Online only / cloud kitchen", "Delivery and pickup, no tables"]];
+const isFood = () => wiz.businessType === "cafe";
+const foodKind = () => (wiz.channels?.has("dinein") ? "shop" : "home");
+const foodPayDefault = () => (wiz.channels?.size === 1 && wiz.channels.has("dinein") ? "after" : "first");
 const PLACES = [["shop", "🏪 In my shop", "Walk-ins and bookings at your shop."], ["home", "🏠 Home service only", "You go to your clients. No walk-ins — bookings with address, area fee and travel time."], ["both", "🏪+🏠 Both", "Shop and home service, each with its own hours on your calendar."]];
 function drawPlace() {
   const box = $("placeChoices"); if (!box) return;
@@ -126,7 +131,7 @@ function drawPlace() {
   $("placeHint").textContent = PLACES.find(([k]) => k === wiz.place)?.[2] || "";
   box.querySelectorAll("[data-place]").forEach((b) => (b.onclick = () => { wiz.place = b.dataset.place; drawPlace(); }));
 }
-const needsOwnerProfile = () => (setupMode() === "salon" && (wiz.setup === "solo" || wiz.ownerWorks)) || (setupMode() === "table" && wiz.setup === "home");
+const needsOwnerProfile = () => (setupMode() === "salon" && (wiz.setup === "solo" || wiz.ownerWorks)) || (setupMode() === "table" && (wiz.setup === "home" || (isFood() && wiz.team === "solo")));
 
 function slugify(s) {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
@@ -169,7 +174,28 @@ function initWizard() {
     const b = pre && wrap.querySelector(`.type[data-key="${CSS.escape(pre)}"]`);
     if (b && !b.disabled) b.click();
   } catch {}
+  const drawFood = () => {
+    wiz.channels ||= new Set(); $("setupTitle").textContent = "How do you sell? Pick all that apply.";
+    const box = $("setupChoices"); box.innerHTML = "";
+    const ready = () => { wiz.setup = wiz.channels.size ? foodKind() : null; $("next2s").disabled = !(wiz.channels.size && wiz.team && wiz.pay); };
+    FOOD.forEach(([k, ic, t, b]) => {
+      const btn = document.createElement("button"); btn.type = "button"; btn.className = "type" + (wiz.channels.has(k) ? " active" : ""); btn.setAttribute("aria-pressed", String(wiz.channels.has(k)));
+      btn.innerHTML = `<div class="ic">${ic}</div><div class="t">${esc(t)}</div><div class="b">${esc(b)}</div>`;
+      btn.onclick = () => { wiz.channels.has(k) ? wiz.channels.delete(k) : wiz.channels.add(k); btn.classList.toggle("active", wiz.channels.has(k)); btn.setAttribute("aria-pressed", String(wiz.channels.has(k))); if (!wiz.payPicked) { wiz.pay = wiz.channels.size ? foodPayDefault() : null; drawPay(); } ready(); };
+      box.appendChild(btn);
+    });
+    const extra = document.createElement("div"); extra.style.cssText = "grid-column:1/-1;display:flex;flex-direction:column;gap:12px;margin-top:6px";
+    extra.innerHTML = `<div><div style="font-weight:800;margin-bottom:6px">Who does the work?</div><div class="row wrap" style="gap:8px" role="radiogroup" aria-label="Who does the work" data-team></div></div>
+      <div><div style="font-weight:800;margin-bottom:6px">When do customers pay?</div><div class="row wrap" style="gap:8px" role="radiogroup" aria-label="When do customers pay" data-pay></div><p class="small muted" style="margin:6px 0 0" data-payhint></p></div>`;
+    box.appendChild(extra);
+    const chip = (on, label) => `border:1px solid ${on ? "#C62828" : "#D1D5DB"};border-radius:999px;padding:8px 14px;font-weight:${on ? 600 : 500};color:${on ? "#C62828" : "inherit"};background:${on ? "#FDECEC" : "#fff"}`;
+    const drawTeam = () => { const el = extra.querySelector("[data-team]"); el.innerHTML = [["solo", "🙋 Just me — one phone, no PINs"], ["staff", "👥 I have staff — roles and PINs"]].map(([k, l]) => `<button type="button" class="chip" role="radio" aria-checked="${wiz.team === k}" data-k="${k}" style="${chip(wiz.team === k)}">${l}</button>`).join(""); el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => { wiz.team = b.dataset.k; drawTeam(); ready(); })); };
+    const drawPay = () => { const el = extra.querySelector("[data-pay]"); el.innerHTML = [["first", "💵 Pay first, then we make it"], ["after", "🍽 Pay after eating"]].map(([k, l]) => `<button type="button" class="chip" role="radio" aria-checked="${wiz.pay === k}" data-k="${k}" style="${chip(wiz.pay === k)}">${l}</button>`).join(""); extra.querySelector("[data-payhint]").textContent = wiz.pay === "first" ? "Best for pop-ups, take-out, home-based and pre-orders — the order goes to the kitchen once it's paid." : wiz.pay === "after" ? "Best for dine-in — the bill is settled at the end." : ""; el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => { wiz.pay = b.dataset.k; wiz.payPicked = true; drawPay(); ready(); })); };
+    drawTeam(); drawPay(); ready();
+    $("ownerWorksBox").classList.add("hidden"); $("placeBox").classList.add("hidden");
+  };
   const drawSetup = () => {
+    if (isFood()) return drawFood();
     const cfg = SETUPS[setupMode()]; if (!cfg) return;
     $("setupTitle").textContent = cfg.title;
     const box = $("setupChoices"); box.innerHTML = "";
@@ -184,7 +210,7 @@ function initWizard() {
     drawPlace();
   };
   const toDetails = () => { $("ownerBox").classList.toggle("hidden", !needsOwnerProfile()); goStep(3); };
-  $("next1").onclick = () => { if (SETUPS[setupMode()]) { if (!SETUPS[setupMode()].choices.some(([k]) => k === wiz.setup)) wiz.setup = null; drawSetup(); goStep(2); } else { wiz.setup = null; toDetails(); } };
+  $("next1").onclick = () => { if (SETUPS[setupMode()]) { if (!isFood() && !SETUPS[setupMode()].choices.some(([k]) => k === wiz.setup)) wiz.setup = null; drawSetup(); goStep(2); } else { wiz.setup = null; toDetails(); } };
   $("ownerWorks").onchange = (e) => (wiz.ownerWorks = e.target.checked);
   $("back2s").onclick = () => goStep(1);
   $("next2s").onclick = toDetails;
@@ -202,7 +228,7 @@ function initWizard() {
       if (!/^\d{4,6}$/.test(wiz.ownerPin)) return wizMsg("Your PIN must be 4–6 digits.");
     }
     const p = PRESETS[wiz.businessType];
-    const setupLabel = SETUPS[p.mode]?.choices.find(([k]) => k === wiz.setup)?.[2];
+    const setupLabel = isFood() && wiz.channels?.size ? `${FOOD.filter(([k]) => wiz.channels.has(k)).map(([, , t]) => t).join(" · ")} — ${wiz.team === "solo" ? "just me" : "with staff"}, ${wiz.pay === "first" ? "pay first" : "pay after"}` : SETUPS[p.mode]?.choices.find(([k]) => k === wiz.setup)?.[2];
     const placeTxt = p.mode === "salon" && wiz.place ? PLACES.find(([k]) => k === wiz.place)?.[1] || "" : "";
     const rows = [["Business", esc(wiz.name)], ["Type", `${p.icon} ${esc(p.title)}`],
       ...(setupLabel ? [["Setup", `${esc(setupLabel)}${wiz.ownerWorks && wiz.setup === "team" ? "<br><span class=\"muted small\">You also serve clients</span>" : ""}`]] : []),
@@ -239,7 +265,7 @@ function initWizard() {
     catch (err) { wizMsg(err.message); btn.disabled = false; btn.textContent = "Create my store"; if (/mobile number/i.test(err.message)) goStep(3); return; }
     btn.textContent = "Creating…";
     try {
-      await call(addingBusiness ? "addBusiness" : "createStore", { bid: (() => { try { let b = localStorage.getItem("taptayo:bid"); if (!b) { b = Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => x.toString(16).padStart(2, "0")).join(""); localStorage.setItem("taptayo:bid", b); } return b; } catch { return null; } })(), ref: (() => { try { return localStorage.getItem("taptayo:ref"); } catch { return null; } })(), name: wiz.name, businessType: wiz.businessType, phone: wiz.phone, address: wiz.address, setup: wiz.setup ? { kind: wiz.setup, ownerWorks: wiz.ownerWorks, place: wiz.place || undefined } : null, ownerName: wiz.ownerName || null, ownerPin: wiz.ownerPin || null });
+      await call(addingBusiness ? "addBusiness" : "createStore", { bid: (() => { try { let b = localStorage.getItem("taptayo:bid"); if (!b) { b = Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => x.toString(16).padStart(2, "0")).join(""); localStorage.setItem("taptayo:bid", b); } return b; } catch { return null; } })(), ref: (() => { try { return localStorage.getItem("taptayo:ref"); } catch { return null; } })(), name: wiz.name, businessType: wiz.businessType, phone: wiz.phone, address: wiz.address, setup: wiz.setup ? { kind: wiz.setup, ownerWorks: wiz.ownerWorks, place: wiz.place || undefined, ...(isFood() && wiz.channels?.size ? { channels: [...wiz.channels], team: wiz.team, pay: wiz.pay } : {}) } : null, ownerName: wiz.ownerName || null, ownerPin: wiz.ownerPin || null });
       claims = (await currentUser.getIdTokenResult(true)).claims;
       hide("wizard");
       if (addingBusiness) { addingBusiness = false; location.hash = "#overview"; location.reload(); return; }
@@ -299,6 +325,7 @@ function drawUsageBanner() {
   if (lim.bookingsPerMonth < UNLIMITED) rows.push([u.month === mon ? u.bookings || 0 : 0, lim.bookingsPerMonth, "bookings this month", "next month"]);
   const hit = u.limitHit && Date.now() - u.limitHit.at < 86400000 && lim[u.limitHit.key] < UNLIMITED ? u.limitHit : null;
   let full = rows.find(([n, m]) => n >= m), near = rows.find(([n, m]) => n < m && n >= Math.ceil(m * 0.8));
+  { const top = rows.map(([n, m, what]) => ({ pct: m ? Math.min(100, Math.round((n / m) * 100)) : 0, n, m, what })).sort((a, b) => b.pct - a.pct)[0] || null; const changed = JSON.stringify(top) !== JSON.stringify(ctx.usageTop || null); ctx.usageTop = top; if (changed) drawUpgrade(); }
   let msg = null, level = "warn";
   if (full) { level = "error"; msg = `🚫 <b>You've used all ${full[1]} ${full[2]}</b> on the ${pn} plan. New ${full[2].split(" ")[0]} are paused until ${full[3]} — customers are asked to message you.`; }
   else if (hit?.key === "bookingsPerDay") { level = "error"; msg = `📅 <b>${hit.date} is fully booked</b> (${hit.max} bookings a day on the ${pn} plan). Customers can only pick other days.`; }
@@ -380,6 +407,7 @@ async function loadDashboard() {
   }).catch(() => {});
   $("welcome").textContent = `Welcome back, ${currentUser.displayName || currentUser.email}`;
   $("openMenuLink").href = `/m/${store.slug}`;
+  drawSideR(store);
 
   // nav
   const nav = $("nav");
@@ -433,11 +461,12 @@ async function loadDashboard() {
     const until = (eff === "trial" ? sub.trialEndsAt : sub.paidUntil)?.toDate?.();
     const days = until ? Math.max(0, Math.ceil((until - Date.now()) / 86400000)) : null;
     const pname = PLANS[eff]?.name || "Free";
-    const label = eff === "trial" ? "Free trial" : eff === "free" ? "Free plan" : prov ? `${pname} · checking payment` : `${pname} plan`;
+    const label = eff === "trial" ? "Basic · free 14 days" : eff === "free" ? "Free plan" : prov ? `${pname} · checking payment` : `${pname} plan`;
     pill.className = "pill " + (eff === "trial" ? "trial" : eff === "free" ? "past_due" : "active");
     pill.textContent = eff === "trial" && days != null ? `${label} · ${days} days left` : label;
     { const pn = $("planName"), ps = $("planSub"), pb = $("planBtn");
-      if (pn) { pn.textContent = label; ps.textContent = eff === "trial" ? `${days ?? 0} days left` : eff === "free" ? "Small use · upgrade anytime" : prov ? "Active while we check (up to 3 days)" : until ? `until ${until.toLocaleDateString("en-PH", { month: "short", day: "numeric" })}` : ""; pb.textContent = eff === "free" || eff === "trial" ? "Choose a plan" : "Manage plan"; pb.hidden = claims.role !== "owner"; } }
+      if (pn) { pn.textContent = label; ps.textContent = eff === "trial" ? `${days ?? 0} days left` : eff === "free" ? "Small use · upgrade anytime" : prov ? "Active while we check (up to 3 days)" : until ? `until ${until.toLocaleDateString("en-PH", { month: "short", day: "numeric" })}` : ""; pb.textContent = eff === "free" || eff === "trial" ? "⚡ Upgrade plan" : "Manage plan"; pb.hidden = claims.role !== "owner"; } }
+    ctx.planEff = eff; ctx.planDays = days; drawUpgrade();
     for (const [id, k, t] of [["kitchenLink", "stations", "🍳 Kitchen"], ["dispatchLink", "dispatch", "📋 Dispatch"], ["riderLink", "delivery", "🛵 Rider"]]) { const a = $(id); if (!a) continue; const ok = entitled(sub, k); if (!a.dataset.t) a.dataset.t = a.textContent; a.textContent = ok ? a.dataset.t : a.dataset.t.replace(/^\S+/, "🔒"); a.title = ok ? "" : `${PRO_FEATURES[k]} — upgrade in Billing`; }
     ctx.subLabel = label; setTimeout(drawUsageBanner, 0);
     ctx.subUntil = until;
@@ -504,7 +533,7 @@ function route() {
     return;
   }
   if (p.pro && ctx.sub && ![].concat(p.pro).some((k) => entitled(ctx.sub, k))) {
-    const need = Math.min(...[].concat(p.pro).map((k) => FEATURE_TIER[k] ?? 1)); const pn = ["Free", "Starter", "Pro", "Business"][need] || "Pro";
+    const need = Math.min(...[].concat(p.pro).map((k) => FEATURE_TIER[k] ?? 1)); const pn = ["Free", "Basic", "Pro", "Business"][need] || "Pro";
     root.innerHTML = `<div class="tile pro-lock"><div class="pl-ic">⭐</div><h3>${esc(title)} — ${pn} plan</h3><p class="muted">You're on the <b>${esc(PLANS[planOf(ctx.sub)]?.name || "Free")}</b> plan. ${esc(title)} comes with <b>${pn}</b> (₱${PLANS[["free", "starter", "plus", "business"][need]]?.price || 0}/month) and higher.</p><a class="btn" href="#billing">See plans</a></div>`;
     return;
   }
@@ -579,3 +608,44 @@ const DEMO_TOUR = (store) => [
   ["[data-page=tools], .bnav [data-page=_me]", "Settings", "Payments, hours, staff, the walk-in line and alerts — all in one place."],
   ["#openMenuLink, .demo-banner a[target]", "Your customer page", "This is what your customers open from your QR code or link."],
 ];
+
+
+// Wide screens (≥ 1500px): a right column with shortcuts so the dashboard isn't half empty
+async function drawSideR(store) {
+  const el = document.getElementById("sideR"); if (!el) return;
+  const link = `https://taptayo.com/m/${store.slug}`;
+  let qr = ""; try { const { qrGroup } = await import("./brandqr.js"); qr = `<svg viewBox="0 0 120 120" width="104" height="104" aria-label="QR of your page">${qrGroup(link, { size: 120, color: "#141414" })}</svg>`; } catch {}
+  const v = store.verif || {}; const KL = [["ownerId", "Owner ID"], ["dti", "DTI"], ["bir", "BIR"], ["permit", "Permit"]];
+  const st = (k) => (k === "ownerId" && store.kycAt) || v[k]?.status === "approved" ? "✅" : v[k]?.status === "pending" ? "⏳" : v[k]?.status === "more" ? "📎" : v[k]?.status === "expired" ? "⚠️" : "➕";
+  const tips = ["Put your QR at the counter and on every table — most orders come from the QR.", "Reply to reviews: shops that reply get more repeat customers.", "Turn on reminders to cut no-shows.", "Post an announcement for holidays and new items — customers see it on your page.", "Share your page link on your Facebook page's button (Book now / Order)."];
+  const esc2 = (x) => String(x ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  el.innerHTML = `<section class="tile sr-box"><h3>🔗 Your page</h3><div class="sr-share">${qr}<div><div class="small muted" style="word-break:break-all">${esc2(link.replace("https://", ""))}</div><div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn sm" type="button" data-copy>Copy link</button><a class="btn ghost sm" href="/m/${esc2(store.slug)}" target="_blank" rel="noopener">Open</a></div></div></div></section>
+    <section class="tile sr-box"><h3>✔ Badges</h3>${KL.map(([k, l]) => `<div class="row between small" style="padding:3px 0"><span>${l}</span><span>${st(k)}</span></div>`).join("")}<a class="btn ghost sm" href="#settings" style="margin-top:8px">Get verified</a></section>
+    <section class="tile sr-box"><h3>💡 Tip</h3><p class="small" style="margin:0">${esc2(tips[new Date().getDate() % tips.length])}</p></section>
+    <section class="tile sr-box"><h3>💬 Need help?</h3><p class="small muted" style="margin:0 0 8px">We reply within 24 hours — no calls needed.</p><button class="btn ghost sm" type="button" data-help>Message TapTayo</button></section>`;
+  el.querySelector("[data-copy]")?.addEventListener("click", async (e) => { try { await navigator.clipboard.writeText(link); e.target.textContent = "✓ Copied"; } catch {} });
+  el.querySelector("[data-help]")?.addEventListener("click", () => document.getElementById("helpBtn")?.click());
+  drawUpgrade();
+}
+
+
+// ⚡ Upgrade: the plan sticker (left) glows on trial / Free / near the limits; a bigger card sits on top of the right column (wide screens).
+// Quiet on Business (top plan). Owners only.
+function drawUpgrade() {
+  const eff = ctx?.planEff; if (!eff || claims?.role !== "owner") return;
+  const tier = PLANS[eff]?.tier ?? 0, top = ctx.usageTop, near = top && top.pct >= 80;
+  const loud = eff === "trial" || eff === "free" || near;
+  document.getElementById("planSticker")?.classList.toggle("glow", !!loud && tier < 3);
+  const el = document.getElementById("sideR"); if (!el) return;
+  el.querySelector(".upr")?.remove();
+  if (tier >= 3 || ctx.store?.demo) return;
+  const isCreator = ctx.store?.businessType === "freelance";
+  const next = isCreator ? PLANS.creator : eff === "plus" || eff === "basic" ? PLANS.business : PLANS.plus;
+  const perks = next === PLANS.business ? ["Your brand only (no TapTayo footer)", "Bigger limits for busy days", "More branches and staff", "Priority help"]
+    : isCreator ? ["Unlimited deals and offers", "Portfolio and promos", "Rush jobs and contracts"]
+    : ["Delivery + rider app", "Promos, loyalty stamps, gift cards", "More staff PINs and screens", "Reports and daily summary"];
+  const head = eff === "trial" ? `Basic ends in ${ctx.planDays ?? 0} day${ctx.planDays === 1 ? "" : "s"} — keep it for ₱${PLANS.starter.price}/month` : eff === "free" ? `You're on Free · Basic is ₱${PLANS.starter.price}/month` : `₱${next.price}/month`;
+  const card = document.createElement("section"); card.className = "upr";
+  card.innerHTML = `<h3>👑 Upgrade to ${next.name}</h3><div class="upr-price">${head}</div>${top ? `<div class="upr-bar"><i style="width:${top.pct}%"></i></div><div class="upr-use">${top.n} of ${top.m} ${top.what} (${top.pct}%)</div>` : ""}<ul>${perks.map((x) => `<li>${x}</li>`).join("")}</ul><a class="upr-go" href="#billing">⚡ See plans</a>`;
+  el.prepend(card);
+}
