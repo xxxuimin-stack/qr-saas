@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" href="/logo/favicon.svg" type="image/svg+xml" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#FFFFFF" />
+  <title>My TapTayo</title>
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="/src/fonts.css" />
+  <style>
+    :root { --g: #16A34A; --ink: #141414; --muted: #57534E; --line: #E7E5E4; }
+    body { margin: 0; font-family: Poppins, system-ui, sans-serif; color: var(--ink); background: #F6F7F5; }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 18px 16px 100px; }
+    .top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .top a.brand { color: var(--ink); font-weight: 800; text-decoration: none; display: flex; gap: 8px; align-items: center; }
+    h1 { font-size: 28px; letter-spacing: -.03em; margin: 20px 0 4px; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin: 14px 0; }
+    .card h2 { margin: 0 0 10px; font-size: 18px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .chip { border: 1px solid var(--line); border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; background: #fff; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; border: 0; border-radius: 12px; background: var(--g); color: #fff; font: 700 14px Poppins, system-ui; padding: 11px 16px; text-decoration: none; cursor: pointer; }
+    .btn.ghost { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin: 8px 0 4px; }
+    input { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; padding: 11px 12px; font: 500 15px Poppins, system-ui; }
+    .bk { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); text-decoration: none; color: inherit; }
+    .bk:first-child { border-top: 0; }
+    .bk img, .bk .ph { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; background: #DCFCE7; display: grid; place-items: center; flex-shrink: 0; }
+    .pill { font-size: 12px; font-weight: 700; border-radius: 999px; padding: 2px 8px; background: #F3F4F6; white-space: nowrap; }
+    .pill.ok { background: #DCFCE7; color: #166534; } .pill.wait { background: #FEF3C7; color: #92400E; } .pill.off { background: #F3F4F6; color: #6B7280; }
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .search { display: flex; gap: 8px; } .search input { flex: 1; }
+    @media (max-width: 520px) { .grid2 { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top"><a class="brand" href="/"><img src="/logo/taptayo-mark.svg" alt="" width="30" height="30" /> taptayo</a><button class="btn ghost" id="out" hidden>Log out</button></div>
+    <div id="app"><p class="muted" style="margin-top:40px">Loading…</p></div>
+  </div>
+  <script type="module" src="/src/me.js"></script>
+</body>
+</html>

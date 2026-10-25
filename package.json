@@ -1,0 +1,24 @@
+{
+  "name": "qr-saas",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "deploy": "vite build && firebase deploy --only hosting,firestore:rules",
+    "deploy:all": "vite build && firebase deploy --only hosting,firestore,storage && node scripts/deploy-functions.mjs",
+    "emulators": "firebase emulators:start --project demo-orderqr",
+    "deploy:functions": "node scripts/deploy-functions.mjs",
+    "deploy:functions:fast": "firebase deploy --only functions"
+  },
+  "dependencies": {
+    "firebase": "^11.10.0",
+    "jspdf": "^2.5.2",
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "vite": "^6.3.5"
+  }
+}

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FFFBF2">
+<title>You're offline — TapTayo</title>
+<style>
+:root{--bg:#FFFBF2;--ink:#141414;--muted:#57534E;--card:#fff;--edge:#ECE5D8}
+@media (prefers-color-scheme: dark){:root{--bg:#141210;--ink:#F5F1EA;--muted:#B5AEA4;--card:#1E1B18;--edge:#2E2A25}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px 16px;background:var(--bg);color:var(--ink);font:500 15px/1.5 Inter,system-ui,-apple-system,sans-serif}
+.card{max-width:360px;width:100%;background:var(--card);border:1px solid var(--edge);border-radius:20px;padding:28px 22px;text-align:center;box-shadow:0 10px 30px rgba(20,20,20,.06)}
+h1{font-size:20px;font-weight:700;margin:16px 0 6px}
+p{color:var(--muted);margin:0 0 20px}
+button{font-family:inherit;font-weight:600;font-size:15px;width:100%;height:48px;border:0;border-radius:12px;background:#C62828;color:#fff;cursor:pointer}
+</style>
+</head>
+<body>
+<main class="card">
+<svg width="64" height="64" viewBox="0 0 120 120" role="img" aria-label="TapTayo"><rect width="120" height="120" rx="32" fill="#C62828"/><path d="M28 44V36Q28 28 36 28H44M76 28H84Q92 28 92 36V44M92 76V84Q92 92 84 92H76M44 92H36Q28 92 28 84V76" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/><circle cx="52" cy="60" r="9" fill="#fff"/><path d="M64 47A18 18 0 0 1 64 73" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round"/></svg>
+<h1>You're offline</h1>
+<p>Check your Wi-Fi or mobile data. This page will load again as soon as you're back online.</p>
+<button type="button" onclick="location.reload()">Try again</button>
+</main>
+<script>addEventListener("online", () => location.reload());</script>
+</body>
+</html>

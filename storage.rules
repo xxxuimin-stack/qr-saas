@@ -1,0 +1,45 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Lahat ng images ng store: stores/{storeId}/logo.jpg, cover.jpg, items/{id}.jpg
+    match /stores/{storeId}/{allPaths=**} {
+      // public images (logo, cover, menu) — single files only (no folder listing), and NEVER the private/ folder
+      allow get: if !string(allPaths).matches('/?private/.*');
+      allow write: if request.auth != null
+                   && request.auth.token.storeId == storeId
+                   && request.auth.token.role == 'owner'
+                   && request.resource.size < 3 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+    // Customer uploads (feedback photo, incident proof): sariling folder lang, images lang, < 3MB
+    match /stores/{storeId}/customer/{uid}/{file} {
+      allow get: if true;
+      allow write: if request.auth != null && request.auth.uid == uid
+                   && request.resource.size < 5 * 1024 * 1024
+                   && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+    }
+    // Sensitive customer files (valid ID, signature, waiver PDF, payment proof): NOT readable by URL.
+    // Staff and the customer get them through the privateFile Cloud Function. Deleted after the retention period.
+    // support chat screenshots — read through the supportFile function
+    match /support/{uid}/{file} {
+      allow read: if false;
+      allow write: if request.auth != null && request.auth.uid == uid && request.resource.size < 6 * 1024 * 1024 && request.resource.contentType.matches('image/.*');
+    }
+    // X-Deal previews (creator uploads 1080p for the business to check) and B2B swap videos — read only through signed links from Cloud Functions; auto-deleted 3 days after download
+    match /xdeal/{storeId}/{inq}/{file} {
+      allow read: if false;
+      allow write: if request.auth != null && request.auth.token.storeId == storeId && request.resource.size < 200 * 1024 * 1024 && request.resource.contentType.matches('video/.*');
+    }
+    match /swaps/{swapId}/{side}/{file} {
+      allow read: if false;
+      allow write: if request.auth != null && request.auth.token.storeId != null && (side == 'a' || side == 'b') && request.resource.size < 200 * 1024 * 1024 && request.resource.contentType.matches('video/.*');
+    }
+    match /stores/{storeId}/private/{uid}/{file} {
+      allow read: if false;
+      allow write: if request.auth != null && request.auth.uid == uid
+                   && request.resource.size < 6 * 1024 * 1024
+                   && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
+    }
+    match /{allPaths=**} { allow read, write: if false; }
+  }
+}

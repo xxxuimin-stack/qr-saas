@@ -1,0 +1,52 @@
+/* Setup wizard (and any .brandpage) — clean TapTayo look: light gray, white cards, Inter, dark red buttons */
+.brandpage, #wizard {
+  --b-ink: #111111; --b-muted: #6B7280; --b-bg: #F5F6F8; --b-line: #E5E7EB; --b-red: #C62828; --b-red-ink: #B91C1C; --b-red-soft: #FDECEC;
+  font-family: var(--tt-font); color: var(--b-ink); -webkit-font-smoothing: antialiased;
+}
+body.brandpage, body:has(#wizard:not(.hidden)) { background: var(--b-bg, #F5F6F8); }
+.brandpage .center, #wizard.center { min-height: 100vh; display: grid; place-items: center; padding: 28px 16px; }
+.brandpage .card, #wizard .card { width: 100%; max-width: 440px; background: #fff; border: 1px solid var(--b-line); border-radius: 20px; padding: 26px 22px; box-shadow: 0 8px 28px rgba(17,17,17,.06); }
+#wizard .card.wide { max-width: 760px; }
+.brandpage .brand, #wizard .brand { justify-content: center; font-weight: 700; font-size: 1.4rem; letter-spacing: -.02em; margin-bottom: 6px; color: var(--b-ink); text-decoration: none; }
+.brandpage .brand .logo, #wizard .brand .logo { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; color: #fff; background: var(--b-red); }
+.brandpage .auth-sub { text-align: center; color: var(--b-muted); margin: 0 0 18px; font-size: .95rem; }
+.brandpage .tabs, #wizard .tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 3px; border-radius: 12px; border: 0; background: #EEF0F2; margin-bottom: 16px; }
+.brandpage .tabs button { border-radius: 9px; padding: 10px 6px; font-weight: 500; font-size: .92rem; color: var(--b-muted); }
+.brandpage .tabs button.active { background: #fff; color: var(--b-ink); font-weight: 600; box-shadow: 0 1px 3px rgba(17,17,17,.08); }
+.brandpage label, #wizard label { font-weight: 500; font-size: .85rem; margin: 0 0 6px; display: block; color: #374151; }
+.brandpage .stack > div { display: flex; flex-direction: column; }
+.brandpage input, #wizard input, #wizard select { width: 100%; box-sizing: border-box; height: 48px; padding: 0 14px; border: 1px solid #D1D5DB; border-radius: 12px; font: inherit; font-size: 1rem; background: #fff; }
+.brandpage input:focus, #wizard input:focus, #wizard select:focus { outline: none; border-color: var(--b-red); box-shadow: 0 0 0 3px var(--b-red-soft); }
+.brandpage .btn, #wizard .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border-radius: 12px; height: 48px; padding: 0 20px; font: inherit; font-weight: 600; font-size: .98rem; background: var(--b-red); color: #fff; border: 0; box-shadow: none; cursor: pointer; }
+.brandpage .btn:hover, #wizard .btn:hover { background: #B71C1C; }
+.brandpage .btn:disabled, #wizard .btn:disabled { opacity: .45; cursor: not-allowed; }
+.brandpage .btn.ghost, #wizard .btn.ghost { background: #fff; color: var(--b-ink); border: 1px solid var(--b-line); }
+.brandpage .btn.ghost:hover, #wizard .btn.ghost:hover { background: #F3F4F6; }
+.brandpage .btn.block { width: 100%; }
+.brandpage #forgot { text-align: center; margin: 12px 0 0; }
+.brandpage a, #wizard a { color: var(--b-red-ink); font-weight: 600; }
+.brandpage .divider { color: var(--b-muted); margin: 18px 0; }
+.brandpage .divider::before, .brandpage .divider::after { background: var(--b-line); }
+.brandpage .backlink { text-align: center; margin-top: 16px; font-size: .9rem; }
+.brandpage .backlink a { color: var(--b-muted); font-weight: 500; text-decoration: none; }
+/* wizard specifics */
+#wizard h2 { font-weight: 700; font-size: 1.5rem; margin: 6px 0 4px; letter-spacing: -.02em; }
+#wizard .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 14px 0 10px; }
+#wizard .steps span { height: 5px; border-radius: 5px; background: #EEF0F2; }
+#wizard .steps span.done { background: var(--b-red); }
+#wizard .types { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; margin-top: 12px; }
+#wizard .type { border: 1px solid var(--b-line); border-radius: 16px; padding: 16px; background: #fff; text-align: left; font: inherit; cursor: pointer; transition: border-color .12s, box-shadow .12s; }
+#wizard .type:hover:not(:disabled) { border-color: #D1D5DB; box-shadow: 0 4px 14px rgba(17,17,17,.06); }
+#wizard .type.active { border-color: var(--b-red); background: var(--b-red-soft); box-shadow: 0 0 0 1px var(--b-red) inset; }
+#wizard .type .ic { font-size: 28px; }
+#wizard .type .t { font-weight: 600; font-size: 1.02rem; margin-top: 6px; }
+#wizard .type .b { color: var(--b-muted); font-size: .85rem; line-height: 1.4; margin-top: 4px; }
+#wizard section label { margin-top: 14px; }
+#wizard .row.between { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+#wizard .code { background: #F3F4F6; border: 1px solid var(--b-line); border-radius: 8px; padding: 3px 8px; }
+#wizard .tile { border: 1px solid var(--b-line); border-radius: 14px; padding: 14px; background: #fff; }
+@media (max-width: 520px) {
+  .brandpage .card, #wizard .card { padding: 22px 16px; border-radius: 18px; }
+  #wizard .types { grid-template-columns: 1fr; }
+  #wizard h2 { font-size: 1.3rem; }
+}

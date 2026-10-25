@@ -1,0 +1,364 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Custom claims na ini-set ng createStore Cloud Function
+    function myStore() {
+      return request.auth.token.storeId;
+    }
+    function myRole() {
+      return request.auth.token.role;
+    }
+    function inStore(storeId) {
+      return signedIn() && myStore() == storeId;
+    }
+    // can change data (the read-only demo viewer can't)
+    function memberOf(storeId) {
+      return inStore(storeId) && myRole() != 'viewer';
+    }
+    // Owner session must not be revoked ("Log out everywhere") and, with 2-step on, must be approved.
+    function ownerSessionOk() {
+      let p = /databases/$(database)/documents/userSecurity/$(request.auth.uid);
+      return !exists(p) || (
+        get(p).data.get('revokedAt', 0) <= request.auth.token.auth_time
+        && (get(p).data.get('twoStep', false) == false
+            || string(request.auth.token.auth_time) in get(p).data.get('sessions', {}))
+      );
+    }
+    function isOwner(storeId) {
+      return inStore(storeId) && myRole() == 'owner' && ownerSessionOk();
+    }
+    function isStaffOrOwner(storeId) {
+      return inStore(storeId) && (myRole() == 'owner' || myRole() == 'staff');
+    }
+
+    // Order status lang ang puwedeng baguhin ng staff/kitchen, hindi ang presyo o items
+    // Staff can change the order's progress, NOT money: prices, items, totals, payment and cancelling
+    // go through the orderOps / editOrder Cloud Functions (checked by role there).
+    function onlyStatusChanged() {
+      return request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'updatedAt', 'readyAt', 'staffId', 'etaMinutes',
+                         'acceptedAt', 'completedAt', 'stations', 'laundry',
+                         'riderId', 'riderName', 'outAt',
+                         'confirmedAt', 'confirmedBy', 'acceptedBy', 'busyExtra', 'dispatch',
+                         'tableId', 'tableLabel', 'roomId', 'sessionId', 'transferredFrom', 'transferredAt',
+                         'addAlert', 'seenAt', 'barista', 'otw', 'trip', 'waitlist', 'passedBy'])
+             && (request.resource.data.status != 'cancelled' || resource.data.status == 'cancelled');
+    }
+
+    // ---------- users ----------
+    match /users/{uid} {
+      // Sarili mo, o (kung owner ka) lahat ng users ng store mo
+      allow read: if signedIn() && (request.auth.uid == uid
+                    || (myRole() == 'owner' && resource.data.storeId == myStore()));
+      // Ginagawa ng Cloud Function; puwedeng i-edit ng user ang sarili niyang name lang
+      allow update: if signedIn() && request.auth.uid == uid
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']);
+      allow create, delete: if false;
+    }
+
+    // ---------- public menu (binabasa ng customer na nag-scan ng QR) ----------
+    match /orgs/{orgId} {
+      allow read: if signedIn() && request.auth.token.orgId == orgId;
+      allow write: if false;   // Cloud Functions only
+      match /daily/{id} {
+        allow read: if signedIn() && request.auth.token.orgId == orgId;
+        allow write: if false;
+      }
+    }
+    match /publicStores/{slug} {
+      allow read: if true;
+      allow write: if false;   // Cloud Function (admin SDK) lang
+      match /rooms/{roomId} {
+        allow read: if true;
+        allow write: if false;
+      }
+    }
+
+    // ---------- stores ----------
+    match /stores/{storeId} {
+      allow read: if inStore(storeId);
+      allow create: if false;  // createStore Cloud Function lang
+      allow delete: if false;
+      // Owner lang ang puwedeng mag-edit ng store settings; hindi puwedeng palitan ang ownerUid, slug, mode
+      allow update: if isOwner(storeId)
+                    && !request.resource.data.diff(resource.data).affectedKeys()
+                          .hasAny(['ownerUid', 'slug', 'mode', 'businessType', 'createdAt']);
+
+      match /categories/{id} {
+        allow read: if inStore(storeId);
+        allow write: if isOwner(storeId);
+      }
+
+      match /items/{id} {
+        allow read: if inStore(storeId);
+        allow create, delete: if isOwner(storeId);
+        // Staff/kitchen puwedeng mag-toggle ng "available" (sold out) pero hindi ng presyo
+        allow update: if isOwner(storeId)
+                      || (inStore(storeId)
+                          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['available', 'soldUntil', 'updatedAt']));
+      }
+
+      match /tables/{id} {
+        allow read: if inStore(storeId);
+        allow write: if isOwner(storeId);
+      }
+
+      match /staff/{id} {
+        allow read: if inStore(storeId);
+        allow write: if false;   // upsertStaff / removeStaff Cloud Functions (PIN hash ay hiwalay)
+      }
+
+      // audit trail & price changes (written by Cloud Functions only)
+      match /staffReports/{id} {
+        allow read, update: if isOwner(storeId);
+        allow create, delete: if false;   // reportStaffOffer Cloud Function
+      }
+      match /stats/{id} {
+        allow read: if isOwner(storeId) || (inStore(storeId) && myRole() == 'viewer');
+        allow write: if false;
+      }
+      match /refunds/{id} {
+        allow read: if inStore(storeId);
+        allow write: if false;   // recordRefund (Cloud Functions) only
+      }
+      match /audit/{id} {
+        allow read: if inStore(storeId);
+        allow write: if false;
+      }
+      match /priceLog/{id} {
+        allow read: if inStore(storeId);
+        allow write: if false;
+      }
+
+      // waitlist: created by joinWaitlist; staff manage it; the customer can say "we're seated"
+      match /waitlist/{id} {
+        allow read: if inStore(storeId) || (signedIn() && resource.data.customerUid == request.auth.uid);
+        allow create: if false;
+        allow update: if memberOf(storeId)
+                      || (signedIn() && resource.data.customerUid == request.auth.uid
+                          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'seatedBy', 'seatedAt', 'updatedAt'])
+                          && request.resource.data.status in ['seated', 'left']);
+        allow delete: if isOwner(storeId);
+      }
+
+      // who is on duty (staff screens send a heartbeat)
+      match /duty/{id} {
+        allow read, write: if inStore(storeId);
+      }
+
+      match /private/{id} {
+        allow read, write: if false;   // PIN hashes, atbp. — Cloud Functions lang
+      }
+
+      // shared tablets signed in as "device" accounts (list for the owner; Cloud Functions write)
+      match /devices/{id} {
+        allow read: if isOwner(storeId);
+        allow write: if false;
+      }
+
+      match /orders/{id} {
+        // Staff ng store, O ang customer mismo (anonymous auth) na gumawa ng order
+        allow read: if inStore(storeId)
+                    || (signedIn() && (resource.data.customerUid == request.auth.uid || request.auth.uid in resource.data.get('laundry', {}).get('extraUids', [])));
+        allow create: if false;   // placeOrder Cloud Function lang
+        allow delete: if isOwner(storeId);
+        // Lahat ng role sa store (owner, staff, kitchen) puwedeng mag-update ng status
+        allow update: if isOwner(storeId) || (memberOf(storeId) && onlyStatusChanged());
+      }
+
+      match /reservations/{id} {
+        allow read: if inStore(storeId)
+                    || (signedIn() && (resource.data.customerUid == request.auth.uid || request.auth.uid in resource.data.get('extraUids', [])));
+        allow create: if false;   // createReservation Cloud Function lang
+        allow delete: if isOwner(storeId);
+        allow update: if isOwner(storeId)
+                      || (inStore(storeId) && request.resource.data.diff(resource.data).affectedKeys()
+                            .hasOnly(['status', 'tableId', 'tableLabel', 'staffNote', 'updatedAt', 'confirmedAt', 'confirmedBy']));
+      }
+
+      // Call staff requests
+      match /requests/{id} {
+        allow read: if inStore(storeId)
+                    || (signedIn() && (resource.data.customerUid == request.auth.uid || request.auth.uid in resource.data.get('laundry', {}).get('extraUids', [])));
+        allow create: if false;   // callStaff Cloud Function
+        allow delete: if isOwner(storeId);
+        // staff: claim / reply / done; customer: reply lang (messages)
+        allow update: if (memberOf(storeId) && request.resource.data.diff(resource.data).affectedKeys()
+                            .hasOnly(['status', 'claimedBy', 'claimedByName', 'claimedAt', 'messages', 'updatedAt', 'doneAt', 'staffId', 'passedBy', 'assignedBy']))
+                      || (signedIn() && resource.data.customerUid == request.auth.uid
+                            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['messages', 'updatedAt']));
+      }
+
+      // VIP room sessions — staff ng store (end via endSession function)
+      match /sessions/{id} {
+        allow read: if inStore(storeId);
+        allow create, update: if memberOf(storeId);
+        allow delete: if isOwner(storeId);
+      }
+
+      // Shifts (start/end + cash tally) — staff ng store
+      match /shifts/{id} {
+        allow read: if inStore(storeId);
+        allow create, update: if memberOf(storeId);
+        allow delete: if isOwner(storeId);
+      }
+
+      match /feedback/{id} {
+        allow read: if inStore(storeId);
+        allow create: if false;   // submitFeedback
+        allow update: if isOwner(storeId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hidden', 'reply', 'updatedAt']);
+        allow delete: if isOwner(storeId);
+      }
+      match /incidents/{id} {
+        allow read: if inStore(storeId) || (signedIn() && resource.data.customerUid == request.auth.uid);
+        allow create: if false;   // reportIncident
+        allow delete: if isOwner(storeId);
+        // customer: reply lang; staff: via resolveIncident function
+        allow update: if (signedIn() && resource.data.customerUid == request.auth.uid
+                          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['messages', 'updatedAt']))
+                      || (inStore(storeId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['messages', 'updatedAt']));
+      }
+
+      match /campaigns/{id} {
+        allow read: if isOwner(storeId);
+        allow write: if false;   // Cloud Function lang
+      }
+      match /duties/{id} {
+        allow read: if inStore(storeId);
+        allow write: if false;   // Cloud Functions only
+      }
+      match /appointments/{id} {
+        allow read: if inStore(storeId) || (signedIn() && resource.data.customerUid == request.auth.uid);
+        allow create: if false;   // Cloud Functions only
+        allow delete: if isOwner(storeId);
+        // A started/finished service can't be turned into a cancel / no-show by staff (only the owner)
+        allow update: if memberOf(storeId)
+                      && (isOwner(storeId)
+                          || !(request.resource.data.get('status', '') in ['cancelled', 'no_show'])
+                          || !(resource.data.get('status', '') in ['in_progress', 'done']))
+                      && request.resource.data.diff(resource.data).affectedKeys()
+                        .hasOnly(['status', 'updatedAt', 'providerId', 'providerName', 'durationConfirmed', 'durationBy', 'startedAt', 'doneAt', 'confirmedAt', 'confirmedBy', 'cancelReason', 'cancelledAt', 'noShowAt', 'notes', 'staffNote', 'startAt', 'dayKey', 'extraMinutes', 'assignedBy', 'assignedAt', 'acceptedAt', 'homeService', 'homeFee', 'followUpId', 'addedServices', 'durationEst', 'categories', 'rating', 'smsOptIn', 'waiting', 'waitNote', 'waitNo', 'arrivedAt', 'arrivedBy', 'lateBy']);
+      }
+      match /announcements/{id} {
+        allow read: if inStore(storeId);
+        allow write: if isOwner(storeId);
+      }
+      match /promos/{id} {
+        allow read: if inStore(storeId);
+        allow write: if isOwner(storeId);
+      }
+      match /vouchers/{code} {
+        allow read: if inStore(storeId);
+        allow create, delete: if isOwner(storeId);
+        allow update: if isOwner(storeId);   // usedCount ay function (admin SDK)
+      }
+
+      // Customer records (phone-based): staff puwedeng mag-flag / mag-note
+      match /rooms/{id} {
+        allow read: if inStore(storeId);
+        allow write: if isOwner(storeId);
+      }
+      match /inquiries/{id} {
+        allow read: if inStore(storeId) || (signedIn() && resource.data.customerUid == request.auth.uid);
+        allow write: if false;   // Cloud Functions only
+      }
+      match /staffLedger/{id} {
+        allow read: if inStore(storeId);
+        allow write: if false;   // Cloud Functions only
+      }
+      match /stays/{id} {
+        allow read: if inStore(storeId) || (signedIn() && resource.data.customerUid == request.auth.uid);
+        allow write: if false;   // Cloud Functions only
+      }
+      // salon gift cards — created by Cloud Functions; the buyer can see their own (to download the card)
+      match /giftcards/{id} {
+        allow read: if inStore(storeId) || (signedIn() && resource.data.buyerUid == request.auth.uid);
+        allow write: if false;
+      }
+      // "notify me if a slot opens" for fully booked days
+      match /slotWaits/{id} {
+        allow read: if inStore(storeId) || (signedIn() && resource.data.uid == request.auth.uid);
+        allow create: if false;
+        allow update: if memberOf(storeId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'contactedAt', 'contactedBy']);
+        allow delete: if memberOf(storeId);
+      }
+      // before/after photos shown on the customer page (client agreed)
+      match /portfolio/{id} {
+        allow read: if inStore(storeId);
+        allow create: if memberOf(storeId) && request.resource.data.keys().hasOnly(['url', 'label', 'providerId', 'service', 'customerKey', 'at', 'by']);
+        allow delete: if memberOf(storeId);
+      }
+      match /advances/{id} {
+        allow read: if inStore(storeId);
+        allow write: if false;
+      }
+      match /payouts/{id} {
+        allow read: if inStore(storeId);
+        allow write: if false;   // Cloud Functions only (recordPayout)
+      }
+      match /refCodes/{id} {
+        allow read: if inStore(storeId);
+        allow write: if false;
+      }
+      match /customers/{id} {
+        allow read: if inStore(storeId);
+        allow create: if false;
+        allow update: if memberOf(storeId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['flagged', 'flagReason', 'dpRequired', 'note', 'updatedAt', 'walkouts', 'noShows', 'failedDeliveries', 'allergies', 'formula', 'photos', 'nextDue', 'birthday', 'birthMonth']);
+        allow delete: if isOwner(storeId);
+        // prepaid salon packages — written by the server at checkout
+        match /packages/{pid} {
+          allow read: if inStore(storeId);
+          allow write: if false;
+        }
+        match /memberships/{mid} {
+          allow read: if inStore(storeId);
+          allow write: if false;
+        }
+      }
+
+      match /meta/{id} {
+        allow read: if inStore(storeId);
+        allow write: if false;   // Cloud Functions lang (order counters, atbp.)
+      }
+
+      match /subscription/{id} {
+        allow read: if inStore(storeId);
+        allow write: if false;   // Cloud Functions lang
+      }
+
+      match /payments/{id} {
+        allow read: if isOwner(storeId);
+        allow write: if false;   // submitPayment / adminUpdateSubscription lang
+      }
+    }
+
+    // TapTayo's own payment details (shown on the Billing page; edited by the admin)
+    // 💬 support chat — the owner of the chat reads it; all writes go through Cloud Functions
+    match /supportThreads/{id} {
+      allow read: if signedIn() && resource.data.uid == request.auth.uid;
+      allow write: if false;
+      match /messages/{m} {
+        allow read: if signedIn() && get(/databases/$(database)/documents/supportThreads/$(id)).data.uid == request.auth.uid;
+        allow write: if false;
+      }
+    }
+    match /config/maintenance {
+      allow read: if true;     // the "we'll be right back" window — every app watches it
+      allow write: if false;   // set through adminMaintenance
+    }
+    match /config/payment {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+    // ---------- lahat ng iba ----------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

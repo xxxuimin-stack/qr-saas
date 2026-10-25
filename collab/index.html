@@ -1,0 +1,334 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" href="/logo/favicon.svg" type="image/svg+xml" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#F2FBF4" />
+  <title>TapTayo Collab · Creators for your business</title>
+  <meta name="description" content="Find Filipino creators, UGC makers, vloggers and photographers for your café, salon or shop. Make an offer, they accept or counter, the date locks with a downpayment. 0% commission." />
+  <meta property="og:title" content="TapTayo Collab — creators for your business" />
+  <meta property="og:description" content="Micro-influencers and UGC creators for small businesses. Search free, make an offer, 0% commission." />
+  <meta property="og:image" content="/demo/creator/cover.jpg" />
+  <link rel="stylesheet" href="/src/fonts.css" />
+  <style>
+    :root { --ink: #141414; --g: #16A34A; --g2: #15803D; --mint: #F2FBF4; --lime: #D9F99D; --sun: #FDE68A; --muted: #4B5563; --line: #141414; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; font-family: Poppins, system-ui, sans-serif; color: var(--ink); background: var(--mint); }
+    a { color: inherit; }
+    img { max-width: 100%; }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 0 20px; }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: 3px solid var(--line); border-radius: 999px; background: var(--g); color: #fff; font: 800 16px Poppins, system-ui; padding: 13px 22px; text-decoration: none; cursor: pointer; box-shadow: 4px 4px 0 var(--line); transition: transform .12s, box-shadow .12s; }
+    .btn:hover { transform: translate(-1px, -1px); box-shadow: 5px 5px 0 var(--line); }
+    .btn:active { transform: translate(2px, 2px); box-shadow: 2px 2px 0 var(--line); }
+    .btn.white { background: #fff; color: var(--ink); }
+    .btn.sm { font-size: 14px; padding: 9px 15px; box-shadow: 3px 3px 0 var(--line); border-width: 2.5px; }
+    :focus-visible { outline: 3px solid #22C55E; outline-offset: 3px; }
+    /* nav */
+    nav.top { position: sticky; top: 0; z-index: 20; background: rgba(242, 251, 244, .92); backdrop-filter: blur(8px); border-bottom: 3px solid var(--line); }
+    nav.top .wrap { display: flex; align-items: center; gap: 18px; height: 68px; }
+    .logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 20px; text-decoration: none; letter-spacing: -.02em; }
+    .logo em { font-style: normal; background: var(--g); color: #fff; border: 2.5px solid var(--line); border-radius: 999px; padding: 1px 10px; font-size: 15px; }
+    nav.top .links { display: flex; gap: 18px; margin-left: auto; font-weight: 700; font-size: 15px; }
+    nav.top .links a { text-decoration: none; }
+    nav.top .links a:hover { text-decoration: underline; text-underline-offset: 4px; }
+    nav.top .links a { white-space: nowrap; }
+    @media (max-width: 860px) { nav.top .links .hide-m { display: none; } nav.top .links { gap: 10px; align-items: center; } nav.top .btn.sm { padding: 7px 12px; font-size: 13px; } .logo { font-size: 17px; } .logo em { font-size: 13px; padding: 0 8px; } }
+    /* hero */
+    .hero { padding: 48px 0 40px; }
+    .hero .wrap { display: grid; grid-template-columns: 1.1fr .9fr; gap: 40px; align-items: center; }
+    .kicker { display: inline-block; border: 2.5px solid var(--line); border-radius: 999px; background: var(--lime); padding: 6px 14px; font-weight: 800; font-size: 14px; }
+    h1 { font-size: clamp(38px, 5.6vw, 68px); line-height: .98; letter-spacing: -.045em; margin: 16px 0 14px; }
+    h1 mark { background: none; color: var(--g); }
+    .lead { font-size: 18px; line-height: 1.55; color: var(--muted); margin: 0 0 22px; max-width: 560px; }
+    .search { display: flex; flex-wrap: wrap; gap: 8px; background: #fff; border: 3px solid var(--line); border-radius: 22px; padding: 8px; box-shadow: 6px 6px 0 var(--line); }
+    .search input { flex: 1 1 180px; min-width: 0; border: 0; font: 600 16px Poppins, system-ui; padding: 12px 12px; background: transparent; }
+    .search input + input { border-left: 2px dashed #D1D5DB; }
+    .search .btn { box-shadow: none; }
+    .hint { font-size: 13px; color: var(--muted); margin: 10px 4px 0; }
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+    .chips button { border: 2.5px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 13px; font: 700 14px Poppins, system-ui; cursor: pointer; }
+    .chips button.on { background: var(--ink); color: #fff; }
+    .collage { position: relative; height: 520px; }
+    .collage .ph { position: absolute; border: 3.5px solid var(--line); border-radius: 26px; overflow: hidden; background: #ddd; box-shadow: 8px 8px 0 var(--line); }
+    .collage .ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .collage .a { left: 0; top: 10px; width: 62%; height: 330px; transform: rotate(-2deg); }
+    .collage .b { right: 0; top: 70px; width: 44%; height: 250px; transform: rotate(3deg); }
+    .collage .c { left: 22%; bottom: 0; width: 52%; height: 200px; transform: rotate(1.5deg); }
+    .float { position: absolute; z-index: 3; background: #fff; border: 3px solid var(--line); border-radius: 16px; padding: 10px 14px; font-weight: 800; font-size: 15px; box-shadow: 4px 4px 0 var(--line); }
+    .float small { display: block; font-weight: 600; color: var(--muted); font-size: 12px; }
+    .f1 { left: -10px; top: 300px; transform: rotate(-3deg); }
+    .f2 { right: -6px; top: 20px; background: var(--lime); transform: rotate(2deg); }
+    .f3 { right: 10px; bottom: 40px; background: var(--sun); transform: rotate(-2deg); }
+    @media (max-width: 920px) { .hero .wrap { grid-template-columns: 1fr; } .collage { height: 380px; } .collage .a { height: 240px; } .collage .b { height: 180px; } .collage .c { height: 150px; } .f1 { top: 210px; } }
+    /* sections */
+    section { padding: 64px 0; border-top: 3px solid var(--line); }
+    section.white { background: #fff; }
+    section.ink { background: var(--ink); color: #fff; }
+    h2 { font-size: clamp(30px, 4vw, 48px); letter-spacing: -.04em; line-height: 1.02; margin: 0 0 10px; }
+    .sub { color: var(--muted); font-size: 17px; margin: 0 0 28px; max-width: 680px; }
+    section.ink .sub { color: #D1D5DB; }
+    .row-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+    /* niche tiles */
+    .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 12px; }
+    .tile { position: relative; border: 3px solid var(--line); border-radius: 20px; overflow: hidden; aspect-ratio: 4/5; cursor: pointer; background: #ccc; box-shadow: 4px 4px 0 var(--line); padding: 0; font: inherit; text-align: left; }
+    .tile img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .3s; }
+    .tile:hover img { transform: scale(1.05); }
+    .tile span { position: absolute; left: 10px; bottom: 10px; right: 10px; background: #fff; border: 2.5px solid var(--line); border-radius: 12px; padding: 6px 10px; font-weight: 800; font-size: 15px; }
+    .tile span small { display: block; font-weight: 600; font-size: 12px; color: var(--muted); }
+    /* creator cards */
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 18px; }
+    .card { background: #fff; border: 3px solid var(--line); border-radius: 24px; overflow: hidden; box-shadow: 6px 6px 0 var(--line); display: flex; flex-direction: column; }
+    .card .cover { height: 120px; background: linear-gradient(135deg, #22C55E, #A3E635) center/cover; position: relative; }
+    .card .ava { position: absolute; left: 14px; bottom: -26px; width: 60px; height: 60px; border-radius: 50%; border: 3px solid #fff; outline: 2.5px solid var(--line); object-fit: cover; background: #DCFCE7; display: grid; place-items: center; font-size: 26px; }
+    .card .bd { padding: 34px 16px 16px; display: flex; flex-direction: column; gap: 7px; flex: 1; }
+    .card .nm { font-weight: 800; font-size: 18px; letter-spacing: -.02em; }
+    .card .ver { color: var(--g); }
+    .badges { display: flex; flex-wrap: wrap; gap: 5px; }
+    .badges span { white-space: nowrap; border: 2px solid var(--line); border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 800; background: #fff; }
+    .badges .rise { background: var(--sun); } .badges .ugc { background: var(--lime); }
+    .meta { font-size: 13.5px; color: var(--muted); }
+    .stats { display: flex; flex-wrap: wrap; gap: 10px; font-size: 13.5px; }
+    .port { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .port a { position: relative; aspect-ratio: 1; border-radius: 10px; overflow: hidden; border: 2px solid var(--line); background: #F3F4F6; display: block; }
+    .port img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .port i { position: absolute; left: 3px; bottom: 3px; font-style: normal; background: rgba(0, 0, 0, .65); color: #fff; font-size: 10px; border-radius: 5px; padding: 0 4px; }
+    .card .cta { margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; padding-top: 6px; }
+    .empty { border: 3px dashed var(--line); border-radius: 20px; padding: 26px; text-align: center; background: #fff; }
+    /* collabs */
+    .collabs { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .cb { background: #fff; border: 3px solid var(--line); border-radius: 20px; padding: 16px; box-shadow: 5px 5px 0 var(--line); display: flex; flex-direction: column; gap: 8px; }
+    .cb h3 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
+    .cb .money { font-size: 22px; font-weight: 800; color: var(--g2); }
+    .tag { display: inline-block; border: 2px solid var(--line); border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 800; background: var(--lime); }
+    /* how */
+    .how { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+    .how .col { background: #fff; color: var(--ink); border: 3px solid var(--line); border-radius: 26px; padding: 24px; box-shadow: 7px 7px 0 var(--g); }
+    .how h3 { margin: 0 0 12px; font-size: 24px; letter-spacing: -.03em; }
+    .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; counter-reset: s; }
+    .steps li { display: grid; grid-template-columns: 38px 1fr; gap: 12px; align-items: start; font-size: 15.5px; line-height: 1.45; }
+    .steps li::before { counter-increment: s; content: counter(s); width: 34px; height: 34px; border: 2.5px solid var(--line); border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: var(--lime); }
+    .steps b { display: block; }
+    @media (max-width: 860px) { .how { grid-template-columns: 1fr; } }
+    /* video */
+    .vtabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+    .vtabs button { border: 2.5px solid #fff; background: transparent; color: #fff; border-radius: 999px; padding: 9px 16px; font: 800 15px Poppins, system-ui; cursor: pointer; }
+    .vtabs button.on { background: #fff; color: var(--ink); }
+    .vframe { border: 3.5px solid #fff; border-radius: 26px; overflow: hidden; box-shadow: 10px 10px 0 var(--g); max-width: 960px; background: #000; }
+    .vframe video { display: block; width: 100%; aspect-ratio: 16/9; background: #000; }
+    /* demos */
+    .demos { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+    .demo { display: flex; flex-direction: column; border: 3px solid var(--line); border-radius: 22px; overflow: hidden; background: #fff; text-decoration: none; box-shadow: 5px 5px 0 var(--line); }
+    .demo img { height: 160px; object-fit: cover; width: 100%; border-bottom: 3px solid var(--line); }
+    .demo div { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 4px; }
+    .demo b { font-size: 18px; letter-spacing: -.02em; }
+    .demo span { color: var(--muted); font-size: 14px; }
+    .demo em { font-style: normal; color: var(--g2); font-weight: 800; margin-top: 4px; }
+    /* ugc */
+    .ugc { display: grid; grid-template-columns: .9fr 1.1fr; gap: 36px; align-items: center; }
+    .ugc .pic { border: 3.5px solid var(--line); border-radius: 26px; overflow: hidden; box-shadow: 10px 10px 0 var(--sun); transform: rotate(-1.5deg); }
+    .ugc .pic img { display: block; width: 100%; aspect-ratio: 4/3; object-fit: cover; }
+    .ticks { list-style: none; padding: 0; margin: 0 0 22px; display: grid; gap: 10px; font-size: 16px; font-weight: 600; }
+    .ticks li::before { content: "✓"; display: inline-grid; place-items: center; width: 24px; height: 24px; margin-right: 10px; border: 2px solid var(--line); border-radius: 7px; background: var(--g); color: #fff; font-size: 13px; }
+    @media (max-width: 860px) { .ugc { grid-template-columns: 1fr; } }
+    /* pricing */
+    .price { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+    .pc { background: #fff; border: 3px solid var(--line); border-radius: 22px; padding: 20px; box-shadow: 5px 5px 0 var(--line); }
+    .pc.hot { background: var(--lime); }
+    .pc h3 { margin: 0; font-size: 20px; }
+    .pc .amt { font-size: 38px; font-weight: 800; letter-spacing: -.03em; margin: 6px 0; }
+    .pc .amt small { font-size: 15px; font-weight: 600; color: var(--muted); }
+    .pc ul { margin: 8px 0 0; padding-left: 18px; line-height: 1.6; font-size: 14.5px; }
+    .zero { display: inline-block; margin-top: 18px; border: 3px solid var(--line); background: var(--sun); border-radius: 16px; padding: 10px 16px; font-weight: 800; font-size: 18px; box-shadow: 4px 4px 0 var(--line); }
+    /* safety + faq */
+    .safe { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
+    .safe div { background: #fff; border: 2.5px solid var(--line); border-radius: 16px; padding: 14px; font-size: 14.5px; line-height: 1.45; }
+    .safe b { display: block; font-size: 16px; margin-bottom: 2px; }
+    details { background: #fff; border: 2.5px solid var(--line); border-radius: 16px; padding: 12px 16px; margin: 10px 0; }
+    summary { font-weight: 800; cursor: pointer; }
+    details p { margin: 8px 0 0; color: var(--muted); line-height: 1.55; }
+    .join { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-top: 18px; }
+    .join a { display: flex; flex-direction: column; gap: 4px; background: #fff; color: var(--ink); border: 3px solid #fff; border-radius: 20px; padding: 18px; text-decoration: none; box-shadow: 6px 6px 0 var(--g); }
+    .join a b { font-size: 20px; }
+    .join a span { color: var(--muted); font-size: 14px; }
+    footer { border-top: 3px solid var(--line); padding: 28px 0 60px; font-size: 14px; color: var(--muted); }
+    footer .wrap { display: flex; flex-wrap: wrap; gap: 14px; justify-content: space-between; }
+  </style>
+</head>
+<body>
+  <nav class="top"><div class="wrap">
+    <a class="logo" href="/collab/"><img src="/logo/taptayo-mark.svg" alt="" width="32" height="32" />taptayo <em>collab</em></a>
+    <div class="links"><a href="#creators" class="hide-m">Creators</a><a href="#collabs" class="hide-m">Open collabs</a><a href="#how" class="hide-m">How it works</a><a href="#xdeal" class="hide-m">X-Deal</a><a href="#pricing" class="hide-m">Pricing</a><a href="/login/?next=/me/" id="loginLink">Log in</a><a class="btn sm" href="#join">Join free</a></div>
+  </div></nav>
+
+  <header class="hero"><div class="wrap">
+    <div>
+      <span class="kicker">🇵🇭 Creators for small businesses · 0% commission</span>
+      <h1>Find creators who make your shop <mark>famous.</mark></h1>
+      <p class="lead">Food vloggers, UGC makers, photographers and makeup artists — even micro creators with small followings. Make an offer (like free food for 4 + ₱1,000 transport), they accept or counter, and the date locks with a downpayment.</p>
+      <form class="search" id="searchForm" role="search" aria-label="Find creators">
+        <input id="q" placeholder="Niche or keyword: food, UGC, makeup…" aria-label="Niche or keyword" />
+        <input id="city" placeholder="City" aria-label="City" style="flex:0 1 150px" />
+        <button class="btn" type="submit">Search</button>
+      </form>
+      <p class="hint">No account needed to look around. Log in only to book or make an offer.</p>
+      <div class="chips" id="chips"></div>
+    </div>
+    <div class="collage" aria-hidden="true">
+      <div class="ph a"><img src="/demo/asia/creator-studio.jpg" alt="" /></div>
+      <div class="ph b"><img src="/demo/asia/phone-selfie.jpg" alt="" /></div>
+      <div class="ph c"><img src="/demo/asia/coffee-shot.jpg" alt="" /></div>
+      <div class="float f1">🎁 X-Deal<small>Free food for 2 ↔ 1 UGC video</small></div>
+      <div class="float f2">✔ Verified · 96% on time</div>
+      <div class="float f3">📈 Sales up 40%<small>“Ube latte sold out 3 days”</small></div>
+    </div>
+  </div></header>
+
+  <div id="soon" hidden style="border-top:3px solid var(--line);background:var(--sun)"><div class="wrap" style="padding:18px 20px;display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between">
+    <div style="flex:1 1 360px"><b style="font-size:18px">🚀 Launching soon in <span data-city>Metro Manila</span></b><div style="font-size:14px;margin-top:2px">We open offers, X-Deals and swaps when we reach <b data-target>100</b> creators. <b data-count>0</b> have joined.</div><div style="height:12px;border:2.5px solid var(--line);border-radius:999px;background:#fff;margin-top:8px;overflow:hidden"><div data-bar style="height:100%;width:0;background:var(--g)"></div></div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn sm" href="/login/?signup=1&role=creator">I'm a creator — join now</a><button class="btn sm white" type="button" data-wl>Business? Notify me</button></div></div></div>
+
+  <section class="white" id="niches"><div class="wrap">
+    <h2>Browse by what you need</h2>
+    <p class="sub">Tap a niche to see creators. Every profile shows real work — portfolio, results and on-time rate.</p>
+    <div class="tiles" id="tiles"></div>
+  </div></section>
+
+  <section id="creators"><div class="wrap">
+    <div class="row-head"><div><h2 id="resTitle">Top creators right now</h2><p class="sub" id="resSub" style="margin:0">Ranked by their work and results — not just followers.</p></div><label style="font-weight:700"><input type="checkbox" id="ugcOnly" /> 📱 UGC only</label></div>
+    <div class="grid" id="results"><div class="empty">Loading creators…</div></div>
+  </div></section>
+
+  <section class="white" id="collabs"><div class="wrap">
+    <div class="row-head"><div><h2>Open collabs</h2><p class="sub" style="margin:0">Businesses looking for creators right now. Creators: apply from your TapTayo account.</p></div><a class="btn white sm" href="/login/?signup=1&role=business">Post a collab</a></div>
+    <div class="collabs" id="collabList"><div class="empty">Loading…</div></div>
+  </div></section>
+
+  <section class="white" id="xdeal"><div class="wrap">
+    <span class="kicker" style="background:var(--lime)">New · X-Deal</span>
+    <h2 style="margin-top:14px">No budget? Trade food, products or a staycation for a video.</h2>
+    <p class="sub">UGC is the cheapest way to get great content — and with X-Deal you don't even need cash. Clear steps, a countdown, and protection for both sides.</p>
+    <div class="how" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+      <div class="col" style="box-shadow:7px 7px 0 var(--ink)"><h3>🎁 How an X-Deal works</h3><ol class="steps">
+        <li><span><b>Offer</b>Food, a product or a staycation (+ an optional tip). Some creators set a minimum tip.</span></li>
+        <li><span><b>Creator accepts &amp; sets the release time</b>e.g. “video 5 days after I receive it”.</span></li>
+        <li><span><b>Item sent → creator confirms received</b>The countdown starts — both of you see it.</span></li>
+        <li><span><b>Watermarked 1080p preview</b>Approve or ask 1 revision. Quiet for 3 days? Auto-approved.</span></li>
+        <li><span><b>High-res on Drive → confirm → tip &amp; rate</b>Liked it? Send a tip.</span></li></ol></div>
+      <div class="col" style="box-shadow:7px 7px 0 var(--ink)"><h3>🛡 Protection</h3><ol class="steps">
+        <li><span><b>Valid ID for creators</b>Businesses send real items — every X-Deal creator is ID-verified.</span></li>
+        <li><span><b>Trust limits</b>New creators: items up to ₱800, ₱2,000 after 3 on-time X-Deals.</span></li>
+        <li><span><b>Strikes</b>7 days past due = strike. 3 strikes = no more X-Deals.</span></li>
+        <li><span><b>TapTayo Protect (₱149/mo)</b>Creator ghosted? The declared item value comes back as TapTayo credits (up to ₱1,500 a claim).</span></li>
+        <li><span><b>Every step is logged</b>Timestamps, photos and tracking — your evidence.</span></li></ol></div>
+      <div class="col" style="box-shadow:7px 7px 0 var(--ink)"><h3>🤝 B2B video swap</h3><ol class="steps">
+        <li><span><b>Business ↔ business</b>A café makes a video for a resort, the resort makes one for the café.</span></li>
+        <li><span><b>Double lock</b>Neither side sees the other's video until BOTH have uploaded.</span></li>
+        <li><span><b>Then both download</b>Files auto-delete 3 days after download — send high-res on Drive.</span></li>
+        <li><span><b>Free for businesses</b>No add-on needed.</span></li></ol></div>
+    </div>
+  </div></section>
+
+  <section class="ink" id="how"><div class="wrap">
+    <h2>How TapTayo Collab works</h2>
+    <p class="sub">Promotions without the chaos of DMs — clear offers, locked dates, proof of posting.</p>
+    <div class="how">
+      <div class="col"><h3>🏪 For businesses</h3><ol class="steps">
+        <li><span><b>Get creator suggestions</b>Set up your shop and we suggest creators that fit — your niche, your city, your budget.</span></li>
+        <li><span><b>Make an offer or post a collab</b>“Free food for 4 + ₱1,000 transport” — or post “3 food UGC videos, ₱1,200 each” and let creators apply.</span></li>
+        <li><span><b>Accept, decline or counter</b>Every offer and counter-offer in one thread. Agree, accept the terms, pay the downpayment — the date is locked.</span></li>
+        <li><span><b>Approve the draft, get proof</b>Review before it goes live. The creator adds the post link, views and likes.</span></li>
+        <li><span><b>Leave a results review</b>“Sales up 40% that week” — helps the next business choose.</span></li>
+      </ol></div>
+      <div class="col"><h3>🎨 For creators</h3><ol class="steps">
+        <li><span><b>Free creator page</b>Rate card by video length, portfolio, niches and your “why book me”.</span></li>
+        <li><span><b>Offers on your terms</b>Accept, decline or counter. Set a minimum — lower offers are refused for you.</span></li>
+        <li><span><b>Side-job friendly</b>Weekends only? Evenings? Max jobs a week? Take a break anytime.</span></li>
+        <li><span><b>Protected schedule</b>Downpayment before the date, non-refundable option and a moving-date fee when clients reschedule.</span></li>
+        <li><span><b>Keep 100%</b>Clients pay you directly — TapTayo takes 0% commission.</span></li>
+      </ol></div>
+    </div>
+  </div></section>
+
+  <section id="video"><div class="wrap">
+    <h2>See it in 90 seconds</h2>
+    <p class="sub">How cafés and shops promote with creators — and how creators get booked.</p>
+    <div class="vtabs" role="group" aria-label="Video"><button type="button" class="on" data-v="collab" style="border-color:var(--ink);color:#fff;background:var(--ink)">🏪 For businesses</button><button type="button" data-v="creator" style="border-color:var(--ink);color:var(--ink)">🎨 For creators</button></div>
+    <div class="vframe" style="border-color:var(--ink)"><video id="vid" src="/videos/collab.mp4" poster="/videos/collab.jpg" controls playsinline preload="none"></video></div>
+  </div></section>
+
+  <section class="white" id="demos"><div class="wrap">
+    <h2>Try the demos</h2>
+    <p class="sub">Real screens, sample data. Make an offer, see a counter-offer, open the business dashboard.</p>
+    <div class="demos">
+      <a class="demo" href="/m/taptayo-creator" target="_blank" rel="noopener"><img src="/demo/asia/creator-studio.jpg" alt="" loading="lazy" /><div><b>Kain Tayo with Bea</b><span>Food vlogger · rate card by video length, offers, rush countdown</span><em>Make an offer →</em></div></a>
+      <a class="demo" href="/m/taptayo-ugc" target="_blank" rel="noopener"><img src="/demo/asia/phone-selfie.jpg" alt="" loading="lazy" /><div><b>Mika Makes UGC</b><span>1.2K followers, ₱800 UGC videos, X-Deals, evenings & weekends</span><em>See her rate card →</em></div></a>
+      <a class="demo" href="/m/taptayo-studio" target="_blank" rel="noopener"><img src="/demo/studio/wedding.jpg" alt="" loading="lazy" /><div><b>TapTayo Studio</b><span>Photographer · raw in 3 days, final in 7, prints & frames</span><em>Book a shoot →</em></div></a>
+      <a class="demo" href="/app/?demo=taptayo-cafe#creators" target="_blank" rel="noopener"><img src="/demo/cafe/counter.jpg" alt="" loading="lazy" /><div><b>Café dashboard</b><span>Suggested creators, offers & counter-offers, open collab posts</span><em>Open the business side →</em></div></a>
+    </div>
+  </div></section>
+
+  <section id="ugc"><div class="wrap ugc">
+    <div class="pic"><img src="/demo/asia/cafe-selfie.jpg" alt="A creator filming herself at a café" loading="lazy" /></div>
+    <div>
+      <span class="kicker" style="background:var(--sun)">UGC · micro creators</span>
+      <h2 style="margin-top:14px">No big following? You can still earn.</h2>
+      <p class="sub">Many businesses just need great content they can post on their own page or run as ads. That's UGC — and it's judged by your work, not your follower count.</p>
+      <ul class="ticks"><li>Profiles are ranked by portfolio, results and on-time rate</li><li>🌱 Rising badge for small creators with great work</li><li>Businesses can filter “UGC only”</li><li>3 portfolio samples and you're listed</li></ul>
+      <a class="btn" href="/login/?signup=1&role=creator">Create my creator page — free</a>
+    </div>
+  </div></section>
+
+  <section class="white" id="pricing"><div class="wrap">
+    <h2>Simple pricing</h2>
+    <p class="sub">Looking and searching is always free. Clients never pay to book.</p>
+    <div class="price">
+      <div class="pc"><h3>🎨 Creator · Free</h3><div class="amt">₱0</div><ul><li>Your creator page & rate card</li><li>Offers & counter-offers</li><li>Up to 3 brand deals + 2 X-Deals a month</li><li>6 portfolio samples</li><li>Listed on TapTayo Collab</li></ul></div>
+      <div class="pc hot"><h3>🎨 Creator Pro</h3><div class="amt">₱79<small>/month</small></div><ul><li>Unlimited deals & bookings</li><li>40 portfolio samples</li><li>Promos (e.g. Monday deals), rush & release timelines</li><li>Contracts, products to sell with bookings</li></ul></div>
+      <div class="pc"><h3>🏪 Business</h3><div class="amt" style="font-size:24px">Included in your plan</div><ul><li>Browse & get suggestions: free</li><li>Offers to creators: Free 1 · Starter 3 · Pro 10 · Business unlimited (per month)</li><li>Open collab posts: Pro 1 · Business unlimited</li></ul></div>
+      <div class="pc hot"><h3>🎁 X-Deals for businesses</h3><div class="amt">Free</div><ul><li>Unlimited X-Deals with UGC creators</li><li>Unlimited B2B video swaps</li><li>Only the item you give (+ optional tip)</li></ul></div>
+      <div class="pc"><h3>🛡 TapTayo Protect</h3><div class="amt">₱149<small>/month</small></div><ul><li>Creator ghosted an X-Deal? Declared item value back as credits</li><li>Up to ₱1,500 a claim · ₱3,000 a month</li><li>Starts 14 days after you turn it on</li></ul></div>
+      <div class="pc"><h3>➕ Creator Collab add-on</h3><div class="amt">₱199<small>/month</small></div><ul><li>Unlimited offers to creators</li><li>Unlimited open collab posts</li><li>Works on any plan — even Free</li></ul></div>
+    </div>
+    <span class="zero">0% commission — creators keep 100%</span>
+  </div></section>
+
+  <section id="safety"><div class="wrap">
+    <h2>Safe for both sides</h2>
+    <p class="sub">Built-in protection so nobody gets ghosted — or worse.</p>
+    <div class="safe">
+      <div><b>🔒 Downpayment locks the date</b>No DP, no date. Terms are accepted online and saved as an agreement.</div>
+      <div><b>📅 Rescheduling rules</b>Non-refundable option, reschedule limits and a moving-date fee.</div>
+      <div><b>🪪 Valid ID for on-site jobs</b>Creators can require an ID and set a travel radius.</div>
+      <div><b>🆘 Safety check-in</b>Arrived · I'm safe · Done — SOS alerts the creator's people.</div>
+      <div><b>✔ Verified badge</b>We check the accounts and follower counts.</div>
+      <div><b>🔞 18+ creators only</b>Every listed creator confirms they're 18 or older.</div>
+      <div><b>#ad reminder</b>Paid posts should say “#ad” or “Paid partnership” — it protects both of you.</div>
+      <div><b>💬 Messenger after booking</b>Contact details are shared once there's a real booking.</div>
+    </div>
+  </div></section>
+
+  <section class="white" id="faq"><div class="wrap" style="max-width:860px">
+    <h2>Questions</h2>
+    <details><summary>Do I need an account to look for creators?</summary><p>No. Search and browse freely. You only log in to make an offer, book, or apply to a collab.</p></details>
+    <details><summary>How do payments work?</summary><p>The client pays the creator directly (GCash, Maya, bank) — the downpayment locks the date, the balance is paid on delivery. TapTayo doesn't hold your money and takes 0% commission.</p></details>
+    <details><summary>What's UGC?</summary><p>User-generated content: videos and photos a creator makes for your brand, which you post on your own page or use in ads. Great content matters more than followers.</p></details>
+    <details><summary>Can I book a creator who is also my customer?</summary><p>Yes. One TapTayo account can be a client, a creator and a business at the same time — switch anytime in My TapTayo.</p></details>
+    <details><summary>What if the creator is late?</summary><p>Rush jobs have a countdown. If the deadline is missed, the client is compensated the way the creator set it: rush fee refunded, a discount next time, or both.</p></details>
+  </div></section>
+
+  <section class="ink" id="join"><div class="wrap">
+    <h2>Join TapTayo — free</h2>
+    <p class="sub">One account. Be a client, a creator, a business — or all three.</p>
+    <div class="join">
+      <a href="/login/?signup=1&role=client"><b>🙋 I'm a client</b><span>Book shops, hire creators, see all my bookings</span></a>
+      <a href="/login/?signup=1&role=creator"><b>🎨 I'm a creator</b><span>Get offers and bookings — even with few followers</span></a>
+      <a href="/login/?signup=1&role=business"><b>🏪 I own a business</b><span>Run my shop and get creator suggestions</span></a>
+    </div>
+  </div></section>
+
+  <footer><div class="wrap"><span>© TapTayo · Your business solution, for freelancers and independent business owners.</span><span><a href="/">taptayo.com</a> · <a href="/help/">Help</a> · <a href="/me/">My TapTayo</a></span></div></footer>
+  <script type="module" src="/src/collab.js"></script>
+</body>
+</html>
