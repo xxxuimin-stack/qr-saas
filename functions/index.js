@@ -138,7 +138,7 @@ async function buildStore({ uid, token, data, orgId, copyFrom = null }) {
   batch.set(db.doc(`publicStores/${slug}`), { storeId, name, slug, businessType, mode: preset.mode, theme: store.theme, labels: store.settings.labels || preset.labels, contact: { phone, address }, acceptOrders: true, locked: false, categories, items: [], updatedAt: now });
   await batch.commit();
   // the owner works too (salon solo / owner works with staff / home-based café) → a staff profile with a PIN for the counter & screens
-  if (!src && ownerProfileNeeded(preset.mode, setup)) {
+  if (!src && data.createOwnerStaff === true && ownerProfileNeeded(preset.mode, setup)) {
     const pin = String(data.ownerPin || "");
     if (!/^\d{4,6}$/.test(pin)) throw new HttpsError("invalid-argument", "Set a 4–6 digit PIN for yourself.");
     const roles = preset.mode === "salon" ? ["manager", "crew", "stylist"] : ["manager", "crew", "kitchen", "barista", "dispatch", "rider"];
@@ -154,7 +154,7 @@ function setupFrom(mode, s) {
   if (mode === "table") return { kind: k === "home" ? "home" : "shop" };
   return { kind: "default" };
 }
-const ownerProfileNeeded = () => false; // Do not collect owner staff name/PIN during initial setup.
+const ownerProfileNeeded = (mode, setup) => (mode === "salon" && (setup.kind === "solo" || setup.ownerWorks)) || (mode === "table" && setup.kind === "home");
 /** Owner: change the business setup later (Tools → Business setup) */
 exports.changeSetup = onCall(async (req) => {
   const t = requireOwner(req);
@@ -268,43 +268,12 @@ exports.listBusinesses = onCall(async (req) => {
   const { list } = await myBusinesses(uid);
   return { businesses: list, current: token.orgId || null };
 });
-exports.addBusiness = onCall(async (req) => {
-  const { uid, token } = requireAuth(req);
-  if (token.role !== "owner") throw new HttpsError("permission-denied", "Owner only.");
-  const data = req.data || {};
-  const { u, list } = await myBusinesses(uid);
-  if (list.length >= 5) throw new HttpsError("resource-exhausted", "You can have up to 5 businesses. Message us if you need more.");
-  const orgRef = db.collection("orgs").doc();
-  const { storeId, slug, mode } = await buildStore({ uid, token, data, orgId: orgRef.id });
-  const now = FieldValue.serverTimestamp();
-  // anti-abuse: one free trial per business type per owner — another one of the same type starts on the Free plan
-  const sameType = list.some((b) => b.businessType === data.businessType) || (await trialUsed(mode, data.phone, data.bid));
-  const trialEnds = Timestamp.fromMillis(Date.now() + TRIAL_DAYS * 86400000);
-  const batch = db.batch();
-  batch.set(db.doc(`stores/${storeId}/subscription/current`), sameType ? freeSub(now) : { plan: "trial", status: "trial", trialEndsAt: trialEnds, paidUntil: null, paymentMethod: null, paymongoSubscriptionId: null, limits: TRIAL_LIMITS, createdAt: now, updatedAt: now });
-  if (!sameType) markTrial(batch, mode, data.phone, data.bid, storeId);
-  batch.set(orgRef, { name: String(data.name || "").trim(), ownerUid: uid, ownerEmail: token.email || null, mainStoreId: storeId, branches: [{ storeId, name: String(data.name || "").trim(), slug, createdAt: Date.now() }], createdAt: now, updatedAt: now });
-  const entry = { storeId, orgId: orgRef.id, name: String(data.name || "").trim(), businessType: String(data.businessType || "") };
-  batch.set(db.doc(`users/${uid}`), { businesses: [...list, entry], storeIds: FieldValue.arrayUnion(storeId), storeId, orgId: orgRef.id }, { merge: true });
-  await batch.commit();
-  await admin.auth().setCustomUserClaims(uid, { storeId, role: "owner", orgId: orgRef.id });
-  logger.info("business added", { uid, storeId, type: data.businessType, shortTrial: sameType });
-  return { storeId, slug, mode, trialDays: sameType ? 3 : TRIAL_DAYS };
+exports.addBusiness = onCall(async () => {
+  throw new HttpsError("failed-precondition", "Each business must use its own email account.");
 });
-exports.switchBusiness = onCall(async (req) => {
-  const { uid, token } = requireAuth(req);
-  if (token.role !== "owner") throw new HttpsError("permission-denied", "Owner only.");
-  const { list } = await myBusinesses(uid);
-  const b = list.find((x) => x.orgId === String(req.data?.orgId || ""));
-  if (!b) throw new HttpsError("not-found", "Business not found.");
-  const org = (await db.doc(`orgs/${b.orgId}`).get()).data();
-  if (!org || org.ownerUid !== uid) throw new HttpsError("permission-denied", "Not your business.");
-  const storeId = org.mainStoreId;
-  await admin.auth().setCustomUserClaims(uid, { storeId, role: "owner", orgId: b.orgId });
-  await db.doc(`users/${uid}`).set({ storeId, orgId: b.orgId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-  return { ok: true, storeId };
+exports.switchBusiness = onCall(async () => {
+  throw new HttpsError("failed-precondition", "Business switching is paused. Log in with the email used for that business.");
 });
-
 // ===========================================================================
 // MULTI-BRANCH — orgs/{orgId}; subscription lives on the main store and is mirrored to branches
 // ===========================================================================
