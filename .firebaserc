@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "orderqr-62446"
+    "default": "orderqr-62446",
+    "staging": "taptayo-staging"
   }
 }

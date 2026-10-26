@@ -56,9 +56,8 @@ service cloud.firestore {
       // Sarili mo, o (kung owner ka) lahat ng users ng store mo
       allow read: if signedIn() && (request.auth.uid == uid
                     || (myRole() == 'owner' && resource.data.storeId == myStore()));
-      // Ginagawa ng Cloud Function; puwedeng i-edit ng user ang sarili niyang name lang
-      allow update: if signedIn() && request.auth.uid == uid
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name']);
+      // Cloud Functions lang (saveProfile: name once every 90 days · notices · blocked shops)
+      allow update: if false;
       allow create, delete: if false;
     }
 
@@ -85,13 +84,13 @@ service cloud.firestore {
       allow read: if inStore(storeId);
       allow create: if false;  // createStore Cloud Function lang
       allow delete: if false;
-      // Owner lang ang puwedeng mag-edit ng store settings; hindi puwedeng palitan ang ownerUid, slug, mode
+      // Owner lang ang puwedeng mag-edit ng store settings; hindi puwedeng palitan ang ownerUid, slug, mode, name (renameStore: 60-day cooldown, locked once the permit badge is on)
       // server-only fields (badges, counts, credits, trust, referral, demo) can't be written from the app — Cloud Functions only
       allow update: if isOwner(storeId)
                     && !request.resource.data.diff(resource.data).affectedKeys()
                           .hasAny(['ownerUid', 'slug', 'mode', 'businessType', 'createdAt',
                                    'verif', 'stats', 'kycAt', 'credits', 'xUsage', 'xStrikes', 'verifyReq', 'collabUsage',
-                                   'referredBy', 'referralRewarded', 'notice', 'trust', 'orgId', 'demo'])
+                                   'referredBy', 'referralRewarded', 'notice', 'trust', 'orgId', 'demo', 'feedUsage', 'proRating', 'name', 'nameChangedAt', 'nameHistory', 'wants'])
                     && request.resource.data.get('settings', {}).get('demo', false) == resource.data.get('settings', {}).get('demo', false);
 
       match /categories/{id} {

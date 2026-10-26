@@ -1,6 +1,7 @@
 // 💬 Help & support — FAQ answers first, then a chat with TapTayo (no calls; we reply within 24 hours).
 // Used on the homepage, the /help page, the owner dashboard and the staff screens.
-import { auth, db, call, storage } from "./firebase.js";
+import { auth, db, call } from "./firebase.js";
+import { storage } from "./storage.js";
 import { signInAnonymously } from "firebase/auth";
 import { doc, collection, onSnapshot, query, orderBy } from "firebase/firestore";
 import { ref, uploadBytes } from "firebase/storage";

@@ -1,0 +1,110 @@
+/* Demo playground shell — same bold look as the TapTayo homepage */
+:root { --ink: #141414; --cream: #FFFBF5; --scene: #0D9488; --line: 3px solid #141414; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; background: var(--cream); color: var(--ink); font-family: Poppins, system-ui, sans-serif; }
+button { font: inherit; cursor: pointer; color: inherit; }
+a { color: inherit; }
+
+.ty-top { display: flex; align-items: center; gap: 14px; padding: 12px 20px; flex-wrap: wrap; }
+.ty-logo { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 20px; letter-spacing: -.03em; text-decoration: none; }
+.ty-live { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #57534E; }
+.ty-live i { width: 9px; height: 9px; border-radius: 50%; background: #16A34A; box-shadow: 0 0 0 4px #DCFCE7; animation: tyLive 1.6s infinite; }
+@keyframes tyLive { 50% { box-shadow: 0 0 0 7px rgba(22,163,74,.12); } }
+.ty-sp { flex: 1; }
+.ty-cta { display: inline-flex; align-items: center; justify-content: center; background: var(--ink); color: #fff; font-weight: 800; text-decoration: none; padding: 10px 18px; border-radius: 999px; border: var(--line); box-shadow: 3px 3px 0 #FACC15; white-space: nowrap; }
+.ty-cta.big { padding: 14px 22px; font-size: 16px; margin-top: 8px; }
+.ty-cta:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 #FACC15; }
+
+.ty-scenes { display: flex; gap: 10px; padding: 4px 20px 14px; overflow-x: auto; scrollbar-width: none; }
+.ty-scenes button { display: inline-flex; align-items: center; gap: 8px; border: var(--line); background: #fff; border-radius: 999px; padding: 8px 16px; font-weight: 700; font-size: 14px; white-space: nowrap; box-shadow: 3px 3px 0 var(--ink); }
+.ty-scenes button span { font-size: 18px; }
+.ty-scenes button.on { background: var(--ink); color: #fff; box-shadow: 3px 3px 0 var(--scene); }
+
+.ty-main { display: grid; grid-template-columns: 330px 1fr; gap: 22px; padding: 0 20px 30px; align-items: start; }
+.ty-guide { position: sticky; top: 12px; }
+.ty-gcard { background: #fff; border: var(--line); border-radius: 22px; padding: 16px; box-shadow: 5px 5px 0 var(--ink); max-height: calc(100vh - 24px); overflow: auto; scrollbar-width: thin; }
+.ty-gtop { display: flex; gap: 10px; align-items: center; }
+.ty-gtop b { display: block; font-size: 15px; letter-spacing: -.01em; }
+.ty-gtop small { display: block; color: #57534E; font-size: 12px; line-height: 1.35; }
+.ty-ic { font-size: 26px; width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: color-mix(in srgb, var(--scene) 14%, #fff); flex: none; }
+.ty-prog { height: 8px; border-radius: 8px; background: #F0EEE9; margin: 12px 0; overflow: hidden; }
+.ty-prog i { display: block; height: 100%; background: var(--scene); transition: width .5s; }
+.ty-did { background: #FEF9C3; border-radius: 14px; padding: 10px 12px; font-size: 13px; line-height: 1.45; animation: tyPop .4s ease-out; }
+.ty-did b { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 2px; }
+.ty-did.intro { background: #F0F9FF; animation: none; }
+@keyframes tyPop { from { transform: scale(.96); opacity: .4; } }
+.ty-step { margin-top: 12px; border: 2px solid var(--ink); border-radius: 16px; padding: 12px; }
+.ty-step.bonus { border-style: dashed; }
+.ty-step.done { background: #ECFDF5; border-color: #16A34A; }
+.ty-sn { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #78716C; }
+.ty-step h3 { margin: 4px 0 4px; font-size: 18px; letter-spacing: -.02em; }
+.ty-step p { margin: 0 0 10px; font-size: 13.5px; line-height: 1.5; color: #3B3633; }
+.ty-plan { display: inline-block; background: var(--pc); color: #fff; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 999px; letter-spacing: .03em; }
+.ty-feat { font-size: 12px; color: #57534E; font-weight: 600; }
+.ty-go { display: block; width: 100%; margin-top: 10px; background: var(--scene); color: #fff; border: 0; border-radius: 12px; padding: 11px; font-weight: 800; animation: tyNudge 1.2s ease-in-out infinite; }
+@keyframes tyNudge { 50% { transform: translateX(4px); } }
+.ty-note { font-size: 12.5px; color: #15803D; margin: 10px 0 0; }
+.ty-list { list-style: none; margin: 14px 0 6px; padding: 0; display: grid; gap: 2px; }
+.ty-list li { display: grid; grid-template-columns: 24px 1fr auto; gap: 6px; align-items: center; font-size: 12.5px; padding: 5px 6px; border-radius: 10px; color: #78716C; }
+.ty-list li span { font-size: 13px; text-align: center; }
+.ty-list li.ok { color: #15803D; } .ty-list li.ok span { font-weight: 800; }
+.ty-list li.now { background: #FEF9C3; color: var(--ink); font-weight: 700; }
+.ty-list li.b { border-top: 1px dashed #E7E5E4; }
+.ty-list em { font-style: normal; font-size: 10px; font-weight: 800; color: var(--pc); border: 1.5px solid var(--pc); border-radius: 999px; padding: 1px 6px; }
+.ty-tools { display: flex; gap: 8px; margin-top: 8px; }
+.ty-tools button { border: 2px solid var(--ink); background: #fff; border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 700; }
+
+.ty-stage { min-width: 0; }
+.ty-roletabs { display: none; }
+.ty-phones { display: flex; gap: 18px; justify-content: center; align-items: flex-start; }
+.ty-phone { display: grid; gap: 8px; justify-items: center; }
+.ty-plabel { font-weight: 800; font-size: 14px; display: flex; align-items: center; gap: 6px; background: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 4px 12px; }
+.ty-ping { font-style: normal; animation: tyRing .5s ease-in-out 4; }
+@keyframes tyRing { 25% { transform: rotate(18deg); } 75% { transform: rotate(-18deg); } }
+.ty-device { position: relative; border-radius: 34px; box-shadow: 0 0 0 10px #141414, 6px 10px 0 10px #141414, 0 30px 60px -20px rgba(0,0,0,.35); overflow: hidden; background: #fff; margin: 10px; transition: box-shadow .3s; }
+.ty-phone.rang .ty-device { animation: tyShake .45s ease-in-out 2; box-shadow: 0 0 0 10px #141414, 6px 10px 0 10px var(--scene), 0 0 0 18px color-mix(in srgb, var(--scene) 35%, transparent); }
+@keyframes tyShake { 25% { transform: translateX(-3px) rotate(-.6deg); } 75% { transform: translateX(3px) rotate(.6deg); } }
+.ty-scale { transform-origin: top left; width: 360px; height: 740px; }
+.ty-scale iframe { border: 0; display: block; background: #fff; }
+
+.ty-plans { max-width: 1200px; margin: 10px auto 0; padding: 30px 20px 80px; }
+.ty-plans h2 { font-size: clamp(24px, 4vw, 36px); letter-spacing: -.04em; margin: 0 0 6px; }
+.ty-plans h3 { margin: 26px 0 10px; }
+.ty-sub { color: #57534E; margin: 0 0 18px; }
+.ty-pgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+.ty-pcol { background: #fff; border: var(--line); border-radius: 18px; padding: 14px; box-shadow: 4px 4px 0 var(--pc); }
+.ty-ph { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 2px solid #F0EEE9; padding-bottom: 8px; margin-bottom: 8px; }
+.ty-ph b { font-size: 18px; color: var(--pc); } .ty-ph span { font-weight: 700; font-size: 13px; }
+.ty-pf { font-size: 13.5px; padding: 4px 0; color: #78716C; } .ty-pf.ok { color: var(--ink); font-weight: 600; }
+.ty-extras { display: flex; flex-wrap: wrap; gap: 8px; }
+.ty-extras span { background: #fff; border: 2px solid var(--ink); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 600; }
+.ty-extras em { font-style: normal; color: var(--pc); font-weight: 800; margin-right: 6px; }
+.ty-end { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 26px; }
+.ty-link { background: none; border: 0; font-weight: 700; text-decoration: underline; padding: 6px 4px; font-size: 14px; }
+
+/* one phone at a time (phones / small screens) */
+body.tabbed .ty-main { grid-template-columns: 1fr; gap: 12px; }
+body.tabbed .ty-guide { position: static; order: 2; }
+body.tabbed .ty-gcard { max-height: none; }
+body.tabbed .ty-roletabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 14px; flex-wrap: wrap; }
+.ty-roletabs button { position: relative; display: inline-flex; gap: 6px; align-items: center; border: 2px solid var(--ink); background: #fff; border-radius: 999px; padding: 7px 12px; font-weight: 700; font-size: 13px; }
+.ty-roletabs button.on { background: var(--ink); color: #fff; }
+.ty-roletabs button.next { animation: tyGlowTab 1.2s infinite; border-color: #CA8A04; }
+@keyframes tyGlowTab { 50% { box-shadow: 0 0 0 5px rgba(250,204,21,.55); } }
+.ty-roletabs i { position: absolute; top: -6px; right: -6px; background: #DC2626; color: #fff; font-style: normal; font-size: 11px; font-weight: 800; min-width: 18px; height: 18px; border-radius: 9px; display: grid; place-items: center; }
+body.tabbed .ty-plabel { display: none; }
+@media (max-width: 760px) {
+  .ty-top { padding: 10px 16px; } .ty-live { display: none; }
+  .ty-scenes { padding: 0 16px 10px; }
+  .ty-main { padding: 0 16px 20px; }
+  .ty-device { margin: 6px; border-radius: 28px; box-shadow: 0 0 0 6px #141414, 0 20px 40px -20px rgba(0,0,0,.35); }
+  .ty-phone.rang .ty-device { box-shadow: 0 0 0 6px var(--scene); }
+  .ty-plans { padding: 20px 16px 60px; }
+}
+
+.ty-mini { display: none; }
+body.tabbed .ty-mini { display: block; background: #FEF9C3; border: 2px solid var(--ink); border-radius: 14px; padding: 10px 12px; font-size: 13px; line-height: 1.45; margin: 0 auto 12px; max-width: 430px; }
+body.tabbed .ty-mini .ty-go { margin-top: 8px; }
+body.tabbed .ty-gcard .ty-go { display: none; }
+@media (max-width: 420px) { .ty-roletabs button { font-size: 12px; padding: 6px 9px; gap: 4px; } .ty-scenes button { font-size: 13px; padding: 7px 12px; } }

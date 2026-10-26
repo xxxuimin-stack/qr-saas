@@ -5,7 +5,7 @@ import { esc, money, html, toast, openModal, closeModal } from "../ui.js";
 import { offerFields, readOffer, offerLine, offersHTML, NEG_CSS } from "../inquiry.js";
 import { uploadPrivateImage } from "../upload.js";
 import { xdealHTML, xdealActions, xdealForm, X_ST } from "../xdeal.js";
-import { storage } from "../firebase.js";
+import { storage } from "../storage.js";
 import { ref as sref, uploadBytesResumable } from "firebase/storage";
 
 const ST = { new: "📨 Sent", negotiating: "💬 Negotiating", quoted: "💬 Quote ready — accept it", accepted: "⏳ DP being checked", in_progress: "🎬 In progress", delivered: "✅ Delivered", done: "🏁 Done", declined: "✕ Declined" };

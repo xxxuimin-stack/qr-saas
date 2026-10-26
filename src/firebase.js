@@ -3,7 +3,6 @@ import { initializeApp } from "firebase/app";
 import { getAuth, initializeAuth, inMemoryPersistence, browserPopupRedirectResolver, GoogleAuthProvider, connectAuthEmulator } from "firebase/auth";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator } from "firebase/firestore";
 import { getFunctions, httpsCallable, connectFunctionsEmulator } from "firebase/functions";
-import { getStorage, connectStorageEmulator } from "firebase/storage";
 
 const env = import.meta.env;
 
@@ -36,7 +35,6 @@ function makeDb() {
 }
 export const db = makeDb();
 export const functions = getFunctions(app, env.VITE_FUNCTIONS_REGION || "asia-southeast1");
-export const storage = getStorage(app);
 export const googleProvider = new GoogleAuthProvider();
 
 // EMULATOR MODE: when VITE_USE_EMULATOR=true in .env, connect to the local emulators
@@ -45,7 +43,6 @@ if (env.VITE_USE_EMULATOR === "true") {
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
   connectFunctionsEmulator(functions, "127.0.0.1", 5001);
-  connectStorageEmulator(storage, "127.0.0.1", 9199);
   console.info("%c[EMULATOR MODE] connected to local Firebase emulators", "color:#b57a12;font-weight:bold");
 }
 
@@ -53,6 +50,7 @@ if (env.VITE_USE_EMULATOR === "true") {
 const DEMO_OK = new Set(["demoViewer", "getAvailability", "queueBoard", "getSlots", "creatorDirectory", "myCreatorOffers", "collabMine", "collabList", "collabStatus", "swapMine", "swapDirectory"]);
 export async function call(name, data, { timeout } = {}) {
   if (DEMO_VIEW && !DEMO_OK.has(name)) throw new Error(DEMO_MSG);
+  if (BOT_CHECKED.has(name) && env.VITE_TURNSTILE_SITEKEY) { const cf = await turnstileToken(); if (cf) data = { ...(data || {}), cf }; }
   const fn = httpsCallable(functions, name, timeout ? { timeout } : undefined);
   try { const res = await fn(data); return res.data; }
   catch (e) {
@@ -66,4 +64,48 @@ export async function call(name, data, { timeout } = {}) {
     }
     throw e;
   }
+}
+
+
+// 🛡 Cloudflare Turnstile — an invisible "not a bot" check on the few actions bots abuse (orders, bookings, reports, signup codes).
+// Real customers see nothing. Off until VITE_TURNSTILE_SITEKEY is set in .env. A failed or slow check never blocks here — the server decides.
+const BOT_CHECKED = new Set(["placeOrder", "bookAppointment", "bookStay", "createReservation", "bookLaundryJob", "reportShop", "partnerInquiry", "inquirySend", "sendSignupOtp", "buyGiftCard"]);
+let tsReady = null, tsWidget = null;
+function loadTurnstile() {
+  if (tsReady) return tsReady;
+  tsReady = new Promise((resolve) => {
+    if (window.turnstile) return resolve(window.turnstile);
+    const sc = document.createElement("script"); sc.src = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"; sc.async = true; sc.defer = true;
+    sc.onload = () => resolve(window.turnstile || null); sc.onerror = () => resolve(null); document.head.appendChild(sc);
+    setTimeout(() => resolve(window.turnstile || null), 8000);
+  });
+  return tsReady;
+}
+async function turnstileToken() {
+  try {
+    const ts = await loadTurnstile(); if (!ts) return null;
+    let host = document.getElementById("ttTurnstile");
+    if (!host) { host = document.createElement("div"); host.id = "ttTurnstile"; host.style.cssText = "position:fixed;bottom:12px;left:50%;transform:translateX(-50%);z-index:99999"; document.body.appendChild(host); }
+    return await new Promise((resolve) => {
+      const done = (t) => { clearTimeout(timer); resolve(t || null); };
+      const timer = setTimeout(() => done(null), 9000);
+      if (tsWidget !== null) { try { ts.remove(tsWidget); } catch {} }
+      // "interaction-only": shows a checkbox ONLY when Cloudflare is unsure (rare for real people)
+      tsWidget = ts.render(host, { sitekey: env.VITE_TURNSTILE_SITEKEY, appearance: "interaction-only", callback: done, "error-callback": () => done(null), "timeout-callback": () => done(null) });
+    });
+  } catch { return null; }
+}
+
+// 🐞 send real browser errors to TapTayo (a few per page, duplicates and browser-extension noise skipped)
+if (typeof window !== "undefined" && !env.DEV) {
+  const sent = new Set(); let n = 0;
+  const send = (message, stack) => {
+    const m = String(message || "").slice(0, 300); if (!m || sent.has(m) || n >= 5) return;
+    if (/ResizeObserver loop|Script error|chrome-extension:|moz-extension:|Failed to fetch|NetworkError|Load failed|popup-closed|cancelled-popup/i.test(m + " " + (stack || ""))) return;
+    sent.add(m); n++;
+    setTimeout(() => { httpsCallable(functions, "logClientError")({ message: m, stack: String(stack || "").slice(0, 1500), url: location.pathname + location.search, page: location.pathname.split("/")[1] || "home" }).catch(() => {}); }, 0);
+  };
+  window.addEventListener("error", (e) => send(e.message, e.error?.stack));
+  // server "no" answers (sold out, too many tries, login needed…) are normal, not bugs — only report unexpected ones
+  window.addEventListener("unhandledrejection", (e) => { const c = String(e.reason?.code || ""); if ((c.startsWith("functions/") && c !== "functions/internal") || c === "offline" || c.startsWith("auth/")) return; send(e.reason?.message || e.reason, e.reason?.stack); });
 }

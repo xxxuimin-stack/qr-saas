@@ -101,7 +101,8 @@ export function renderBillingPage(root, ctx) {
   // how to pay (TapTayo's own GCash — edited by the admin, stored in config/payment)
   getDoc(doc(db, "config", "payment")).then((d) => {
     const P = d.data() || {};
-    root.querySelector("[data-how]").innerHTML = P.gcashNumber ? `<div class="pay-card">${P.qrUrl ? `<img src="${esc(P.qrUrl)}" alt="GCash QR"/>` : ""}<div><b>Send to GCash ${esc(P.gcashNumber)}</b><div class="small muted">${esc(P.gcashName || "")}${P.bankNote ? ` · or ${esc(P.bankNote)}` : ""}</div><div class="small muted">${P.contact ? `Questions: ${esc(P.contact)}` : ""}</div></div></div>` : `<p class="small muted">Payment details aren't set up yet — message TapTayo.</p>`;
+    // the QR alone is enough (GCash shows a masked name when they scan) — number and name are optional
+    root.querySelector("[data-how]").innerHTML = P.gcashNumber || P.qrUrl ? `<div class="pay-card">${P.qrUrl ? `<img src="${esc(P.qrUrl)}" alt="GCash QR"/>` : ""}<div><b>${P.gcashNumber ? `Send to GCash ${esc(P.gcashNumber)}` : "Scan with GCash (or any bank app via InstaPay)"}</b><div class="small muted">${[P.gcashName ? esc(P.gcashName) : "", P.qrUrl ? "Save the QR, then GCash → Pay QR → Upload from gallery" : "", P.bankNote ? `or ${esc(P.bankNote)}` : ""].filter(Boolean).join(" · ")}</div><div class="small muted">${P.contact ? `Questions: ${esc(P.contact)}` : ""}</div>${P.qrUrl ? `<a class="btn ghost sm" href="${esc(P.qrUrl)}" download="taptayo-gcash-qr.png" style="margin-top:6px">⬇ Save QR</a>` : ""}</div></div>` : `<p class="small muted">Payment details aren't set up yet — message TapTayo.</p>`;
   }).catch(() => (root.querySelector("[data-how]").innerHTML = ""));
 
   // total

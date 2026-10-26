@@ -3,822 +3,285 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>TapTayo — Your shop, one tap away</title>
-<meta name="description" content="QR ordering, booking and POS for Filipino small businesses. Customers scan a QR to order, book or reserve — no app. Free account, no card needed. Not a BIR-accredited POS.">
+<title>TapTayo — Your shop, one QR away</title>
+<meta name="description" content="Orders, bookings, GCash and loyalty for Filipino cafés, salons, spas, laundry shops and stays. Customers scan a QR — no app. Free account, no card needed. Not a BIR-accredited POS.">
 <meta name="theme-color" content="#C62828">
 <link rel="icon" href="/logo/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/src/fonts.css" />
 <style>
-body{margin:0;background:#FFFBF2}
-a{color:#141414}a:hover{color:#000}
-summary{cursor:pointer;list-style:none}
-summary::-webkit-details-marker{display:none}
-@keyframes tt-marquee{from{transform:translateX(0)}to{transform:translateX(-50%)}}
-@keyframes tt-pop{0%{transform:scale(.92);opacity:0}100%{transform:scale(1);opacity:1}}
-.tt-track{animation:tt-marquee 28s linear infinite}
-.tt-pop{animation:tt-pop .3s ease-out both}
-@media (max-width: 640px){.tt-sec{display:none}}
-@media (max-width: 400px){header{padding:14px 16px!important}header nav a{padding:8px 13px!important;font-size:14px!important}header nav a.tt-signup{box-shadow:2px 2px 0 #141414!important}header>a img{width:32px;height:32px}header>a span{font-size:21px!important}}
-@media (prefers-reduced-motion: reduce){.tt-track,.tt-pop{animation:none}}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:#fff;font-family:Poppins,system-ui,-apple-system,"Segoe UI",sans-serif;color:#111;-webkit-font-smoothing:antialiased}
+a{color:#B91C1C;font-weight:600;text-decoration:none}a:hover{text-decoration:underline}
+img{display:block;max-width:100%}
+.hidden{display:none !important}
+.wrap{max-width:1200px;margin:0 auto;padding:0 24px}
+.sec{padding:72px 0}.sec.gray{background:#F5F6F8}.sec.dark{background:#111;color:#fff}
+h2{font-size:clamp(28px,3.4vw,38px);letter-spacing:-.03em;line-height:1.1;margin:0 0 8px;font-weight:700}
+.lead{font-size:16.5px;color:#6B7280;margin:0 0 26px;line-height:1.55;max-width:680px}
+.dark .lead{color:#D1D5DB}
+.pill{display:inline-flex;align-items:center;height:30px;padding:0 12px;border-radius:999px;background:#FDECEC;color:#B91C1C;font-size:13px;font-weight:600}
+.btn{font:inherit;border:0;border-radius:999px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-weight:600;white-space:nowrap;cursor:pointer;text-decoration:none!important}
+.bp{height:52px;padding:0 24px;background:#C62828;color:#fff!important;font-size:16px}.bp:hover{background:#B71C1C}
+.bs{height:52px;padding:0 22px;background:#fff;color:#111!important;border:1px solid #E5E7EB;font-size:16px}
+.bsm{height:40px;padding:0 16px;font-size:14px}
+/* header */
+.top{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid #EEF0F2}
+.top .wrap{display:flex;align-items:center;gap:22px;height:66px}
+.brand{display:flex;align-items:center;gap:9px;color:#111!important;font-size:21px;font-weight:700;letter-spacing:-.03em;text-decoration:none!important}
+.nav{display:flex;gap:4px;align-items:center;flex:1}
+.nav a{color:#374151;font-weight:500;font-size:14.5px;padding:8px 10px;border-radius:10px}.nav a:hover{background:#F5F6F8;text-decoration:none}
+.right{display:flex;gap:8px;align-items:center}
+/* hero */
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);gap:56px;align-items:center;padding:56px 24px 64px}
+.hero h1{font-size:clamp(40px,5.6vw,66px);line-height:1.02;letter-spacing:-.04em;margin:18px 0 16px;font-weight:700}
+.hero h1 em{font-style:normal;color:#C62828}
+.hero p{font-size:18.5px;color:#4B5563;line-height:1.55;margin:0 0 26px;max-width:540px}
+.ctas{display:flex;gap:12px;flex-wrap:wrap}
+.checks{display:flex;gap:18px;flex-wrap:wrap;margin-top:22px;font-size:13.5px;color:#6B7280}.checks span{display:flex;gap:6px;align-items:center}
+.heroimgs{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:30px;max-width:540px}
+.heroimgs div{aspect-ratio:1;border-radius:16px;background:#EEF0F2 center/cover}
+/* login card (same as /login/) */
+.card{background:#fff;border:1px solid #E5E7EB;border-radius:20px;padding:26px 24px;display:flex;flex-direction:column;gap:18px;box-shadow:0 18px 50px rgba(17,17,17,.10)}
+.seg{display:grid;grid-template-columns:1fr 1fr;background:#EEF0F2;border-radius:12px;padding:3px;gap:3px}
+.seg button{height:40px;border:0;border-radius:9px;background:transparent;font:500 14px Poppins,sans-serif;color:#6B7280;cursor:pointer}
+.seg button[aria-selected="true"]{background:#fff;color:#111;font-weight:600;box-shadow:0 1px 3px rgba(17,17,17,.08)}
+.card h2{font-size:24px;margin:0}
+.sub{margin:4px 0 0;font-size:14.5px;color:#6B7280}
+form{display:flex;flex-direction:column;gap:14px}
+.f{display:flex;flex-direction:column;gap:6px}
+label{font-size:13px;font-weight:500;color:#374151}
+input{height:48px;padding:0 14px;border:1px solid #D1D5DB;border-radius:12px;background:#fff;font:inherit;font-size:16px;color:#111;width:100%}
+input:focus{outline:none;border-color:#C62828;box-shadow:0 0 0 3px #FDECEC}
+.pw{position:relative;display:flex}.pw input{padding-right:72px}
+#pwToggle{position:absolute;right:4px;top:4px;height:40px;padding:0 12px;border:0;border-radius:10px;background:transparent;font:600 13.5px Poppins,sans-serif;color:#374151;cursor:pointer}
+.primary{height:50px;border:0;border-radius:12px;background:#C62828;color:#fff;font:600 16px Poppins,sans-serif;cursor:pointer}.primary:hover{background:#B71C1C}
+.google{height:48px;border:1px solid #E5E7EB;border-radius:12px;background:#fff;font:500 15px Poppins,sans-serif;color:#111;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer}
+.or{display:flex;align-items:center;gap:10px;color:#9CA3AF;font-size:12.5px}.or::before,.or::after{content:"";flex:1;height:1px;background:#EEF0F2}
+.alert{padding:12px 14px;border-radius:12px;font-size:14px;line-height:1.45}.alert.error{background:#FEF2F2;color:#B42318}.alert.ok{background:#ECFDF3;color:#15803D}.alert.warn{background:#FFF7E6;color:#92400E}.alert a{color:inherit;text-decoration:underline}
+.note{margin:0;font-size:12.5px;line-height:1.5;color:#6B7280;text-align:center}
+button:disabled{opacity:.6;cursor:wait}
+.roles{display:grid;gap:8px}.roles button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:1.5px solid #E5E7EB;border-radius:12px;background:#fff;padding:10px 12px;font:500 13px Poppins,sans-serif;color:#6B7280;cursor:pointer}.roles button b{font-size:15px;color:#111}.roles button.on{border-color:#C62828;background:#FEF2F2}
+.adult{display:flex;gap:8px;align-items:center;font-size:14px;font-weight:500}.adult input{width:20px!important;height:20px!important;min-height:0;padding:0;flex:none}
+/* find near */
+.search{display:flex;flex-direction:row;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.search input{flex:1 1 280px;height:54px;border-radius:999px;padding:0 20px;font-size:16px}
+.cats{display:flex;gap:14px;overflow-x:auto;padding-bottom:8px;scrollbar-width:thin}
+.cat{flex:0 0 auto;width:156px;color:#111!important}.cat:hover{text-decoration:none}
+.cat span{display:block;width:156px;height:156px;border-radius:18px;background:#EEF0F2 center/cover}
+.cat b{display:block;margin-top:8px;font-size:14.5px;font-weight:600}
+/* demo grid */
+.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.dcard{border-radius:20px;overflow:hidden;background:#fff;border:1px solid #EEF0F2;color:#111!important;display:flex;flex-direction:column;transition:transform .15s,box-shadow .15s}
+.dcard:hover{text-decoration:none;transform:translateY(-3px);box-shadow:0 14px 30px rgba(17,17,17,.10)}
+.dcard .ph{height:200px;background:#EEF0F2 center/cover}
+.dcard div.t{padding:16px}.dcard b{font-size:17px}.dcard p{font-size:13.5px;color:#6B7280;margin:6px 0 12px}.dcard em{font-style:normal;color:#C62828;font-weight:600;font-size:14px}
+/* order travel */
+.travel{position:relative;border-radius:22px;overflow:hidden;min-height:380px;background:url(/demo/food/boodle-fight.jpg) center/cover;display:flex;align-items:center}
+.travel::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.7),rgba(0,0,0,.15))}
+.steps{position:relative;display:flex;gap:12px;flex-wrap:wrap;padding:32px}
+.step{background:#fff;color:#111;border-radius:14px;padding:12px 14px;width:160px}.step b{display:block;font-size:14px;margin-top:6px}.step small{font-size:12px;color:#6B7280}
+/* videos */
+.vtile{cursor:pointer;color:#111;text-align:left;background:none;border:0;padding:0;font:inherit}
+.vtile .ph{position:relative;aspect-ratio:16/10;border-radius:16px;background:#EEF0F2 center/cover}
+.vtile .ph i{position:absolute;left:10px;bottom:10px;background:rgba(0,0,0,.65);color:#fff;font-style:normal;font-size:12px;font-weight:600;padding:4px 9px;border-radius:999px;display:flex;gap:5px;align-items:center}
+.vtile b{display:block;margin-top:8px;font-size:14.5px;font-weight:600}
+.vbox{position:fixed;inset:0;z-index:50;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center;padding:16px}
+.vbox video{max-width:min(1000px,100%);max-height:88vh;border-radius:14px;background:#000}
+.vbox button{position:absolute;top:14px;right:16px;border:0;background:#fff;border-radius:999px;width:40px;height:40px;font-size:18px;cursor:pointer}
+/* features */
+.fcard{background:#fff;border:1px solid #EEF0F2;border-radius:18px;padding:22px}.fcard span{font-size:24px}.fcard b{display:block;font-size:16px;margin:10px 0 6px}.fcard p{margin:0;font-size:14px;color:#6B7280;line-height:1.5}
+/* freelancers */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.lcard{border-radius:20px;padding:26px;border:1px solid #E5E7EB;background:#fff;display:flex;flex-direction:column;gap:14px}
+.lcard.g{background:#F0FDF4;border-color:#BBF7D0}
+.lcard h3{margin:0;font-size:20px}
+.lcard ul{list-style:none;margin:0;padding:0;display:grid;gap:9px;font-size:15px}.lcard li{display:flex;gap:8px;align-items:flex-start}.lcard li svg{margin-top:4px;flex:none}
+.bg{height:48px;padding:0 20px;background:#16A34A;color:#fff!important;font-size:15px}
+/* setup */
+.setup{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.num{display:flex;gap:14px;margin-top:18px}.num i{flex:none;width:30px;height:30px;border-radius:50%;background:#C62828;color:#fff;font-style:normal;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:14px}.num b{display:block}.num small{color:#6B7280;font-size:13.5px}
+.collage{display:grid;grid-template-columns:1fr 1fr;gap:12px}.collage div{aspect-ratio:1.15;border-radius:16px;background:#EEF0F2 center/cover}
+/* soon */
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.scard{background:#fff;border:1px solid #EEF0F2;border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:8px}
+.scard .h{display:flex;justify-content:space-between;align-items:center}.scard .h span{font-size:28px}
+.eta{font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 9px;background:#F3F4F6;color:#374151}.eta.Next{background:#FDECEC;color:#B91C1C}.eta.Soon{background:#FFF7E6;color:#92400E}
+.scard b{font-size:16px;line-height:1.25}.scard p{margin:0;font-size:13.5px;color:#6B7280;line-height:1.5}
+/* pricing */
+.plans{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.plan{background:#fff;border:1px solid #E5E7EB;border-radius:20px;padding:22px;display:flex;flex-direction:column;gap:10px}
+.plan.hot{border:2px solid #C62828}
+.plan .p{font-size:34px;font-weight:700;letter-spacing:-.03em}.plan .p small{font-size:14px;color:#6B7280;font-weight:500}
+.plan ul{list-style:none;padding:0;margin:4px 0 8px;display:grid;gap:7px;font-size:14px;color:#374151;flex:1}.plan li{display:flex;gap:7px}.plan li svg{margin-top:3px;flex:none}
+/* faq */
+details{border:1px solid #E5E7EB;border-radius:16px;padding:16px 20px;background:#fff}
+summary{cursor:pointer;font-weight:600;font-size:16px;list-style:none}summary::-webkit-details-marker{display:none}
+details p{margin:10px 0 0;color:#4B5563;line-height:1.6;font-size:15px}
+/* cta */
+.cta{border-radius:24px;padding:56px 48px;background:linear-gradient(90deg,rgba(150,20,20,.92),rgba(198,40,40,.7)),url(/demo/food/inihaw-meal.jpg) center/cover;color:#fff}
+.cta h2{font-size:clamp(30px,4vw,44px)}
+footer{border-top:1px solid #EEF0F2;padding:26px 0;font-size:13px;color:#6B7280}
+footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}footer nav{display:flex;gap:14px;flex-wrap:wrap}footer a{color:#374151;font-weight:500}
+button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #F4A9A9;outline-offset:2px}
+@media (max-width:1020px){.nav{display:none}.grid4,.plans{grid-template-columns:1fr 1fr}}
+@media (max-width:860px){.hero{grid-template-columns:1fr;gap:28px;padding-top:32px}.grid3{grid-template-columns:1fr 1fr}.two,.setup{grid-template-columns:1fr}.sec{padding:52px 0}.cta{padding:36px 24px}}
+@media (max-width:560px){.wrap{padding:0 16px}.hero{padding:24px 16px 40px}.grid3,.grid4,.plans{grid-template-columns:1fr}.right .hide-s{display:none}.heroimgs{grid-template-columns:repeat(4,1fr);gap:6px}.cat,.cat span{width:128px}.cat span{height:128px}.step{width:calc(50% - 6px)}.steps{padding:18px}.brand span.t{font-size:19px}}
+@media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}.dcard{transition:none}}
 </style>
-  <link rel="stylesheet" href="/src/fonts.css" />
 </head>
-<body>
-<div style="font-family: Poppins, system-ui, sans-serif; color: #141414; background: #FFFBF2; width: 100%; overflow-x: hidden">
+<body data-auth-embed="home">
+<header class="top"><div class="wrap">
+<a class="brand" href="/" aria-label="TapTayo home"><img src="/logo/taptayo-mark.svg" width="32" height="32" alt=""><span class="t">taptayo</span></a>
+<nav class="nav" aria-label="Main"><a href="/explore/">Explore</a><a href="#demo">Live demo</a><a href="#features">Features</a><a href="#freelancers">Freelancers</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a></nav>
+<div class="right"><span id="langSlot"></span><a class="btn bs bsm hide-s" href="#login" data-go="login">Log in</a><a class="btn bp bsm" href="#login" data-go="signup">Sign up</a></div>
+</div></header>
 
-<div style="background: #D4FF3A; border-bottom: 3px solid #141414; overflow: hidden; white-space: nowrap">
-<div class="tt-track" style="display: inline-flex; gap: 40px; padding: 12px 0; font-size: 15px; font-weight: 800; letter-spacing: 0.5px">
-<span>14 DAYS FREE</span><span>✦</span><span>NO CARD NEEDED</span><span>✦</span><span>NO APP TO DOWNLOAD</span><span>✦</span><span>SET UP IN ABOUT 10 MINUTES</span><span>✦</span><span>GCASH + CASH</span><span>✦</span>
-<span>14 DAYS FREE</span><span>✦</span><span>NO CARD NEEDED</span><span>✦</span><span>NO APP TO DOWNLOAD</span><span>✦</span><span>SET UP IN ABOUT 10 MINUTES</span><span>✦</span><span>GCASH + CASH</span><span>✦</span>
-</div>
+<main>
+<section class="wrap hero" id="top">
+<div>
+<span class="pill">Made for Filipino small businesses</span>
+<h1>Your shop, one <em>QR</em> away.</h1>
+<p>Orders, bookings, GCash and loyalty for cafés, salons, spas, laundry and stays. <b style="color:#111">No commission per order</b> — set up in about 10 minutes.</p>
+<div class="ctas"><a class="btn bp" href="#demo"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>Try the live demo</a><a class="btn bs" href="#login" data-go="signup">Start free</a></div>
+<div class="checks"><span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>No card needed</span><span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>GCash &amp; Maya</span><span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Works on any phone</span><span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Free plan, no time limit</span></div>
+<div class="heroimgs" aria-hidden="true"><div style="background-image:url(/demo/food/sisig.jpg)"></div><div style="background-image:url(/demo/salon/nail-art.jpg)"></div><div style="background-image:url(/demo/laundry/folded-shirts.jpg)"></div><div style="background-image:url(/demo/stay/pool-palms.jpg)"></div></div>
 </div>
 
-<header style="max-width: 1240px; margin: 0 auto; padding: 18px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px">
-<a href="#top" aria-label="TapTayo home" style="display: flex; align-items: center; gap: 10px; text-decoration: none">
-<img src="/logo/taptayo-mark.svg" width="38" height="38" alt="">
-<span style="font-size: 25px; font-weight: 800; letter-spacing: -1px">taptayo</span>
-</a>
-<nav aria-label="Main" style="display: flex; flex-wrap: wrap; align-items: center; gap: 4px">
-<a class="tt-sec" href="#tour" style="padding: 12px; font-size: 15px; font-weight: 700; text-decoration: none">Watch tour</a>
-<a class="tt-sec" href="#editions" style="padding: 12px; font-size: 15px; font-weight: 700; text-decoration: none">Editions</a>
-<a class="tt-sec" href="#pricing" style="padding: 12px; font-size: 15px; font-weight: 700; text-decoration: none">Pricing</a>
-<a class="tt-sec" href="#faq" style="padding: 12px; font-size: 15px; font-weight: 700; text-decoration: none">FAQ</a>
-<a href="/collab/" style="padding: 8px 12px; margin-left: 4px; border: 2.5px solid #141414; border-radius: 999px; background: #D9F99D; font-size: 15px; font-weight: 800; text-decoration: none">🎥 Collab · find creators</a>
-<a href="/login/" style="margin-left: 6px; padding: 10px 18px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; font-size: 15px; font-weight: 700; text-decoration: none">Log in</a>
-<a class="tt-signup" href="/login/?signup=1" style="padding: 10px 18px; border: 2.5px solid #141414; border-radius: 999px; background: #FF5A36; box-shadow: 3px 3px 0 #141414; font-size: 15px; font-weight: 800; text-decoration: none; color: #FFFFFF">Sign up</a>
-</nav>
-</header>
-
-<section id="top" style="max-width: 1240px; margin: 0 auto; padding: 40px 24px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 24px">
-<span style="display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; box-shadow: 3px 3px 0 #141414; font-size: 16px; font-weight: 700; transform: rotate(-2deg)"><span style="font-size: 12px; font-weight: 800; letter-spacing: 0.5px">PH</span>Made for Filipino small businesses</span>
-<h1 style="margin: 0; max-width: 1000px; font-size: clamp(48px, 8.5vw, 112px); font-weight: 800; letter-spacing: -0.055em; line-height: 0.92">Your shop, <span style="display: inline-block; padding: 0 18px 8px; background: #FF5A36; border: 3.5px solid #141414; border-radius: 26px; transform: rotate(-2deg); color: #FFFFFF">one tap</span> away.</h1>
-<p style="margin: 0; max-width: 640px; font-size: clamp(18px, 2vw, 21px); line-height: 1.5; color: #44403C">Customers scan a QR to order, book or reserve — no app. You run the counter, kitchen, staff and sales from your phone.</p>
-<div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 14px">
-<a href="/login/?signup=1" style="padding: 20px 32px; border: 3px solid #141414; border-radius: 999px; background: #FF5A36; box-shadow: 5px 5px 0 #141414; font-size: 19px; font-weight: 800; text-decoration: none; color: #FFFFFF">Start free</a>
-<a href="#tour" style="padding: 20px 28px; border: 3px solid #141414; border-radius: 999px; background: #FFFFFF; font-size: 19px; font-weight: 800; text-decoration: none; display: flex; align-items: center; gap: 10px"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" fill="#141414"></path></svg>Watch the tour</a>
+<div class="card" id="login">
+<div class="seg" role="tablist" aria-label="Account">
+<button type="button" role="tab" id="tabLogin" aria-selected="true">Log in</button>
+<button type="button" role="tab" id="tabSignup" aria-selected="false">New? Sign up</button>
 </div>
-<span style="font-size: 15px; font-weight: 600; color: #57534E">No card needed · Free plan forever · <a href="#demo" style="color: #141414; font-weight: 800">or try a live demo shop →</a></span>
-<div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; padding-top: 8px">
-<span style="font-size: 14px; font-weight: 700; color: #57534E; padding: 10px 4px">Made for:</span>
-<a href="#cafe" style="padding: 10px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #FFE3D3; font-size: 15px; font-weight: 800; text-decoration: none">Food business</a>
-<a href="#laundry" style="padding: 10px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #D7E9FF; font-size: 15px; font-weight: 800; text-decoration: none">Laundry Shop</a>
-<a href="#salon" style="padding: 10px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #FFD6E5; font-size: 15px; font-weight: 800; text-decoration: none">Salon &amp; Aesthetic</a>
-<a href="#spa" style="padding: 10px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #EBD5F0; font-size: 15px; font-weight: 800; text-decoration: none">Massage &amp; Spa</a>
-<a href="#stay" style="padding: 10px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #CDF3EE; font-size: 15px; font-weight: 800; text-decoration: none">Stay &amp; Airbnb</a>
+<div><h2 id="authTitle">Welcome back!</h2><p class="sub" id="authSub">Let's check today's orders.</p></div>
+<form id="authForm" novalidate>
+<div id="nameField" class="hidden" style="display:contents">
+<div class="f"><label>I'm a…</label><div class="roles" id="roles" role="radiogroup" aria-label="Account type">
+<button type="button" data-role="client" role="radio" aria-checked="false"><b>🙋 Client</b><span>Book shops &amp; hire creators</span></button>
+<button type="button" data-role="creator" role="radio" aria-checked="false"><b>🎨 Freelancer / Creator</b><span>Get booked &amp; paid</span></button>
+<button type="button" data-role="business" role="radio" aria-checked="true" class="on"><b>🏪 Business owner</b><span>Run my shop, find creators</span></button>
+</div></div>
+<div class="f hidden" id="adultField"><label class="adult"><input type="checkbox" id="a-adult"/> I'm 18 or older (required for creators)</label></div>
+<div class="f"><label for="a-shop" id="shopLabel">Shop name</label><input id="a-shop" name="shop" type="text" maxlength="60" placeholder="Kapehan sa Kanto" autocomplete="organization"></div>
+</div>
+<div class="f"><label for="email">Email</label><input id="email" name="email" type="email" required placeholder="you@yourshop.com" autocomplete="email"></div>
+<div class="f">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:12px"><label for="password">Password</label><span id="forgot" style="display:contents"><a href="#" id="resetLink" style="font-size:13px">Forgot?</a></span></div>
+<div class="pw"><input id="password" name="password" type="password" required minlength="6" placeholder="Your password" autocomplete="current-password"><button type="button" id="pwToggle" aria-label="Show password"><span id="pwToggleText">Show</span></button></div>
+</div>
+<button type="submit" id="submitBtn" class="primary"><span id="ctaText">Log in</span></button>
+<div id="msg" role="alert" aria-live="assertive"></div>
+</form>
+<div class="or">or</div>
+<button type="button" id="googleBtn" class="google"><svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>Continue with Google</button>
+<div id="signupNote" class="hidden" style="display:contents"><p class="note">No card needed. By signing up, you agree to the <a href="/terms/">Terms</a> and <a href="/privacy/">Privacy Policy</a>.</p></div>
 </div>
 </section>
 
-<section id="tour" aria-label="How TapTayo works — tour" style="max-width: 1100px; margin: 0 auto; padding: 24px 24px 96px">
-<div style="border: 3.5px solid #141414; border-radius: 32px; background: #141414; box-shadow: 12px 12px 0 #FF5A36; overflow: hidden">
-<div style="display: flex; align-items: center; gap: 8px; padding: 14px 18px">
-<span style="width: 12px; height: 12px; border-radius: 50%; background: #FF5A36; color: #FFFFFF"></span>
-<span style="width: 12px; height: 12px; border-radius: 50%; background: #FFB627"></span>
-<span style="width: 12px; height: 12px; border-radius: 50%; background: #D4FF3A"></span>
-<span style="margin-left: 10px; font-size: 14px; font-weight: 700; color: #FFFBF2">How TapTayo works · 5 steps</span>
-<span style="margin-left: auto; padding: 4px 10px; border-radius: 999px; background: #FF5A36; font-size: 12px; font-weight: 800; color: #FFFFFF"><span class="tour-num">1</span> / 5</span>
-</div>
-<div style="display: flex; gap: 6px; padding: 0 18px 14px">
-<span id="tour-segs" style="display:contents"></span>
-</div>
-<div style="background-color: #FFFBF2; background-image: linear-gradient(#EFE6D6 1px, transparent 1px), linear-gradient(90deg, #EFE6D6 1px, transparent 1px); background-size: 36px 36px; min-height: 460px; padding: clamp(20px, 4vw, 48px); box-sizing: border-box; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: clamp(24px, 5vw, 64px)">
-<div style="flex: 1 1 300px; max-width: 400px; min-width: 0; display: flex; flex-direction: column; gap: 14px" aria-live="polite">
-<span style="align-self: flex-start; padding: 8px 14px; border: 2.5px solid #141414; border-radius: 999px; background: #D4FF3A; font-size: 14px; font-weight: 800" class="tour-tag">Step <span class="tour-num">1</span></span>
-<span style="font-size: clamp(30px, 4vw, 46px); font-weight: 800; letter-spacing: -0.04em; line-height: 1"><span class="tour-title"></span></span>
-<span style="font-size: 17px; line-height: 1.5; color: #44403C"><span class="tour-text"></span></span>
-</div>
-<div style="flex: 0 1 380px; min-width: 0; min-height: 360px; display: flex; align-items: center; justify-content: center">
+<section class="sec gray" id="near"><div class="wrap">
+<span class="pill" style="background:#E0F2FE;color:#0369A1">For clients</span>
+<h2 style="margin-top:12px">Find services near you</h2>
+<p class="lead">Nails, massage, laundry pickup, staycations, photographers — book in a few taps, no app. Going somewhere? Search the place and book ahead.</p>
+<form class="search" action="/explore/" method="get" role="search"><label for="nearQ" class="hidden">What do you need?</label><input id="nearQ" name="q" placeholder="e.g. gel nails, home massage, laundry pickup" autocomplete="off"><button class="btn bp" type="submit">🔎 Search near me</button></form>
+<div class="cats"><a class="cat" href="/explore/?niche=nails"><span style="background-image:url(/demo/salon/nail-art.jpg)"></span><b>Nails</b></a><a class="cat" href="/explore/?niche=spa"><span style="background-image:url(/demo/spa/hot-stone.jpg)"></span><b>Spa & massage</b></a><a class="cat" href="/explore/?niche=hair"><span style="background-image:url(/demo/salon/styling.jpg)"></span><b>Hair</b></a><a class="cat" href="/explore/?niche=lashes"><span style="background-image:url(/demo/salon/hair-care.jpg)"></span><b>Lashes & brows</b></a><a class="cat" href="/explore/?niche=laundry"><span style="background-image:url(/demo/laundry/folded-shirts.jpg)"></span><b>Laundry</b></a><a class="cat" href="/explore/?niche=stay"><span style="background-image:url(/demo/stay/pool-palms.jpg)"></span><b>Staycation</b></a><a class="cat" href="/explore/?niche=food"><span style="background-image:url(/demo/food/sisig.jpg)"></span><b>Food</b></a><a class="cat" href="/explore/?niche=photo"><span style="background-image:url(/demo/studio/camera.jpg)"></span><b>Photography</b></a></div>
+</div></section>
 
-<div class="tour-scene" data-i="0">
-<div class="tt-pop" style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap; justify-content: center">
-<div style="width: 170px; padding: 18px; border: 3px solid #141414; border-radius: 20px; background: #FFFFFF; box-shadow: 6px 6px 0 #141414; display: flex; flex-direction: column; align-items: center; gap: 10px; transform: rotate(-4deg)">
-<span style="font-size: 13px; font-weight: 800">TABLE 4</span>
-<svg width="110" height="110" viewBox="0 0 21 21" aria-hidden="true"><rect width="21" height="21" fill="#FFFFFF"></rect><g fill="#141414"><path d="M0 0h7v7H0zM14 0h7v7h-7zM0 14h7v7H0z"></path></g><g fill="#FFFFFF"><path d="M1 1h5v5H1zM15 1h5v5h-5zM1 15h5v5H1z"></path></g><g fill="#141414"><path d="M2 2h3v3H2zM16 2h3v3h-3zM2 16h3v3H2zM9 1h1v2H9zM11 2h2v1h-2zM8 4h2v2H8zM11 5h1v3h-1zM9 8h1v1H9zM1 9h2v1H1zM4 8h1v3H4zM6 9h2v1H6zM13 9h2v2h-2zM16 8h1v1h-1zM18 9h2v2h-2zM9 11h3v1H9zM15 12h1v2h-1zM8 13h1v3H8zM10 14h2v1h-2zM12 16h2v2h-2zM17 14h2v1h-2zM9 18h2v2H9zM15 17h1v3h-1zM18 17h2v3h-2z"></path></g></svg>
-<span style="font-size: 12px; font-weight: 700; color: #57534E">Scan to order</span>
-</div>
-<div style="width: 150px; height: 290px; border: 7px solid #141414; border-radius: 30px; background: #3F3A36; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center">
-<svg width="100" height="100" viewBox="0 0 120 120" aria-hidden="true"><path d="M20 44 V30 Q20 20 30 20 H44 M76 20 H90 Q100 20 100 30 V44 M100 76 V90 Q100 100 90 100 H76 M44 100 H30 Q20 100 20 90 V76" fill="none" stroke="#D4FF3A" stroke-width="6" stroke-linecap="round"></path></svg>
-<span style="position: absolute; bottom: 14px; left: 10px; right: 10px; padding: 6px; border-radius: 999px; background: #FFFFFF; font-size: 11px; font-weight: 800; text-align: center">Opening menu…</span>
-</div>
-</div>
-</div>
+<section class="sec" id="demo"><div class="wrap">
+<h2>One app for your kind of business</h2>
+<p class="lead">Pick yours — every edition comes with its own live demo shop. Tap around like a real customer.</p>
+<div class="grid3"><a class="dcard" href="/m/taptayo-cafe"><div class="ph" style="background-image:url(/demo/food/sisig.jpg)"></div><div class="t"><b>Café & Restaurant</b><p>Menu with photos, table QR, kitchen, delivery</p><em>Try this demo →</em></div></a><a class="dcard" href="/m/taptayo-salon"><div class="ph" style="background-image:url(/demo/salon/nail-art.jpg)"></div><div class="t"><b>Salon & Aesthetic</b><p>Bookings, stylists, home service, loyalty</p><em>Try this demo →</em></div></a><a class="dcard" href="/m/taptayo-spa"><div class="ph" style="background-image:url(/demo/spa/back-massage.jpg)"></div><div class="t"><b>Massage & Spa</b><p>Rooms, therapists, couple bookings, home service</p><em>Try this demo →</em></div></a><a class="dcard" href="/m/taptayo-laundry"><div class="ph" style="background-image:url(/demo/laundry/laundromat.jpg)"></div><div class="t"><b>Laundry Shop</b><p>Kg pricing, claim stubs, rider pickups</p><em>Try this demo →</em></div></a><a class="dcard" href="/m/taptayo-airbnb"><div class="ph" style="background-image:url(/demo/stay/pool-palms.jpg)"></div><div class="t"><b>Stay & Resort</b><p>Rooms, dates, check-in, cleaner app</p><em>Try this demo →</em></div></a><a class="dcard" href="/m/taptayo-studio"><div class="ph" style="background-image:url(/demo/studio/camera.jpg)"></div><div class="t"><b>Photographer & Creator</b><p>Packages, downpayment, raw in 3 days</p><em>Try this demo →</em></div></a></div>
+</div></section>
 
-<div class="tour-scene" data-i="1">
-<div class="tt-pop" style="width: 250px; height: 460px; border: 8px solid #141414; border-radius: 38px; background: #FFFFFF; box-shadow: 10px 10px 0 #FF5A36; overflow: hidden; display: flex; transform: rotate(3deg)"><img src="/previews/cafe-0.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
+<section class="sec dark"><div class="wrap">
+<h2>See one order travel through your shop</h2>
+<p class="lead">From the customer's phone to the kitchen, the rider and your sales — live.</p>
+<div class="travel"><div class="steps"><div class="step">📱<b>Customer</b><small>Orders from the table QR</small></div><div class="step">🔔<b>Counter</b><small>Rings · accepts in a tap</small></div><div class="step">🍳<b>Kitchen</b><small>Cooks the ticket</small></div><div class="step">🛵<b>Dispatch</b><small>Rider gets the map pin</small></div><div class="step">📈<b>Owner</b><small>Sales update live</small></div></div></div>
+</div></section>
 
-<div class="tour-scene" data-i="2">
-<div class="tt-pop" style="width: 250px; height: 460px; border: 8px solid #141414; border-radius: 38px; background: #FFFFFF; box-shadow: 10px 10px 0 #C9B8FF; overflow: hidden; display: flex; transform: rotate(-3deg)"><img src="/previews/cafe-1.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
+<section class="sec" id="features"><div class="wrap">
+<h2>Watch the features</h2>
+<p class="lead">Short videos with voice-over. Tap one to play.</p>
+<div class="grid3"><button type="button" class="vtile" data-vid="overview"><div class="ph" style="background-image:url(/videos/overview.jpg),url(/demo/cafe/busy.jpg)"><i><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> Play</i></div><b>All of TapTayo in 1 minute</b></button><button type="button" class="vtile" data-vid="cafe"><div class="ph" style="background-image:url(/videos/cafe.jpg),url(/demo/drink/latte-pour.jpg)"><i><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> Play</i></div><b>Order → counter → kitchen</b></button><button type="button" class="vtile" data-vid="salon"><div class="ph" style="background-image:url(/videos/salon.jpg),url(/demo/salon/styling.jpg)"><i><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> Play</i></div><b>Salon booking & home service</b></button><button type="button" class="vtile" data-vid="spa"><div class="ph" style="background-image:url(/videos/spa.jpg),url(/demo/spa/candles.jpg)"><i><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> Play</i></div><b>Spa rooms & safe home service</b></button><button type="button" class="vtile" data-vid="laundry"><div class="ph" style="background-image:url(/videos/laundry.jpg),url(/demo/laundry/folded-shirts.jpg)"><i><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> Play</i></div><b>Laundry claim stub & tracker</b></button><button type="button" class="vtile" data-vid="stay"><div class="ph" style="background-image:url(/videos/stay.jpg),url(/demo/stay/hotel-room.jpg)"><i><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg> Play</i></div><b>Stay booking & check-in</b></button></div>
+<h2 style="margin-top:56px">Everything a small shop needs</h2>
+<p class="lead">In every edition.</p>
+<div class="grid3"><div class="fcard"><span>💸</span><b>One-tap GCash</b><p>Clients tap “I've sent”, your counter checks the reference. Cash and bank too.</p></div><div class="fcard"><span>⭐</span><b>Loyalty & promos</b><p>Stamps, vouchers, merienda promos, gift cards and memberships.</p></div><div class="fcard"><span>🔔</span><b>Kitchen & dispatch</b><p>Orders ring, cooks see tickets, riders get the address and map pin.</p></div><div class="fcard"><span>🏠</span><b>Home service + maps</b><p>Client's pin, valid ID, “on the way” and HELP button for your staff.</p></div><div class="fcard"><span>🧾</span><b>Cash count & remit</b><p>Blind cash count, shifts, staff self-remittance — no more kupit.</p></div><div class="fcard"><span>👥</span><b>Staff apps</b><p>Counter, kitchen, rider, stylist, cleaner — each with their own PIN.</p></div></div>
+</div></section>
 
-<div class="tour-scene" data-i="3">
-<div class="tt-pop" style="width: 250px; height: 460px; border: 8px solid #141414; border-radius: 38px; background: #FFFFFF; box-shadow: 10px 10px 0 #FFB627; overflow: hidden; display: flex; transform: rotate(3deg)"><img src="/previews/cafe-2.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
+<section class="sec gray" id="freelancers"><div class="wrap">
+<span class="pill" style="background:#DCFCE7;color:#15803D">Freelancers · New</span>
+<h2 style="margin-top:12px">Extra hands when you're busy. Extra jobs when you're free.</h2>
+<p class="lead">Nail techs, lash artists, stylists, therapists and makeup artists join shops near them as freelancers. The shop pays the freelancer — TapTayo never holds the money.</p>
+<div class="two">
+<div class="lcard g"><h3>🧑‍🎨 For freelancers</h3><ul><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>One “Available” switch for all your shops</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>See the barangay, distance and what you earn before you accept</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>One calendar — never double-booked</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Portfolio (10+ photos) + ID / training badges</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Rate the shops (★ and “pays on time”)</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Download your earnings anytime</span></li></ul><a class="btn bg" href="/pro/" style="align-self:flex-start">Work as a freelancer</a></div>
+<div class="lcard"><h3>💇 For salons &amp; spas</h3><ul><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Hire nail, lash, hair, massage & makeup freelancers near you</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Set your cut per service — ₱200 per lash set or 10% per hair job</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Offers one at a time or first-to-accept, nearest first</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Live status: on the way · with a client until 3:30</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Service changes need the client's ✓ and your approval</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>After photo + “Is this what you got?” on every job</span></li></ul><a class="btn bp" href="#login" data-go="signup" style="align-self:flex-start;height:48px;font-size:15px">Hire freelancers</a></div>
 </div>
+<p style="margin:16px 0 0;font-size:13.5px;color:#6B7280">No-shows get strikes (2 = paused 7 days, 3 = removed) · clients' numbers stay hidden · exact address only 3 hours before the job.</p>
+</div></section>
 
-<div class="tour-scene" data-i="4">
-<div class="tt-pop" style="width: 250px; height: 460px; border: 8px solid #141414; border-radius: 38px; background: #FFFFFF; box-shadow: 10px 10px 0 #D4FF3A; overflow: hidden; display: flex; transform: rotate(-3deg)"><img src="/previews/tour-sales.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-</div>
-</div>
-<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 14px 18px">
-<button type="button" id="tour-toggle" aria-label="Play tour" style="width: 48px; height: 48px; border: 0; border-radius: 50%; background: #FF5A36; display: flex; align-items: center; justify-content: center; cursor: pointer; color: #FFFFFF">
-<span class="ic-pause" style="display:none"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4h4v16H6zM14 4h4v16h-4z" fill="#141414"></path></svg></span>
-<span class="ic-play" style="display:flex"><svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4l13 8-13 8z" fill="#141414"></path></svg></span>
-</button>
-<div role="group" aria-label="Tour steps" style="display: flex; flex-wrap: wrap; gap: 6px">
-<span id="tour-chapters" style="display:contents"></span>
-</div>
-</div>
-</div>
-</section>
+<section class="sec"><div class="wrap setup">
+<div><h2>Set up in 10 minutes — or we do it for you</h2>
+<div class="num"><i>1</i><div><b>Pick your business</b><small>Café, salon, spa, laundry, stay or freelancer</small></div></div>
+<div class="num"><i>2</i><div><b>Add your menu or services</b><small>Copy the sample, or send us a photo of yours and we'll encode it</small></div></div>
+<div class="num"><i>3</i><div><b>Print your QR</b><small>Table tents and posters ready to print</small></div></div>
+<div class="ctas" style="margin-top:26px"><a class="btn bp" href="#login" data-go="signup">Start free</a><a class="btn bs" href="/help/">💬 Ask us anything</a></div></div>
+<div class="collage" aria-hidden="true"><div style="background-image:url(/demo/cafe/counter.jpg)"></div><div style="background-image:url(/demo/salon/interior-pink.jpg)"></div><div style="background-image:url(/demo/laundry/basket-woman.jpg)"></div><div style="background-image:url(/demo/stay/villa-deck.jpg)"></div></div>
+</div></section>
 
-<div id="editions"></div>
+<section class="sec gray" id="soon"><div class="wrap">
+<span class="pill" style="background:#FFF7E6;color:#92400E">Coming soon</span>
+<h2 style="margin-top:12px">What we're building next</h2>
+<p class="lead">Shop owners vote in their dashboard — the most-wanted gets built first.</p>
+<div class="grid3" id="soonList"></div>
+</div></section>
 
-<section id="videos" aria-labelledby="videos-h" style="max-width: 1100px; margin: 0 auto; padding: 0 24px 96px">
-<div style="display: flex; flex-direction: column; gap: 12px; text-align: center; align-items: center; margin-bottom: 28px">
-<h2 id="videos-h" style="margin: 0; font-size: clamp(34px, 5vw, 56px); font-weight: 800; letter-spacing: -0.045em">See it in 30 seconds</h2>
-<p style="margin: 0; max-width: 620px; font-size: 18px; color: #44403C">With voice-over. Pick your business and see the features owners love most: anti-kupit cash count, safe home service, staff self-remittance, anti-bintang laundry photos, Airbnb security deposits and hour packages.</p>
-</div>
-<div role="group" aria-label="Business type" style="display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 22px"><button type="button" data-vid="overview" aria-pressed="true" style="padding: 10px 18px; border: 2.5px solid #141414; border-radius: 999px; background: #141414; color: #FFFFFF; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer">⭐ All in 1 min</button><button type="button" data-vid="cafe" aria-pressed="false" style="padding: 10px 18px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; color: #141414; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer">☕ Café</button><button type="button" data-vid="salon" aria-pressed="false" style="padding: 10px 18px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; color: #141414; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer">💇 Salon</button><button type="button" data-vid="spa" aria-pressed="false" style="padding: 10px 18px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; color: #141414; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer">💆 Spa</button><button type="button" data-vid="freelance" aria-pressed="false" style="padding: 10px 18px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; color: #141414; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer">🎨 Freelancer</button><button type="button" data-vid="creator" aria-pressed="false" style="padding: 10px 18px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; color: #141414; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer">🎥 Creator</button><button type="button" data-vid="collab" aria-pressed="false" style="padding: 10px 18px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; color: #141414; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer">🤝 Collab for shops</button><button type="button" data-vid="laundry" aria-pressed="false" style="padding: 10px 18px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; color: #141414; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer">🧺 Laundry</button><button type="button" data-vid="stay" aria-pressed="false" style="padding: 10px 18px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; color: #141414; font-family: inherit; font-size: 15px; font-weight: 800; cursor: pointer">🏡 Stay</button></div>
-<div style="border: 3.5px solid #141414; border-radius: 28px; overflow: hidden; background: #141414; box-shadow: 10px 10px 0 #7B2D8E; margin: 0 auto" data-vidframe>
-<video data-video src="/videos/overview.mp4" poster="/videos/overview.jpg" controls playsinline preload="none" style="display: block; width: 100%; aspect-ratio: 16 / 9; background: #141414"></video>
-</div>
-<script>
-(function () {
-  var colors = { overview: '#7B2D8E', cafe: '#F05A1A', salon: '#FF3D7F', spa: '#7B2D8E', freelance: '#16A34A', creator: '#16A34A', collab: '#16A34A', laundry: '#1E8BFF', stay: '#0D9488' };
-  var v = document.querySelector('[data-video]'), fr = document.querySelector('[data-vidframe]');
-  // phones get the vertical (9:16) cut
-  var tall = window.matchMedia('(max-width: 640px)').matches, sfx = tall ? '-v' : '';
-  if (tall) { v.style.aspectRatio = '9 / 16'; fr.style.maxWidth = '420px'; v.poster = '/videos/overview-v.jpg'; v.src = '/videos/overview-v.mp4'; }
-  document.querySelectorAll('[data-vid]').forEach(function (b) {
-    b.addEventListener('click', function () {
-      var k = b.getAttribute('data-vid');
-      document.querySelectorAll('[data-vid]').forEach(function (x) { var on = x === b; x.setAttribute('aria-pressed', on); x.style.background = on ? '#141414' : '#FFFFFF'; x.style.color = on ? '#FFFFFF' : '#141414'; });
-      v.poster = '/videos/' + k + sfx + '.jpg'; v.src = '/videos/' + k + sfx + '.mp4'; fr.style.boxShadow = '10px 10px 0 ' + colors[k];
-      var pr = v.play(); if (pr && pr.catch) pr.catch(function () {});
-    });
-  });
-})();
-</script>
-</section>
+<section class="sec" id="pricing"><div class="wrap">
+<h2 style="text-align:center">Simple monthly price. No commission.</h2>
+<p class="lead" style="text-align:center;margin-left:auto;margin-right:auto">Start on a free account, then pick a plan when you need more. Every order is yours — we never take a cut.</p>
+<div class="plans"><div class="plan"><b>Free</b><div class="p">₱0 <small>forever</small></div><ul><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Small use, no time limit</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Café: menu + counter</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Salon: 2 bookings a day</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Laundry: 15 jobs a day</span></li></ul><a class="btn bs bsm" href="#login" data-go="signup">Start free</a></div><div class="plan"><b>Basic</b><div class="p">₱99 <small>/ month</small></div><ul><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Kitchen & barista screens</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>3 staff PINs, shifts, reports</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Call staff, ratings, edit orders</span></li></ul><a class="btn bs bsm" href="#login" data-go="signup">Choose Basic</a></div><div class="plan hot"><b>Pro · Most popular</b><div class="p">₱499 <small>/ month</small></div><ul><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Delivery + rider app, dispatch</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Promos, vouchers, loyalty stamps</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Reservations, client card, packages</span></li></ul><a class="btn bp bsm" href="#login" data-go="signup">Choose Pro</a></div><div class="plan"><b>Business</b><div class="p">₱999 <small>/ month</small></div><ul><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Everything, bigger limits</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Gift cards, memberships, SMS</span></li><li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg><span>Your brand only — no “Powered by”</span></li></ul><a class="btn bs bsm" href="#login" data-go="signup">Choose Business</a></div></div>
+<p style="text-align:center;margin:18px 0 0;font-size:14px;color:#6B7280">Add-ons from ₱29 / month · pay 10 months, get 12.</p>
+</div></section>
 
-<section id="demo" aria-labelledby="demo-h" style="max-width: 1200px; margin: 0 auto; padding: 0 24px 96px">
-<div style="display: flex; flex-direction: column; gap: 12px; text-align: center; align-items: center; margin-bottom: 32px">
-<h2 id="demo-h" style="margin: 0; font-size: clamp(34px, 5vw, 56px); font-weight: 800; letter-spacing: -0.045em">Try a live demo shop</h2>
-<p style="margin: 0; max-width: 620px; font-size: 18px; color: #44403C">Open one on your phone and order or book like a customer. Nothing is charged — watch your order move from <b>preparing</b> to <b>ready</b> by itself.</p>
-</div>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px">
-<a href="/m/taptayo-cafe" target="_blank" rel="noopener" style="display: flex; flex-direction: column; border: 3px solid #141414; border-radius: 26px; background: #FFFFFF; box-shadow: 5px 5px 0 #FF5A36; overflow: hidden; text-decoration: none; color: #141414">
-<img src="/demo/cafe/bright.jpg" alt="" width="480" height="300" loading="lazy" decoding="async" style="width: 100%; height: 170px; object-fit: cover; display: block; border-bottom: 3px solid #141414">
-<div style="padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 6px"><b style="font-size: 20px; letter-spacing: -0.02em">TapTayo Café</b><span style="font-size: 15px; color: #57534E; line-height: 1.4">QR menu, dine-in &amp; take-out, loyalty stamps</span><span style="margin-top: 6px; font-size: 15px; font-weight: 800; color: #FF5A36">Order a coffee →</span></div></a>
-<a href="/m/taptayo-salon" target="_blank" rel="noopener" style="display: flex; flex-direction: column; border: 3px solid #141414; border-radius: 26px; background: #FFFFFF; box-shadow: 5px 5px 0 #FF8FB8; overflow: hidden; text-decoration: none; color: #141414">
-<img src="/demo/salon/interior-pink.jpg" alt="" width="480" height="300" loading="lazy" decoding="async" style="width: 100%; height: 170px; object-fit: cover; display: block; border-bottom: 3px solid #141414">
-<div style="padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 6px"><b style="font-size: 20px; letter-spacing: -0.02em">TapTayo Salon</b><span style="font-size: 15px; color: #57534E; line-height: 1.4">Online booking, stylists, home service</span><span style="margin-top: 6px; font-size: 15px; font-weight: 800; color: #FF5A36">Book a slot →</span></div></a>
-<a href="/m/taptayo-spa" target="_blank" rel="noopener" style="display: flex; flex-direction: column; border: 3px solid #141414; border-radius: 26px; background: #FFFFFF; box-shadow: 5px 5px 0 #C99AD6; overflow: hidden; text-decoration: none; color: #141414">
-<img src="/demo/spa/hot-stone-flowers.jpg" alt="" width="480" height="300" loading="lazy" decoding="async" style="width: 100%; height: 170px; object-fit: cover; display: block; border-bottom: 3px solid #141414">
-<div style="padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 6px"><b style="font-size: 20px; letter-spacing: -0.02em">TapTayo Spa</b><span style="font-size: 15px; color: #57534E; line-height: 1.4">Therapists, rooms, walk-in line, home service</span><span style="margin-top: 6px; font-size: 15px; font-weight: 800; color: #FF5A36">Book a massage →</span></div></a>
-<a href="/m/taptayo-studio" target="_blank" rel="noopener" style="display: flex; flex-direction: column; border: 3px solid #141414; border-radius: 26px; background: #FFFFFF; box-shadow: 5px 5px 0 #86EFAC; overflow: hidden; text-decoration: none; color: #141414">
-<img src="/demo/studio/creator.jpg" alt="" width="480" height="300" loading="lazy" decoding="async" style="width: 100%; height: 170px; object-fit: cover; display: block; border-bottom: 3px solid #141414">
-<div style="padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 6px"><b style="font-size: 20px; letter-spacing: -0.02em">TapTayo Studio</b><span style="font-size: 15px; color: #57534E; line-height: 1.4">Photographer: raw in 3 days, final in 7, prints &amp; frames</span><span style="margin-top: 6px; font-size: 15px; font-weight: 800; color: #16A34A">Book a shoot →</span></div></a>
-<a href="/m/taptayo-creator" target="_blank" rel="noopener" style="display: flex; flex-direction: column; border: 3px solid #141414; border-radius: 26px; background: #FFFFFF; box-shadow: 5px 5px 0 #86EFAC; overflow: hidden; text-decoration: none; color: #141414">
-<img src="/demo/creator/cover.jpg" alt="" width="480" height="300" loading="lazy" decoding="async" style="width: 100%; height: 170px; object-fit: cover; display: block; border-bottom: 3px solid #141414">
-<div style="padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 6px"><b style="font-size: 20px; letter-spacing: -0.02em">TapTayo Creator · Kain Tayo with Bea</b><span style="font-size: 15px; color: #57534E; line-height: 1.4">Food vlogger: rate card, offers &amp; counter-offers, rush countdown</span><span style="margin-top: 6px; font-size: 15px; font-weight: 800; color: #16A34A">Make an offer →</span></div></a>
-<a href="/m/taptayo-laundry" target="_blank" rel="noopener" style="display: flex; flex-direction: column; border: 3px solid #141414; border-radius: 26px; background: #FFFFFF; box-shadow: 5px 5px 0 #7DB8FF; overflow: hidden; text-decoration: none; color: #141414">
-<img src="/demo/laundry/laundromat.jpg" alt="" width="480" height="300" loading="lazy" decoding="async" style="width: 100%; height: 170px; object-fit: cover; display: block; border-bottom: 3px solid #141414">
-<div style="padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 6px"><b style="font-size: 20px; letter-spacing: -0.02em">TapTayo Laundry</b><span style="font-size: 15px; color: #57534E; line-height: 1.4">Rider pickup, live status, claim code</span><span style="margin-top: 6px; font-size: 15px; font-weight: 800; color: #FF5A36">Book a pickup →</span></div></a>
-<a href="/m/taptayo-airbnb" target="_blank" rel="noopener" style="display: flex; flex-direction: column; border: 3px solid #141414; border-radius: 26px; background: #FFFFFF; box-shadow: 5px 5px 0 #5ED6C6; overflow: hidden; text-decoration: none; color: #141414">
-<img src="/demo/stay/pool-tropical.jpg" alt="" width="480" height="300" loading="lazy" decoding="async" style="width: 100%; height: 170px; object-fit: cover; display: block; border-bottom: 3px solid #141414">
-<div style="padding: 18px 20px 20px; display: flex; flex-direction: column; gap: 6px"><b style="font-size: 20px; letter-spacing: -0.02em">TapTayo Airbnb</b><span style="font-size: 15px; color: #57534E; line-height: 1.4">Room photos, calendar, downpayment</span><span style="margin-top: 6px; font-size: 15px; font-weight: 800; color: #FF5A36">Check dates →</span></div></a>
-</div>
-<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding-top: 24px"><span style="font-size: 16px; font-weight: 700; color: #44403C">See the owner side — open a demo dashboard:</span><a href="/app/?demo=taptayo-cafe" target="_blank" rel="noopener" style="padding: 10px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; font-size: 15px; font-weight: 800; text-decoration: none; color: #141414">☕ Café</a><a href="/app/?demo=taptayo-salon" target="_blank" rel="noopener" style="padding: 10px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; font-size: 15px; font-weight: 800; text-decoration: none; color: #141414">💇 Salon</a><a href="/app/?demo=taptayo-spa" target="_blank" rel="noopener" style="padding: 10px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; font-size: 15px; font-weight: 800; text-decoration: none; color: #141414">💆 Spa</a><a href="/app/?demo=taptayo-studio" target="_blank" rel="noopener" style="padding: 10px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; font-size: 15px; font-weight: 800; text-decoration: none; color: #141414">🎨 Freelancer</a><a href="/app/?demo=taptayo-creator" target="_blank" rel="noopener" style="padding: 10px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; font-size: 15px; font-weight: 800; text-decoration: none; color: #141414">🎥 Creator</a><a href="/app/?demo=taptayo-laundry" target="_blank" rel="noopener" style="padding: 10px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; font-size: 15px; font-weight: 800; text-decoration: none; color: #141414">🧺 Laundry</a><a href="/app/?demo=taptayo-airbnb" target="_blank" rel="noopener" style="padding: 10px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; font-size: 15px; font-weight: 800; text-decoration: none; color: #141414">🏡 Airbnb</a></div>
-</section>
+<section class="sec gray" id="faq"><div class="wrap" style="max-width:860px">
+<h2>Questions?</h2>
+<div style="display:grid;gap:10px;margin-top:18px"><details><summary>Do my customers need to download an app?</summary><p>No. They scan your QR or open your shop link in any phone browser.</p></details><details><summary>Can I run everything from my phone?</summary><p>Yes. A tablet at the counter is optional.</p></details><details><summary>How do customers pay?</summary><p>Cash, cash on delivery, or GCash and bank transfer. Your staff verify the reference numbers.</p></details><details><summary>Is it really free?</summary><p>Yes. The Free plan has no time limit, with small-use limits. Upgrade when you need more staff, screens or features. Your menu and records are always kept.</p></details><details><summary>Is TapTayo a BIR-accredited POS?</summary><p>No. TapTayo receipts are digital order receipts, not official receipts or BIR invoices. Keep issuing your BIR invoices the way your registration requires.</p></details><details><summary>I have more than one branch. Is that okay?</summary><p>Yes. All your branches live under one account.</p></details><details><summary>I'm a freelancer (nails, lashes, massage, makeup). How do I get jobs?</summary><p>Open <a href="/pro/">taptayo.com/pro</a>, add your skills, your area and at least 10 photos of your work, then apply to shops hiring near you. When a shop accepts you, switch on “Available” — each job offer shows the area, the distance and what you earn, and you can decline.</p></details><details><summary>How do you keep shops and clients safe?</summary><p>Shops get verified badges from their permits (and can't rename once verified). Shops can block clients and report serious cases — TapTayo checks every report: 2 confirmed reports pause booking for 30 days, 3 close it. Clients can report or block a shop too.</p></details></div>
+<p style="margin:18px 0 0;font-weight:600"><a href="/help/">See all questions →</a> · <a href="/help/">💬 Chat with us</a></p>
+</div></section>
 
-<section id="cafe" style="background: #FFF0E6; border-top: 3px solid #141414">
-<div style="max-width: 1240px; margin: 0 auto; padding: 88px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 56px">
-<div style="flex: 1 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
-<span style="align-self: flex-start; padding: 8px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #F05A1A; font-size: 15px; font-weight: 800; color: #FFFFFF">Food business</span>
-<h2 style="margin: 0; font-size: clamp(38px, 5vw, 64px); font-weight: 800; letter-spacing: -0.045em; line-height: 0.98">Orders fly from the table to the kitchen.</h2>
-<p style="margin: 0; font-size: 18px; line-height: 1.55; color: #44403C">Every table gets its own QR. Customers order and add more anytime — the counter accepts, the kitchen and barista get their tickets, and you see it all live. Ordering from home? They pick a pickup time, confirm on Messenger, and come over once their status says ready.</p>
-<ul style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; font-size: 16px; font-weight: 600">
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #F05A1A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>QR per table, order-ahead pickup &amp; delivery</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #F05A1A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Counter, kitchen, barista &amp; dispatch screens</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #F05A1A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Busy mode with live wait times</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #F05A1A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>18+ menu, VIP rooms &amp; events</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #F05A1A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Promos, combos &amp; free delivery</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #F05A1A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Rider app with COD &amp; change-for</li>
-</ul>
-<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding-top: 8px">
-<a href="/login/?signup=1&amp;type=cafe" style="padding: 18px 28px; border: 3px solid #141414; border-radius: 999px; background: #F05A1A; box-shadow: 5px 5px 0 #141414; font-size: 18px; font-weight: 800; text-decoration: none; color: #FFFFFF">Start free with Café</a>
-<span style="font-size: 15px; color: #57534E">Free account · no card needed</span>
-</div>
-</div>
+<section class="sec"><div class="wrap"><div class="cta">
+<h2>Try the demo first.<br>Set up later.</h2>
+<div class="ctas" style="margin-top:20px"><a class="btn bs" href="#demo"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>Try the live demo</a><a class="btn" href="#login" data-go="signup" style="height:52px;padding:0 22px;border:1.5px solid #fff;color:#fff!important;font-size:16px">Start free</a></div>
+</div></div></section>
+</main>
 
-<div style="flex: 0 1 460px; min-width: 0; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 18px">
-<div style="position: relative; padding: 10px 24px 20px">
-<div role="img" aria-label="cafe preview" data-alt="cafe" style="width: 290px; max-width: 100%; height: 560px; border: 10px solid #141414; border-radius: 46px; background: #FFFBF2; box-shadow: 16px 16px 0 #F05A1A; overflow: hidden; display: flex; flex-direction: column; transform: rotate(3deg)">
-
-<div class="slide" data-car="cafe" data-i="0">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/cafe-0.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="cafe" data-i="1">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/cafe-1.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="cafe" data-i="2">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/cafe-2.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="cafe" data-i="3">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/cafe-3.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-<div class="slide" data-car="cafe" data-i="4">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/cafe-4.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-<div class="slide" data-car="cafe" data-i="5">
-<div class="tt-pop" style="flex-grow: 1; display: flex; flex-direction: column; min-height: 0; background: #FFFFFF">
-<div style="padding: 32px 16px 12px; border-bottom: 1px solid #E7E5E4; display: flex; align-items: center; gap: 10px">
-<span style="width: 38px; height: 38px; border-radius: 50%; background: #F05A1A; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800">K</span>
-<div style="display: flex; flex-direction: column"><span style="font-size: 16px; font-weight: 800">Kapehan</span><span style="font-size: 12px; color: #57534E">Messenger · usually replies instantly</span></div>
-</div>
-<div style="padding: 12px; display: flex; flex-direction: column; gap: 10px; flex-grow: 1; background: #FAFAF9">
-<span style="align-self: center; padding: 6px 10px; border-radius: 999px; background: #E7E5E4; font-size: 11px; font-weight: 700; color: #44403C; text-align: center">Opened from TapTayo to confirm your order</span>
-<div style="align-self: flex-end; max-width: 85%; padding: 10px 12px; border-radius: 18px 18px 4px 18px; background: #0A6CFF; color: #FFFFFF; font-size: 13px; line-height: 1.4; font-weight: 600">Hi Kapehan! This is Juan — confirming my pickup order #1043 · ₱400 · 3:30 PM.</div>
-<div style="align-self: flex-start; max-width: 85%; padding: 10px 12px; border-radius: 18px 18px 18px 4px; background: #E7E5E4; font-size: 13px; line-height: 1.4; font-weight: 600">Got it! Order #1043 confirmed ✓ We'll update your status when it's ready.</div>
-</div>
-<div style="margin: 12px; padding: 12px 14px; border: 1.5px solid #D6D3D1; border-radius: 999px; font-size: 13px; color: #57534E; display: flex; justify-content: space-between"><span>Aa</span><span style="font-weight: 800; color: #0A6CFF">Send</span></div>
-</div>
-</div>
-<div class="slide" data-car="cafe" data-i="6">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/cafe-6.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-</div>
-<span class="tt-pop" style="position: absolute; left: -6px; top: 96px; padding: 10px 14px; border: 3px solid #141414; border-radius: 16px; background: #FFFFFF; box-shadow: 5px 5px 0 #141414; font-size: 15px; font-weight: 800; transform: rotate(-5deg); white-space: nowrap"><span class="car-sticker" data-car="cafe"></span></span>
-</div>
-<div style="width: 100%; max-width: 460px; box-sizing: border-box; padding: 18px; border: 3px solid #141414; border-radius: 24px; background: #FFFFFF; box-shadow: 6px 6px 0 #F05A1A; display: flex; flex-direction: column; gap: 12px">
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
-<span style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: #57534E"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#57534E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11V5a2 2 0 0 1 4 0v5"></path><path d="M13 10V9a2 2 0 0 1 4 0v2"></path><path d="M17 11a2 2 0 0 1 4 0v3a7 7 0 0 1-7 7h-1a7 7 0 0 1-5.6-2.8L4.6 15a2 2 0 0 1 3.2-2.4L9 14"></path></svg>Tap through the features</span>
-<div style="display: flex; gap: 8px">
-<button type="button" data-prev="cafe" aria-label="Previous screen" style="width: 44px; height: 44px; border: 2.5px solid #141414; border-radius: 50%; background: #FFFFFF; font-family: inherit; font-size: 18px; font-weight: 800; color: #141414; cursor: pointer">←</button>
-<button type="button" data-next="cafe" aria-label="Next screen" style="width: 44px; height: 44px; border: 2.5px solid #141414; border-radius: 50%; background: #F05A1A; font-family: inherit; font-size: 18px; font-weight: 800; color: #FFFFFF; cursor: pointer">→</button>
-</div>
-</div>
-<div role="group" aria-label="Preview screens" style="display: flex; flex-wrap: wrap; gap: 8px">
-<span class="chips" data-car="cafe" style="display:contents"></span>
-</div>
-<span aria-live="polite" style="font-size: 16px; font-weight: 700; line-height: 1.4; color: #141414"><span class="car-cap" data-car="cafe"></span></span>
-</div>
-</div>
-</div>
-</section>
-
-<section id="laundry" style="background: #E6F2FF; border-top: 3px solid #141414">
-<div style="max-width: 1240px; margin: 0 auto; padding: 88px 24px; display: flex; flex-wrap: wrap-reverse; align-items: center; gap: 56px">
-
-<div style="flex: 0 1 460px; min-width: 0; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 18px">
-<div style="position: relative; padding: 10px 24px 20px">
-<div role="img" aria-label="laundry preview" data-alt="laundry" style="width: 290px; max-width: 100%; height: 560px; border: 10px solid #141414; border-radius: 46px; background: #F5F7FA; box-shadow: -16px 16px 0 #1E8BFF; overflow: hidden; display: flex; flex-direction: column; transform: rotate(-3deg)">
-
-<div class="slide" data-car="laundry" data-i="0">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/laundry-0.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="laundry" data-i="1">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/laundry-1.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="laundry" data-i="2">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/laundry-2.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="laundry" data-i="3">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/laundry-3.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-</div>
-<span class="tt-pop" style="position: absolute; right: -6px; top: 96px; padding: 10px 14px; border: 3px solid #141414; border-radius: 16px; background: #FFFFFF; box-shadow: 5px 5px 0 #141414; font-size: 15px; font-weight: 800; transform: rotate(4deg); white-space: nowrap"><span class="car-sticker" data-car="laundry"></span></span>
-</div>
-<div style="width: 100%; max-width: 460px; box-sizing: border-box; padding: 18px; border: 3px solid #141414; border-radius: 24px; background: #FFFFFF; box-shadow: 6px 6px 0 #1E8BFF; display: flex; flex-direction: column; gap: 12px">
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
-<span style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: #57534E"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#57534E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11V5a2 2 0 0 1 4 0v5"></path><path d="M13 10V9a2 2 0 0 1 4 0v2"></path><path d="M17 11a2 2 0 0 1 4 0v3a7 7 0 0 1-7 7h-1a7 7 0 0 1-5.6-2.8L4.6 15a2 2 0 0 1 3.2-2.4L9 14"></path></svg>Tap through the features</span>
-<div style="display: flex; gap: 8px">
-<button type="button" data-prev="laundry" aria-label="Previous screen" style="width: 44px; height: 44px; border: 2.5px solid #141414; border-radius: 50%; background: #FFFFFF; font-family: inherit; font-size: 18px; font-weight: 800; color: #141414; cursor: pointer">←</button>
-<button type="button" data-next="laundry" aria-label="Next screen" style="width: 44px; height: 44px; border: 2.5px solid #141414; border-radius: 50%; background: #1E8BFF; font-family: inherit; font-size: 18px; font-weight: 800; color: #FFFFFF; cursor: pointer">→</button>
-</div>
-</div>
-<div role="group" aria-label="Preview screens" style="display: flex; flex-wrap: wrap; gap: 8px">
-<span class="chips" data-car="laundry" style="display:contents"></span>
-</div>
-<span aria-live="polite" style="font-size: 16px; font-weight: 700; line-height: 1.4; color: #141414"><span class="car-cap" data-car="laundry"></span></span>
-</div>
-</div>
-
-<div style="flex: 1 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
-<span style="align-self: flex-start; padding: 8px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #1E8BFF; font-size: 15px; font-weight: 800; color: #FFFFFF">Laundry Shop</span>
-<h2 style="margin: 0; font-size: clamp(38px, 5vw, 64px); font-weight: 800; letter-spacing: -0.045em; line-height: 0.98">No more “tapos na ba?” texts.</h2>
-<p style="margin: 0; font-size: 18px; line-height: 1.55; color: #44403C">Customers drop off or book a rider pickup, then follow their load from washing to ready. Every load gets a private claim code — no code, no labada. Bye to fake claimants and wrong releases.</p>
-<ul style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; font-size: 16px; font-weight: 600">
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #1E8BFF; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Claim stub with a private claim code</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #1E8BFF; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Staff enters the code to release</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #1E8BFF; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Live status: washing → drying → ready</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #1E8BFF; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Drop-off or rider pickup &amp; delivery</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #1E8BFF; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Price by kilo, computed at the shop</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #1E8BFF; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Rush service, loyalty &amp; SMS promos</li>
-</ul>
-<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding-top: 8px">
-<a href="/login/?signup=1&amp;type=laundry" style="padding: 18px 28px; border: 3px solid #141414; border-radius: 999px; background: #1E8BFF; box-shadow: 5px 5px 0 #141414; font-size: 18px; font-weight: 800; text-decoration: none; color: #FFFFFF">Start free with Laundry</a>
-<span style="font-size: 15px; color: #57534E">Free account · no card needed</span>
-</div>
-</div>
-</div>
-</section>
-
-<section id="salon" style="background: #FFE6EF; border-top: 3px solid #141414">
-<div style="max-width: 1240px; margin: 0 auto; padding: 88px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 56px">
-<div style="flex: 1 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
-<span style="align-self: flex-start; padding: 8px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #FF3D7F; font-size: 15px; font-weight: 800; color: #FFFFFF">Salon &amp; Aesthetic</span>
-<h2 style="margin: 0; font-size: clamp(38px, 5vw, 64px); font-weight: 800; letter-spacing: -0.045em; line-height: 0.98">A full booking calendar, zero DMs.</h2>
-<p style="margin: 0; font-size: 18px; line-height: 1.55; color: #44403C">Clients pick services, a stylist and a time slot in seconds. Commissions compute themselves, home service clients see you on the way, and walk-ins, bookings and home visits all sit on one calendar — solo or with staff.</p>
-<ul style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; font-size: 16px; font-weight: 600">
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #FF3D7F; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Online booking with real-time slots</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #FF3D7F; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Commission per staff, auto-computed</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #FF3D7F; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Home service with live ETA &amp; transport fee</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #FF3D7F; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Home-based studio queue &amp; wait time</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #FF3D7F; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Return visits with day-of confirm</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #FF3D7F; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>One calendar: walk-ins, bookings, home service</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #FF3D7F; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Walk-in waitlist &amp; stylist queues</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #FF3D7F; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Waivers, policies &amp; reviews</li>
-</ul>
-<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding-top: 8px">
-<a href="/login/?signup=1&amp;type=salon" style="padding: 18px 28px; border: 3px solid #141414; border-radius: 999px; background: #FF3D7F; box-shadow: 5px 5px 0 #141414; font-size: 18px; font-weight: 800; text-decoration: none; color: #FFFFFF">Start free with Salon</a>
-<span style="font-size: 15px; color: #57534E">Free account · no card needed</span>
-</div>
-</div>
-
-<div style="flex: 0 1 460px; min-width: 0; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 18px">
-<div style="position: relative; padding: 10px 24px 20px">
-<div role="img" aria-label="salon preview" data-alt="salon" style="width: 290px; max-width: 100%; height: 560px; border: 10px solid #141414; border-radius: 46px; background: #FFF7FA; box-shadow: 16px 16px 0 #FF3D7F; overflow: hidden; display: flex; flex-direction: column; transform: rotate(3deg)">
-
-<div class="slide" data-car="salon" data-i="0">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/salon-0.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="salon" data-i="1">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/salon-1.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="salon" data-i="2">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/salon-2.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="salon" data-i="3">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/salon-3.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="salon" data-i="4">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/salon-4.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="salon" data-i="5">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/salon-5.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-</div>
-<span class="tt-pop" style="position: absolute; left: -6px; top: 96px; padding: 10px 14px; border: 3px solid #141414; border-radius: 16px; background: #FFFFFF; box-shadow: 5px 5px 0 #141414; font-size: 15px; font-weight: 800; transform: rotate(-5deg); white-space: nowrap"><span class="car-sticker" data-car="salon"></span></span>
-</div>
-<div style="width: 100%; max-width: 460px; box-sizing: border-box; padding: 18px; border: 3px solid #141414; border-radius: 24px; background: #FFFFFF; box-shadow: 6px 6px 0 #FF3D7F; display: flex; flex-direction: column; gap: 12px">
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
-<span style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: #57534E"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#57534E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11V5a2 2 0 0 1 4 0v5"></path><path d="M13 10V9a2 2 0 0 1 4 0v2"></path><path d="M17 11a2 2 0 0 1 4 0v3a7 7 0 0 1-7 7h-1a7 7 0 0 1-5.6-2.8L4.6 15a2 2 0 0 1 3.2-2.4L9 14"></path></svg>Tap through the features</span>
-<div style="display: flex; gap: 8px">
-<button type="button" data-prev="salon" aria-label="Previous screen" style="width: 44px; height: 44px; border: 2.5px solid #141414; border-radius: 50%; background: #FFFFFF; font-family: inherit; font-size: 18px; font-weight: 800; color: #141414; cursor: pointer">←</button>
-<button type="button" data-next="salon" aria-label="Next screen" style="width: 44px; height: 44px; border: 2.5px solid #141414; border-radius: 50%; background: #FF3D7F; font-family: inherit; font-size: 18px; font-weight: 800; color: #FFFFFF; cursor: pointer">→</button>
-</div>
-</div>
-<div role="group" aria-label="Preview screens" style="display: flex; flex-wrap: wrap; gap: 8px">
-<span class="chips" data-car="salon" style="display:contents"></span>
-</div>
-<span aria-live="polite" style="font-size: 16px; font-weight: 700; line-height: 1.4; color: #141414"><span class="car-cap" data-car="salon"></span></span>
-</div>
-</div>
-</div>
-</section>
-
-<section id="spa" style="background: #F6ECF8; border-top: 3px solid #141414">
-<div style="max-width: 1240px; margin: 0 auto; padding: 88px 24px; display: flex; flex-wrap: wrap; align-items: center; gap: 56px">
-<div style="flex: 1 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
-<span style="align-self: flex-start; padding: 8px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #7B2D8E; font-size: 15px; font-weight: 800; color: #FFFFFF">Massage &amp; Spa</span>
-<h2 style="margin: 0; font-size: clamp(38px, 5vw, 64px); font-weight: 800; letter-spacing: -0.045em; line-height: 0.98">Rooms, therapists and home service, handled.</h2>
-<p style="margin: 0; font-size: 18px; line-height: 1.55; color: #44403C">Clients book a massage and a time; TapTayo picks a free therapist and a free room. Walk-ins join the line from their phone, and for home service a rider drops off the therapist and gets a pickup alert the moment the session is done.</p>
-<ul style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; font-size: 16px; font-weight: 600">
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #7B2D8E; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Treatment rooms assigned automatically</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #7B2D8E; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Couple booking: two therapists at once</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #7B2D8E; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Female or male therapist on request</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #7B2D8E; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Massage details: pressure, areas to avoid, health</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #7B2D8E; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Walk-in line with live wait and numbers</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #7B2D8E; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Home service with rider drop-off &amp; pick-up</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #7B2D8E; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>“I'm safe” and Help buttons for therapists</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #7B2D8E; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Promos, combos, tips and ratings</li>
-</ul>
-<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding-top: 8px">
-<a href="/login/?signup=1&amp;type=spa" style="padding: 18px 28px; border: 3px solid #141414; border-radius: 999px; background: #7B2D8E; box-shadow: 5px 5px 0 #141414; font-size: 18px; font-weight: 800; text-decoration: none; color: #FFFFFF">Start free with Spa</a>
-<span style="font-size: 15px; color: #57534E">Free account · no card needed</span>
-</div>
-</div>
-
-<div style="flex: 0 1 460px; min-width: 0; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 18px">
-<div style="position: relative; padding: 10px 24px 20px">
-<div role="img" aria-label="spa preview" data-alt="spa" style="width: 290px; max-width: 100%; height: 560px; border: 10px solid #141414; border-radius: 46px; background: #FBF5FC; box-shadow: 16px 16px 0 #7B2D8E; overflow: hidden; display: flex; flex-direction: column; transform: rotate(3deg)">
-
-<div class="slide" data-car="spa" data-i="0">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/spa-0.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="spa" data-i="1">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/spa-1.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="spa" data-i="2">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/spa-2.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="spa" data-i="3">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/spa-3.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="spa" data-i="4">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/spa-4.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="spa" data-i="5">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/spa-5.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-</div>
-<span class="tt-pop" style="position: absolute; left: -6px; top: 96px; padding: 10px 14px; border: 3px solid #141414; border-radius: 16px; background: #FFFFFF; box-shadow: 5px 5px 0 #141414; font-size: 15px; font-weight: 800; transform: rotate(-5deg); white-space: nowrap"><span class="car-sticker" data-car="spa"></span></span>
-</div>
-<div style="width: 100%; max-width: 460px; box-sizing: border-box; padding: 18px; border: 3px solid #141414; border-radius: 24px; background: #FFFFFF; box-shadow: 6px 6px 0 #7B2D8E; display: flex; flex-direction: column; gap: 12px">
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
-<span style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: #57534E"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#57534E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11V5a2 2 0 0 1 4 0v5"></path><path d="M13 10V9a2 2 0 0 1 4 0v2"></path><path d="M17 11a2 2 0 0 1 4 0v3a7 7 0 0 1-7 7h-1a7 7 0 0 1-5.6-2.8L4.6 15a2 2 0 0 1 3.2-2.4L9 14"></path></svg>Tap through the features</span>
-<div style="display: flex; gap: 8px">
-<button type="button" data-prev="spa" aria-label="Previous screen" style="width: 44px; height: 44px; border: 2.5px solid #141414; border-radius: 50%; background: #FFFFFF; font-family: inherit; font-size: 18px; font-weight: 800; color: #141414; cursor: pointer">←</button>
-<button type="button" data-next="spa" aria-label="Next screen" style="width: 44px; height: 44px; border: 2.5px solid #141414; border-radius: 50%; background: #7B2D8E; font-family: inherit; font-size: 18px; font-weight: 800; color: #FFFFFF; cursor: pointer">→</button>
-</div>
-</div>
-<div role="group" aria-label="Preview screens" style="display: flex; flex-wrap: wrap; gap: 8px">
-<span class="chips" data-car="spa" style="display:contents"></span>
-</div>
-<span aria-live="polite" style="font-size: 16px; font-weight: 700; line-height: 1.4; color: #141414"><span class="car-cap" data-car="spa"></span></span>
-</div>
-</div>
-</div>
-</section>
-
-
-<section id="stay" style="background: #E0F7F4; border-top: 3px solid #141414">
-<div style="max-width: 1240px; margin: 0 auto; padding: 88px 24px; display: flex; flex-wrap: wrap-reverse; align-items: center; gap: 56px">
-
-<div style="flex: 0 1 460px; min-width: 0; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 18px">
-<div style="position: relative; padding: 10px 24px 20px">
-<div role="img" aria-label="stay preview" data-alt="stay" style="width: 290px; max-width: 100%; height: 560px; border: 10px solid #141414; border-radius: 46px; background: #F5FBFA; box-shadow: -16px 16px 0 #0D9488; overflow: hidden; display: flex; flex-direction: column; transform: rotate(-3deg)">
-
-<div class="slide" data-car="stay" data-i="0">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/stay-0.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="stay" data-i="1">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/stay-1.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="stay" data-i="2">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/stay-2.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-
-<div class="slide" data-car="stay" data-i="3">
-<div class="tt-pop" style="flex-grow: 1; display: flex; min-height: 0; background: #FFFFFF"><img src="/previews/stay-3.jpg" alt="" width="360" height="720" loading="lazy" decoding="async" style="width: 100%; height: 100%; object-fit: cover; object-position: top center; display: block"></div>
-</div>
-</div>
-<span class="tt-pop" style="position: absolute; right: -6px; top: 96px; padding: 10px 14px; border: 3px solid #141414; border-radius: 16px; background: #FFFFFF; box-shadow: 5px 5px 0 #141414; font-size: 15px; font-weight: 800; transform: rotate(4deg); white-space: nowrap"><span class="car-sticker" data-car="stay"></span></span>
-</div>
-<div style="width: 100%; max-width: 460px; box-sizing: border-box; padding: 18px; border: 3px solid #141414; border-radius: 24px; background: #FFFFFF; box-shadow: 6px 6px 0 #0D9488; display: flex; flex-direction: column; gap: 12px">
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
-<span style="display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 800; color: #57534E"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#57534E" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11V5a2 2 0 0 1 4 0v5"></path><path d="M13 10V9a2 2 0 0 1 4 0v2"></path><path d="M17 11a2 2 0 0 1 4 0v3a7 7 0 0 1-7 7h-1a7 7 0 0 1-5.6-2.8L4.6 15a2 2 0 0 1 3.2-2.4L9 14"></path></svg>Tap through the features</span>
-<div style="display: flex; gap: 8px">
-<button type="button" data-prev="stay" aria-label="Previous screen" style="width: 44px; height: 44px; border: 2.5px solid #141414; border-radius: 50%; background: #FFFFFF; font-family: inherit; font-size: 18px; font-weight: 800; color: #141414; cursor: pointer">←</button>
-<button type="button" data-next="stay" aria-label="Next screen" style="width: 44px; height: 44px; border: 2.5px solid #141414; border-radius: 50%; background: #0D9488; font-family: inherit; font-size: 18px; font-weight: 800; color: #FFFFFF; cursor: pointer">→</button>
-</div>
-</div>
-<div role="group" aria-label="Preview screens" style="display: flex; flex-wrap: wrap; gap: 8px">
-<span class="chips" data-car="stay" style="display:contents"></span>
-</div>
-<span aria-live="polite" style="font-size: 16px; font-weight: 700; line-height: 1.4; color: #141414"><span class="car-cap" data-car="stay"></span></span>
-</div>
-</div>
-
-<div style="flex: 1 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
-<span style="align-self: flex-start; padding: 8px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #0D9488; font-size: 15px; font-weight: 800; color: #FFFFFF">Stay &amp; Airbnb · New</span>
-<h2 style="margin: 0; font-size: clamp(38px, 5vw, 64px); font-weight: 800; letter-spacing: -0.045em; line-height: 0.98">Slow week? Fill the empty hours.</h2>
-<p style="margin: 0; font-size: 18px; line-height: 1.55; color: #44403C">Your own booking page that works with Airbnb.com and Booking.com — plus the tools that turn quiet days into income: hour packages, tonight's deals, and honest discounts for rooms with a known issue. Security deposits with photo proof protect your rooms; self check-in and a caretaker app run the rest.</p>
-<ul style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; font-size: 16px; font-weight: 600">
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #0D9488; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Syncs with Airbnb.com &amp; Booking.com</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #0D9488; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>1, 3, 6 or 12-hour stays · tonight's deal</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #0D9488; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Security deposit with photo-proof deductions</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #0D9488; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Self check-in with smart lock or lockbox code</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #0D9488; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Room notice discounts — no surprises</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #0D9488; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Caretaker app: room check, next guest, extras</li>
-</ul>
-<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding-top: 8px">
-<a href="/login/?signup=1&amp;type=stay" style="padding: 18px 28px; border: 3px solid #141414; border-radius: 999px; background: #0D9488; box-shadow: 5px 5px 0 #141414; font-size: 18px; font-weight: 800; text-decoration: none; color: #FFFFFF">Start free with Stay</a>
-<a href="/m/taptayo-airbnb" style="font-size: 17px; font-weight: 700; color: #141414">Try the demo →</a>
-</div>
-</div>
-</div>
-</section>
-
-<section id="freelance" aria-labelledby="fl-h" style="border-top: 3px solid #141414; background: #F0FDF4">
-<div style="max-width: 1240px; margin: 0 auto; padding: 96px 24px; display: flex; flex-wrap: wrap; gap: 48px; align-items: center">
-<div style="flex: 1 1 380px; min-width: 0; position: relative">
-<img src="/demo/studio/creator.jpg" alt="A content creator filming with a camera on a tripod" width="1200" height="800" loading="lazy" decoding="async" style="width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border: 3.5px solid #141414; border-radius: 28px; box-shadow: 12px 12px 0 #16A34A; display: block">
-<span style="position: absolute; left: -8px; bottom: 28px; padding: 10px 16px; border: 3px solid #141414; border-radius: 16px; background: #FFFFFF; box-shadow: 5px 5px 0 #141414; font-weight: 800; font-size: 17px; transform: rotate(-3deg)">DP paid · date locked ✓</span>
-</div>
-<div style="flex: 1 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
-<span style="align-self: flex-start; padding: 8px 16px; border: 2.5px solid #141414; border-radius: 999px; background: #16A34A; font-size: 15px; font-weight: 800; color: #FFFFFF">Freelancer &amp; Creator · New</span>
-<h2 id="fl-h" style="margin: 0; font-size: clamp(38px, 5vw, 64px); font-weight: 800; letter-spacing: -0.045em; line-height: 0.98">Your raket, fully booked.</h2>
-<p style="margin: 0; font-size: 18px; line-height: 1.55; color: #44403C">For photographers, makeup artists, content creators, food vloggers, designers, tutors and hosts. Clients book a slot or a whole day, send a brief for a quote, or make you an offer — accept, decline or counter. Your date is locked only when they accept your terms and pay the downpayment. Cafés and shops on TapTayo can find you in the creator directory and invite you. No more ghosting.</p>
-<ul style="margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px 24px; font-size: 16px; font-weight: 600">
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #16A34A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Rate card: 1-min, 3-min video, vlog</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #16A34A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Offers &amp; counter-offers (free food + transport)</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #16A34A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Terms + downpayment lock the date</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #16A34A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Drafts → revision → final + post proof</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #16A34A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>⚡ Rush with countdown — late = auto refund</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #16A34A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>📷 Raw in 3 days, final in 7 — client sees the countdown</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #16A34A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Verified badge, niches, “why book me”, client results</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #16A34A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Valid ID + travel radius for on-site jobs</li>
-<li style="display: flex; gap: 10px"><span style="flex-shrink: 0; width: 24px; height: 24px; border: 2px solid #141414; border-radius: 7px; background: #16A34A; display: flex; align-items: center; justify-content: center; color: #FFFFFF"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#141414" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5 9-10"></path></svg></span>Sell prints, frames, lashes, lenses with the booking</li>
-</ul>
-<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding-top: 8px">
-<a href="/login/?signup=1&amp;type=freelance" style="padding: 18px 28px; border: 3px solid #141414; border-radius: 999px; background: #16A34A; box-shadow: 5px 5px 0 #141414; font-size: 18px; font-weight: 800; text-decoration: none; color: #FFFFFF">Start free for your raket</a>
-<a href="/m/taptayo-creator" style="font-size: 17px; font-weight: 700; color: #141414">Creator demo →</a><a href="/m/taptayo-studio" style="font-size: 17px; font-weight: 700; color: #141414">Photographer demo →</a><a href="/collab/" style="font-size: 17px; font-weight: 700; color: #141414">Find a creator →</a>
-</div>
-</div>
-</div>
-</section>
-
-<section aria-labelledby="best-h" style="border-top: 3px solid #141414">
-<div style="max-width: 1240px; margin: 0 auto; padding: 96px 24px; display: flex; flex-direction: column; gap: 40px">
-<div style="display: flex; flex-direction: column; gap: 12px; align-items: center; text-align: center">
-<span style="padding: 8px 14px; border: 2.5px solid #141414; border-radius: 999px; background: #FFB627; font-size: 14px; font-weight: 800; transform: rotate(2deg)">in every edition</span>
-<h2 id="best-h" style="margin: 0; font-size: clamp(38px, 5.5vw, 68px); font-weight: 800; letter-spacing: -0.045em; line-height: 0.98">The stuff you'll actually use.</h2>
-</div>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px">
-<div style="padding: 28px; border: 3px solid #141414; border-radius: 26px; background: #FF5A36; box-shadow: 7px 7px 0 #141414; display: flex; flex-direction: column; gap: 10px; min-height: 200px; color: #FFFFFF"><span style="font-size: 44px; font-weight: 800; letter-spacing: -0.04em; line-height: 1">No app.</span><span style="font-size: 17px; font-weight: 600; line-height: 1.5">Customers scan your QR or open your shop link in any phone browser. That's it.</span></div>
-<div style="padding: 28px; border: 3px solid #141414; border-radius: 26px; background: #C9B8FF; box-shadow: 7px 7px 0 #141414; display: flex; flex-direction: column; gap: 10px; min-height: 200px; transform: rotate(-1deg)"><span style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05">Bye, fake orders.</span><span style="font-size: 17px; font-weight: 600; line-height: 1.5">New customers confirm through Messenger before anything hits your kitchen.</span></div>
-<div style="padding: 28px; border: 3px solid #141414; border-radius: 26px; background: #FFFFFF; box-shadow: 7px 7px 0 #141414; display: flex; flex-direction: column; gap: 10px; min-height: 200px"><span style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05">GCash + cash.</span><span style="font-size: 17px; font-weight: 600; line-height: 1.5; color: #44403C">Require a GCash reference number, or take cash at the counter.</span></div>
-<div style="padding: 28px; border: 3px solid #141414; border-radius: 26px; background: #FFFFFF; box-shadow: 7px 7px 0 #141414; display: flex; flex-direction: column; gap: 10px; min-height: 200px"><span style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05">A PIN for every staff.</span><span style="font-size: 17px; font-weight: 600; line-height: 1.5; color: #44403C">Know exactly who took, cooked and served each order.</span></div>
-<div style="padding: 28px; border: 3px solid #141414; border-radius: 26px; background: #D4FF3A; box-shadow: 7px 7px 0 #141414; display: flex; flex-direction: column; gap: 10px; min-height: 200px; transform: rotate(1deg)"><span style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05">Closing in 2 taps.</span><span style="font-size: 17px; font-weight: 600; line-height: 1.5">Daily sales, best sellers, staff tally and shift cash count — ready when you close.</span></div>
-<div style="padding: 28px; border: 3px solid #141414; border-radius: 26px; background: #FFFFFF; box-shadow: 7px 7px 0 #141414; display: flex; flex-direction: column; gap: 10px; min-height: 200px"><span style="font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.05">More branches? Same bill.</span><span style="font-size: 17px; font-weight: 600; line-height: 1.5; color: #44403C">Run every branch under one account.</span></div>
-</div>
-</div>
-</section>
-
-<section aria-labelledby="free-h" style="padding: 0 24px 96px">
-<div style="max-width: 1152px; margin: 0 auto; padding: clamp(28px, 5vw, 64px); box-sizing: border-box; border: 3.5px solid #141414; border-radius: 36px; background: #D4FF3A; box-shadow: 12px 12px 0 #141414; display: flex; flex-wrap: wrap; align-items: center; gap: 48px">
-<div style="flex: 1 1 420px; min-width: 0; display: flex; flex-direction: column; gap: 18px">
-<span style="align-self: flex-start; padding: 8px 14px; border: 2.5px solid #141414; border-radius: 999px; background: #FFFFFF; font-size: 14px; font-weight: 800; transform: rotate(-3deg)">seriously, free muna</span>
-<h2 id="free-h" style="margin: 0; font-size: clamp(40px, 6vw, 76px); font-weight: 800; letter-spacing: -0.05em; line-height: 0.95">Free account. Pay ₱0.</h2>
-<p style="margin: 0; font-size: 18px; line-height: 1.55; font-weight: 500">Create your free account and start taking orders today. No card needed. The <b>Free plan</b> has no time limit (small-use limits), and your menu and records stay safe. Upgrade anytime from ₱99.</p>
-<div style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px">
-<a href="/login/?signup=1" style="padding: 20px 32px; border: 3px solid #141414; border-radius: 999px; background: #FF5A36; box-shadow: 5px 5px 0 #141414; font-size: 19px; font-weight: 800; text-decoration: none; color: #FFFFFF">Create my free account</a>
-<span style="font-size: 15px; font-weight: 700">Takes about 10 minutes</span>
-</div>
-</div>
-<div style="flex: 0 1 340px; min-width: 0; margin: 0 auto; padding: 24px; border: 3px solid #141414; border-radius: 8px; background: #FFFDF5; font-family: ui-monospace, 'SF Mono', Menlo, monospace; display: flex; flex-direction: column; gap: 10px; transform: rotate(2deg)">
-<span style="font-size: 14px; font-weight: 700; text-align: center">TAPTAYO · FREE ACCOUNT</span>
-<span style="border-top: 2px dashed #141414"></span>
-<div style="display: flex; justify-content: space-between; font-size: 15px"><span>Setup fee</span><span>₱0</span></div>
-<div style="display: flex; justify-content: space-between; font-size: 15px"><span>App for customers</span><span>₱0</span></div>
-<div style="display: flex; justify-content: space-between; font-size: 15px"><span>Free plan, no time limit</span><span>₱0</span></div>
-<div style="display: flex; justify-content: space-between; font-size: 15px"><span>Credit card</span><span>none</span></div>
-<div style="display: flex; justify-content: space-between; font-size: 15px"><span>Upgrade</span><span>anytime</span></div>
-<span style="border-top: 2px dashed #141414"></span>
-<div style="display: flex; justify-content: space-between; font-size: 20px; font-weight: 800"><span>TOTAL TODAY</span><span>₱0</span></div>
-<span style="font-size: 13px; text-align: center; padding-top: 4px">Salamat po! ✦</span>
-</div>
-</div>
-</section>
-
-<section id="pricing" style="background: #FFF0E6; border-top: 3px solid #141414">
-<div style="max-width: 1200px; margin: 0 auto; padding: 96px 24px; display: flex; flex-direction: column; gap: 40px">
-<div style="display: flex; flex-direction: column; gap: 12px; text-align: center; align-items: center">
-<h2 style="margin: 0; font-size: clamp(36px, 5vw, 60px); font-weight: 800; letter-spacing: -0.045em">Simple pricing</h2>
-<p style="margin: 0; font-size: 18px; color: #44403C">Start free. Pick a plan when you're ready.</p>
-</div>
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 22px; align-items: stretch">
-<div style="padding: 28px; border: 3px solid #141414; border-radius: 28px; background: #FFFFFF;  display: flex; flex-direction: column; gap: 14px">
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px"><h3 style="margin: 0; font-size: 20px; font-weight: 800">Free</h3></div>
-<div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 48px; font-weight: 800; letter-spacing: -2px">₱0</span><span style="font-size: 15px; color: #57534E">forever</span></div>
-<ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; font-size: 15px; line-height: 1.45; flex-grow: 1"><li>For small use — no time limit</li><li>Café: menu + counter (the counter does it all)</li><li>Salon: solo / home service, 2 bookings a day · 15 a month</li><li>Spa: 3 bookings a day · 20 a month</li><li>Laundry: 15 jobs a day · Stay: 20 bookings a month</li></ul>
-<a href="/login/?signup=1" style="padding: 15px; border: 3px solid #141414; border-radius: 999px; background: #D4FF3A;  text-align: center; font-size: 16px; font-weight: 800; text-decoration: none">Start free</a>
-</div>
-<div style="padding: 28px; border: 3px solid #141414; border-radius: 28px; background: #FFFFFF;  display: flex; flex-direction: column; gap: 14px">
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px"><h3 style="margin: 0; font-size: 20px; font-weight: 800">Basic</h3></div>
-<div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 48px; font-weight: 800; letter-spacing: -2px">₱99</span><span style="font-size: 15px; color: #57534E">/ month</span></div>
-<ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; font-size: 15px; line-height: 1.45; flex-grow: 1"><li>Kitchen &amp; barista screens</li><li>3 staff PINs, shifts, reports</li><li>Call staff, ratings, edit orders</li></ul>
-<a href="/login/?signup=1" style="padding: 15px; border: 3px solid #141414; border-radius: 999px; background: #FFFFFF;  text-align: center; font-size: 16px; font-weight: 800; text-decoration: none">Choose Basic</a>
-</div>
-<div style="padding: 28px; border: 3px solid #141414; border-radius: 28px; background: #141414; color: #FFFBF2; box-shadow: 8px 8px 0 #FF5A36; transform: rotate(-1deg); display: flex; flex-direction: column; gap: 14px">
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px"><h3 style="margin: 0; font-size: 20px; font-weight: 800">Pro</h3><span style="padding: 5px 11px; border: 2px solid #FFFBF2; border-radius: 999px; background: #FF5A36; color: #FFFFFF; font-size: 12px; font-weight: 800">Most popular</span></div>
-<div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 48px; font-weight: 800; letter-spacing: -2px">₱499</span><span style="font-size: 15px; color: #D6D3D1">/ month</span></div>
-<ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; font-size: 15px; line-height: 1.45; flex-grow: 1; color: #E7E5E4"><li>Delivery + rider app, dispatch</li><li>Promos, vouchers, loyalty stamps</li><li>Reservations, client card, packages</li></ul>
-<a href="/login/?signup=1" style="padding: 15px; border: 3px solid #FFFBF2; border-radius: 999px; background: #FF5A36; color: #FFFFFF; text-align: center; font-size: 16px; font-weight: 800; text-decoration: none">Choose Pro</a>
-</div>
-<div style="padding: 28px; border: 3px solid #141414; border-radius: 28px; background: #FFFFFF;  display: flex; flex-direction: column; gap: 14px">
-<div style="display: flex; align-items: center; justify-content: space-between; gap: 10px"><h3 style="margin: 0; font-size: 20px; font-weight: 800">Business</h3></div>
-<div style="display: flex; align-items: baseline; gap: 6px"><span style="font-size: 48px; font-weight: 800; letter-spacing: -2px">₱999</span><span style="font-size: 15px; color: #57534E">/ month</span></div>
-<ul style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 7px; font-size: 15px; line-height: 1.45; flex-grow: 1"><li>Everything, bigger limits</li><li>Gift cards, memberships, SMS, Telegram</li><li>Your brand only — no “Powered by”</li></ul>
-<a href="/login/?signup=1" style="padding: 15px; border: 3px solid #141414; border-radius: 999px; background: #FFFFFF;  text-align: center; font-size: 16px; font-weight: 800; text-decoration: none">Choose Business</a>
-</div>
-</div>
-<p style="margin: 0; text-align: center; font-size: 16px; color: #44403C">Start on a <b>free account</b>, then pick a plan when you need more. Add-ons from ₱29 / month · pay 10 months, get 12.</p>
-</div>
-</section>
-
-<section id="faq" style="max-width: 820px; margin: 0 auto; padding: 96px 24px; display: flex; flex-direction: column; gap: 28px">
-<h2 style="margin: 0; font-size: clamp(36px, 5vw, 60px); font-weight: 800; letter-spacing: -0.045em">Questions?</h2>
-<div style="display: flex; flex-direction: column; gap: 12px">
-<details style="padding: 20px 24px; border: 3px solid #141414; border-radius: 20px; background: #FFFFFF"><summary style="font-size: 18px; font-weight: 800">Do my customers need to download an app?</summary><p style="margin: 12px 0 0; font-size: 16px; line-height: 1.55; color: #44403C">No. They scan your QR or open your shop link in any phone browser.</p></details>
-<details style="padding: 20px 24px; border: 3px solid #141414; border-radius: 20px; background: #FFFFFF"><summary style="font-size: 18px; font-weight: 800">Can I run everything from my phone?</summary><p style="margin: 12px 0 0; font-size: 16px; line-height: 1.55; color: #44403C">Yes. A tablet at the counter is optional.</p></details>
-<details style="padding: 20px 24px; border: 3px solid #141414; border-radius: 20px; background: #FFFFFF"><summary style="font-size: 18px; font-weight: 800">How do customers pay?</summary><p style="margin: 12px 0 0; font-size: 16px; line-height: 1.55; color: #44403C">Cash, cash on delivery, or GCash and bank transfer. Your staff verify the reference numbers.</p></details>
-<details style="padding: 20px 24px; border: 3px solid #141414; border-radius: 20px; background: #FFFFFF"><summary style="font-size: 18px; font-weight: 800">Is it really free?</summary><p style="margin: 12px 0 0; font-size: 16px; line-height: 1.55; color: #44403C">Yes. The Free plan has no time limit, with small-use limits. Upgrade when you need more staff, screens or features. Your menu and records are always kept.</p></details>
-<details style="padding: 20px 24px; border: 3px solid #141414; border-radius: 20px; background: #FFFFFF"><summary style="font-size: 18px; font-weight: 800">Is TapTayo a BIR-accredited POS?</summary><p style="margin: 12px 0 0; font-size: 16px; line-height: 1.55; color: #44403C">No. TapTayo receipts are digital order receipts, not official receipts or BIR invoices. Keep issuing your BIR invoices the way your registration requires.</p></details>
-<details style="padding: 20px 24px; border: 3px solid #141414; border-radius: 20px; background: #FFFFFF"><summary style="font-size: 18px; font-weight: 800">I have more than one branch. Is that okay?</summary><p style="margin: 12px 0 0; font-size: 16px; line-height: 1.55; color: #44403C">Yes. All your branches live under one account.</p></details>
-</div>
-<p style="margin: 8px 0 0; font-size: 17px; font-weight: 700"><a href="/help/" style="color: #141414">See all questions →</a> · <a href="/help/" style="color: #141414">💬 Chat with us</a></p>
-</section>
-
-<section style="padding: 0 24px 80px">
-<div style="max-width: 1152px; margin: 0 auto; padding: clamp(36px, 6vw, 72px); box-sizing: border-box; border: 3.5px solid #141414; border-radius: 36px; background: #FF5A36; box-shadow: 12px 12px 0 #141414; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 32px; color: #FFFFFF">
-<div style="flex: 1 1 420px; display: flex; flex-direction: column; gap: 10px">
-<h2 style="margin: 0; font-size: clamp(38px, 5.5vw, 68px); font-weight: 800; letter-spacing: -0.05em; line-height: 0.95">Ready when you are.</h2>
-<p style="margin: 0; font-size: 18px; font-weight: 600">Set up your shop in about 10 minutes. Free plan forever.</p>
-</div>
-<a href="/login/?signup=1" style="padding: 20px 32px; border: 3px solid #141414; border-radius: 999px; background: #FFFFFF; box-shadow: 5px 5px 0 #141414; font-size: 19px; font-weight: 800; text-decoration: none">Try it free</a>
-</div>
-</section>
-
-<footer style="border-top: 3px solid #141414">
-<div style="max-width: 1240px; margin: 0 auto; padding: 28px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
-<div style="display: flex; align-items: center; gap: 10px">
-<img src="/logo/taptayo-mark.svg" width="30" height="30" alt="">
-<span style="font-size: 19px; font-weight: 800; letter-spacing: -0.5px">taptayo</span>
-<span style="font-size: 14px; color: #57534E; padding-left: 8px">© 2026 TapTayo · Made for Filipino small businesses</span>
-</div>
-<nav aria-label="Footer" style="display: flex; flex-wrap: wrap; gap: 4px">
-<a href="/login/" style="padding: 12px; font-size: 15px; font-weight: 700; text-decoration: none">Log in</a>
-<a class="tt-signup" href="/login/?signup=1" style="padding: 12px; font-size: 15px; font-weight: 700; text-decoration: none">Sign up</a>
-<a href="#pricing" style="padding: 12px; font-size: 15px; font-weight: 700; text-decoration: none">Pricing</a>
-<a href="#faq" style="padding: 12px; font-size: 15px; font-weight: 700; text-decoration: none">FAQ</a>
-<a href="/terms/" style="padding: 12px; font-size: 15px; font-weight: 700; text-decoration: none">Terms</a>
-<a href="/privacy/" style="padding: 12px; font-size: 15px; font-weight: 700; text-decoration: none">Privacy</a>
-</nav>
-</div>
-</footer>
-</div>
+<footer><div class="wrap">
+<div style="display:flex;align-items:center;gap:10px"><img src="/logo/taptayo-mark.svg" width="26" height="26" alt=""><b style="color:#111">taptayo</b><span>© 2026 TapTayo · Made for Filipino small businesses</span></div>
+<nav aria-label="Footer"><a href="#login" data-go="login">Log in</a><a href="#login" data-go="signup">Sign up</a><a href="/explore/">Explore</a><a href="/pro/">Freelancers</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a href="/terms/">Terms</a><a href="/privacy/">Privacy</a></nav>
+</div></footer>
 
 <script>
-(function () {
-  /* ---------- Tour ---------- */
-  var scenes = [
-    { short: 'Scan', title: 'Customer scans the table QR.', text: 'Every table, counter or door gets its own QR. One scan opens your shop — no app, no sign-up.', tag: '#D4FF3A' },
-    { short: 'Order', title: 'They order from their phone.', text: 'Your menu, services or rooms, with photos and prices. They can add more anytime.', tag: '#FF5A36' },
-    { short: 'Pay', title: 'Pay with GCash or cash.', text: 'Require a GCash reference number, or let them pay at the counter. New customers confirm via Messenger.', tag: '#C9B8FF' },
-    { short: 'Kitchen', title: 'Counter accepts, kitchen cooks.', text: 'Orders land on the counter screen. Once accepted, the kitchen and barista get their own tickets.', tag: '#FFB627' },
-    { short: 'Sales', title: 'You see every peso, live.', text: 'Sales, best sellers, staff tally and shift cash count — all on your phone at closing.', tag: '#D4FF3A' }
-  ];
-  var step = 0, playing = false, timer = null;
-  var segWrap = document.getElementById('tour-segs');
-  var chapWrap = document.getElementById('tour-chapters');
-  var segFills = [], chapBtns = [];
-  scenes.forEach(function (sc, i) {
-    var seg = document.createElement('span');
-    seg.style.cssText = 'flex: 1 1 0; height: 6px; border-radius: 999px; background: #3F3A36; overflow: hidden';
-    var fill = document.createElement('span');
-    fill.style.cssText = 'display: block; height: 100%; border-radius: 999px; background: #FF5A36; transition: width .3s';
-    seg.appendChild(fill); segWrap.appendChild(seg); segFills.push(fill);
-    var b = document.createElement('button');
-    b.type = 'button'; b.textContent = (i + 1) + ' · ' + sc.short;
-    b.addEventListener('click', function () { setStep(i); if (playing) startTimer(); });
-    chapWrap.appendChild(b); chapBtns.push(b);
-  });
-  var toggleBtn = document.getElementById('tour-toggle');
-  function renderTour() {
-    var sc = scenes[step];
-    document.querySelectorAll('.tour-num').forEach(function (el) { el.textContent = step + 1; });
-    document.querySelectorAll('.tour-title').forEach(function (el) { el.textContent = sc.title; });
-    document.querySelectorAll('.tour-text').forEach(function (el) { el.textContent = sc.text; });
-    document.querySelectorAll('.tour-tag').forEach(function (el) { el.style.background = sc.tag; });
-    document.querySelectorAll('.tour-scene').forEach(function (el) { el.style.display = +el.dataset.i === step ? '' : 'none'; });
-    segFills.forEach(function (f, i) { f.style.width = i <= step ? '100%' : '0%'; });
-    chapBtns.forEach(function (b, i) {
-      var on = i === step;
-      b.setAttribute('aria-current', on ? 'step' : 'false');
-      b.style.cssText = 'min-height: 44px; padding: 0 14px; border-radius: 999px; font-family: inherit; font-size: 14px; font-weight: 800; cursor: pointer; ' +
-        (on ? 'background: #FFFBF2; color: #141414; border: 2px solid #FFFBF2' : 'background: transparent; color: #FFFBF2; border: 2px solid #57534E');
-    });
-    toggleBtn.setAttribute('aria-label', playing ? 'Pause tour' : 'Play tour');
-    toggleBtn.querySelector('.ic-pause').style.display = playing ? 'flex' : 'none';
-    toggleBtn.querySelector('.ic-play').style.display = playing ? 'none' : 'flex';
-  }
-  function setStep(i) { step = i; renderTour(); }
-  function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
-  function startTimer() {
-    stopTimer();
-    timer = setInterval(function () {
-      if (step >= scenes.length - 1) { stopTimer(); playing = false; renderTour(); }
-      else setStep(step + 1);
-    }, 3200);
-  }
-  toggleBtn.addEventListener('click', function () {
-    if (playing) { playing = false; stopTimer(); renderTour(); }
-    else { playing = true; if (step >= scenes.length - 1) step = 0; renderTour(); startTimer(); }
-  });
-  renderTour();
-
-  /* ---------- Phone previews ---------- */
-  var cars = {
-    cafe: { color: '#F05A1A', title: 'Café phone preview', slides: [
-      ['Menu', 'Customers order from the table QR — no app.', 'New order · Table 4'],
-      ['Pay', 'Pay with GCash (ref no. required) or cash.', 'Confirmed via Messenger ✓'],
-      ['Kitchen', 'Counter accepts — kitchen and barista get their own tickets.', 'Ticket sent to kitchen'],
-      ['Busy mode', 'Busy mode shows customers a live wait time.', 'Busy mode · ~20 min'],
-      ["Pickup", "At home? They order ahead and choose a pickup time.", "Order ahead · 3:30 PM"],
-      ["Messenger", "They're sent to your Messenger to confirm it's really them.", "Confirmed via Messenger ✓"],
-      ["Ready", "The kitchen accepts and cooks — their status flips to ready, then they head over.", "Ready for pickup ✓"]] },
-    laundry: { color: '#1E8BFF', title: 'Laundry phone preview', slides: [
-      ['Tracker', 'Customers follow their load from washing to ready.', 'Ready for pickup ✓'],
-      ['Claim stub', 'Every load gets a claim stub with a private claim code.', 'Only they know the code'],
-      ['Release', 'At pickup, staff enters the code — no match, no release.', 'No code, no labada.'],
-      ['Pickup', 'Or book a rider pickup, with rush service.', 'Rider pickup booked']] },
-    salon: { color: '#FF3D7F', title: 'Salon phone preview', slides: [
-      ['Booking', 'Clients pick a service, a stylist and a time slot.', 'Booked · Sat 2:00 PM'],
-      ['Commission', "Set each stylist's commission — it computes on every accept.", 'Mia +₱140 commission'],
-      ['Home service', 'Home service: your client sees you on the way, with your ETA.', 'On the way · ETA 15 min'],
-      ['Queue', "Home-based studio? Set the wait time when there's a line.", 'Queue · ~30 min wait'],
-      ['Next visit', 'Save the next visit — the client confirms on the day.', 'Next visit saved'],
-      ['Calendar', 'One calendar for home service, walk-ins and bookings — solo or with staff.', 'You: home · Ana: walk-ins']] },
-    spa: { color: '#7B2D8E', title: 'Spa phone preview', slides: [
-      ['Booking', 'Clients see your services, promos and the live wait right away.', 'Wait now · ~25 min'],
-      ['Live line', 'Who is free now, who is free later — or take a number for the line.', 'You are #12 · 2 ahead'],
-      ['Massage details', 'Pressure, areas to avoid and health notes go to the therapist.', 'Firm · avoid lower back'],
-      ['Promos', 'Weekday deals, combos and couple promos are priced at booking.', '−20% Relax Weekdays'],
-      ['Therapist app', 'Therapists accept jobs on their phone, with a countdown.', 'New job · accept in 5 min'],
-      ['Reception', 'Reception calls the next number, assigns rooms and riders.', 'Calling #12 · Room 2']] },
-    stay: { color: '#0D9488', title: 'Stay phone preview', slides: [
-      ['Booking', 'Guests pick dates and send a downpayment.', '2 nights · Confirmed'],
-      ['Guest page', 'Guest status page: check-out countdown, extend and requests.', 'Extend or request in 1 tap'],
-      ['Cleaner', "Guest taps “I'm leaving” — your cleaner sees it right away.", 'Cleaner notified'],
-      ['Rooms', "Add cleaners and see every room's status at a glance.", '+ Add as many cleaners']] }
-  };
-  var pos = {};
-  Object.keys(cars).forEach(function (k) {
-    var c = cars[k]; pos[k] = 0; c.chips = [];
-    var wrap = document.querySelector('.chips[data-car="' + k + '"]');
-    c.slides.forEach(function (sl, j) {
-      var b = document.createElement('button');
-      b.type = 'button'; b.textContent = (j + 1) + ' · ' + sl[0];
-      b.addEventListener('click', function () { go(k, j); });
-      wrap.appendChild(b); c.chips.push(b);
-    });
-    document.querySelector('[data-prev="' + k + '"]').addEventListener('click', function () { go(k, pos[k] - 1); });
-    document.querySelector('[data-next="' + k + '"]').addEventListener('click', function () { go(k, pos[k] + 1); });
-    render(k);
-  });
-  function go(k, j) { var n = cars[k].slides.length; pos[k] = (j + n) % n; render(k); }
-  function render(k) {
-    var c = cars[k], i = pos[k], sl = c.slides[i];
-    document.querySelectorAll('.slide[data-car="' + k + '"]').forEach(function (el) {
-      el.style.display = +el.dataset.i === i ? 'contents' : 'none';
-    });
-    document.querySelectorAll('.car-cap[data-car="' + k + '"]').forEach(function (el) { el.textContent = sl[1]; });
-    document.querySelectorAll('.car-sticker[data-car="' + k + '"]').forEach(function (el) { el.textContent = sl[2]; });
-    var phone = document.querySelector('[data-alt="' + k + '"]');
-    if (phone) phone.setAttribute('aria-label', c.title + ': ' + sl[1]);
-    c.chips.forEach(function (b, j) {
-      var on = j === i;
-      b.setAttribute('aria-current', on ? 'true' : 'false');
-      b.style.cssText = 'flex: 1 1 auto; white-space: nowrap; min-height: 42px; padding: 0 14px; border-radius: 999px; font-family: inherit; font-size: 13px; font-weight: 800; cursor: pointer; ' +
-        (on ? 'background: ' + c.color + '; color: #FFFFFF; border: 2px solid #141414' : 'background: #FFFBF2; color: #141414; border: 2px solid #E7E0D6');
-    });
-  }
-
-  /* ---------- Check-out countdown (Stay preview) ---------- */
-  var secs = 2 * 3600 + 14 * 60 + 33;
-  function pad(n) { return String(n).padStart(2, '0'); }
-  setInterval(function () {
-    if (secs > 0) secs--;
-    var t = pad(Math.floor(secs / 3600)) + ':' + pad(Math.floor(secs % 3600 / 60)) + ':' + pad(secs % 60);
-    document.querySelectorAll('.co-clock').forEach(function (el) { el.textContent = t; });
-  }, 1000);
-})();
+// remember which store's "Powered by taptayo" link brought this visitor (referral credit at sign-up)
+try { var r = new URLSearchParams(location.search).get("ref"); if (r && /^[a-z0-9-]{2,60}$/.test(r)) localStorage.setItem("taptayo:ref", r); } catch (e) {}
+// header / CTA buttons → the login card on the right (switch tab, focus email)
+document.addEventListener("click", function (e) {
+  var a = e.target.closest("[data-go]"); if (!a) return; e.preventDefault();
+  var tab = document.getElementById(a.getAttribute("data-go") === "signup" ? "tabSignup" : "tabLogin"); if (tab) tab.click();
+  var card = document.getElementById("login"); if (card) { card.scrollIntoView({ behavior: "smooth", block: "center" }); setTimeout(function () { var i = document.getElementById(a.getAttribute("data-go") === "signup" ? "a-shop" : "email"); if (i) i.focus({ preventScroll: true }); }, 450); }
+});
+if (/[?&]signup=1/.test(location.search)) setTimeout(function () { var t = document.getElementById("tabSignup"); if (t) t.click(); }, 300);
+// videos: play in a lightbox (vertical cut on phones)
+document.querySelectorAll("[data-vid]").forEach(function (b) { b.addEventListener("click", function () {
+  var k = b.getAttribute("data-vid"), tall = matchMedia("(max-width: 640px)").matches, s = tall ? "-v" : "";
+  var w = document.createElement("div"); w.className = "vbox"; w.innerHTML = '<button type="button" aria-label="Close">✕</button><video controls autoplay playsinline src="/videos/' + k + s + '.mp4" poster="/videos/' + k + s + '.jpg"></video>';
+  w.addEventListener("click", function (e) { if (e.target === w || e.target.tagName === "BUTTON") w.remove(); }); document.body.appendChild(w);
+}); });
 </script>
 <script type="module">
-import { auth } from "/src/firebase.js";
-import { onAuthStateChanged } from "firebase/auth";
-onAuthStateChanged(auth, (u) => { if (!u || u.isAnonymous) return; document.querySelectorAll('a[href="/login/"]').forEach((a) => { a.textContent = "Dashboard"; a.href = "/app/"; }); document.querySelectorAll(".tt-signup").forEach((a) => a.remove()); });
+import { startI18n, langSwitch } from "/src/i18n.js";
+import { ROADMAP } from "/src/roadmapdata.js";
+startI18n(); langSwitch({ into: document.getElementById("langSlot") });
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+document.getElementById("soonList").innerHTML = ROADMAP.map((r) => `<div class="scard"><div class="h"><span>${r.icon}</span><em class="eta ${esc(r.eta)}" style="font-style:normal">${esc(r.eta)}</em></div><b>${esc(r.title)}</b><p>${esc(r.what)}</p></div>`).join("");
 </script>
+<script type="module" src="/src/auth.js"></script>
 </body>
 </html>

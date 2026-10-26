@@ -18,7 +18,7 @@ const ITEMS = [
 ];
 
 function state(store) {
-  const t = store?.trust; if (!t || store.demo) return null;
+  const t = store?.trust; if (!t) return null;
   const b = new Set(t.badges || []);
   const rows = ITEMS.filter(([k]) => k !== "creator" || store.businessType === "freelance" || b.has("creator"));
   const have = rows.filter(([k]) => b.has(k));
@@ -45,7 +45,7 @@ function card(store) {
   const intro = !s.b.has("verified") && !s.docs.length ? `<p class="tb-intro">${s.b.has("active") ? "This shop has 20+ completed orders or bookings on TapTayo." : "This shop just joined TapTayo. To keep you safe, downpayments are capped until it's verified."}</p>` : "";
   return `<div class="tb-card" role="dialog" aria-label="Trust badges"><div class="tb-t">${top}</div>${intro}${s.rows.map(([k, l, d, c, i]) => { const on = s.b.has(k); return `<div class="tb-r${on ? "" : " off"}"><span class="tb-i" style="background:${on ? c : "#E7E5E4"}">${i}</span><span><b>${l}</b><br><small>${on ? d : "Not yet"}</small></span>${on ? `<em>✓</em>` : ""}</div>`; }).join("")}
     <div class="tb-prog"><i style="width:${Math.round((n / total) * 100)}%"></i></div><small class="tb-n">${n} of ${total}${s.complete ? " — all complete ✨" : ""}${s.t.tx >= 10 ? ` · ${Number(s.t.tx).toLocaleString("en-PH")} ${store.mode === "salon" || store.mode === "stay" ? "bookings" : "orders"} on TapTayo` : ""}</small>
-    <small class="tb-foot">A badge means TapTayo checked it — it's not a guarantee. See something wrong? Use “Report this shop”.</small></div>`;
+    <small class="tb-foot">${store.demo ? "🧪 Demo shop — these are sample badges to show how they look." : "A badge means TapTayo checked it — it's not a guarantee. See something wrong? Use “Report this shop”."}</small></div>`;
 }
 
 /** one listener for the whole page: tap a badge → fan out + explain card (tap outside / again / scroll to close) */
@@ -70,7 +70,7 @@ export function enableTrust(getStore) {
 
 /** small line under the name: "1,240 orders on TapTayo" (badges themselves live beside the name) */
 export function trustChips(store) {
-  const t = store?.trust; if (!t || store.demo || !(t.tx >= 10)) return "";
+  const t = store?.trust; if (!t || !(t.tx >= 10)) return "";
   return `<div class="ci-badges"><span class="ci-badge" style="color:#57534e;background:#f5f5f4">${Number(t.tx).toLocaleString("en-PH")} ${store.mode === "salon" || store.mode === "stay" ? "bookings" : "orders"} on TapTayo</span></div>`;
 }
 

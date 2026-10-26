@@ -43,7 +43,8 @@ export function renderTablesPage(root, ctx) {
     <div class="tile" style="margin-top:14px">
       <h3>${single ? "Store QR (print this)" : "Pickup / delivery link (no table)"}</h3>
       <p class="small muted">${single ? "One QR for everything — dine-in, take-out, pickup, delivery, reservations." : "For customers who aren't seated — post it on your Facebook page or print it for the counter."}</p>
-      <div class="row wrap"><span class="code">${esc(base)}</span><button class="btn ghost sm" id="copyBase" type="button">Copy</button><button class="btn ghost sm" id="qrBase" type="button">Show QR</button></div>
+      <div class="row wrap"><span class="code">${esc(base)}</span><button class="btn ghost sm" id="copyBase" type="button">Copy</button><a class="btn ghost sm" target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`https://taptayo.com/s/${store.slug}`)}">📤 Share on Facebook</a></div>
+      <p class="small muted" style="margin:8px 0 0">For Facebook, Messenger and Viber posts use <span class="code">taptayo.com/s/${esc(store.slug)}</span> — it shows your cover photo, name and rating in the post.</p><div><button class="btn ghost sm" id="qrBase" type="button">Show QR</button></div>
     </div>`;
 
   root.querySelector("#copyBase").onclick = () => navigator.clipboard.writeText(base).then(() => toast("Copied"));

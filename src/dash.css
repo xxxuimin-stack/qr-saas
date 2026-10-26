@@ -333,3 +333,10 @@ body.dash .upr ul { margin: 8px 0 12px; padding-left: 18px; font-size: 13px; lin
 @keyframes ttSpin { to { transform: rotate(360deg); } }
 @keyframes ttPulse { 50% { box-shadow: 0 0 34px rgba(250,204,21,.95); } }
 @media (prefers-reduced-motion: reduce) { body.dash .plan-sticker.glow::before, body.dash .upr::before, .upr-go { animation: none; } }
+
+/* Coming soon (roadmap) */
+.rm { margin-top: 20px; }
+.rm-row { display: flex; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line, #eee); }
+.rm-ic { font-size: 24px; width: 36px; text-align: center; flex: none; }
+.rm-body { flex: 1; min-width: 0; }
+.rm-eta { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 8px; background: #FEF3C7; color: #92400E; margin-left: 4px; }

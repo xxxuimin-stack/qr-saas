@@ -107,7 +107,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
       <div class="tile">
         <h3>Business info</h3>
         <div class="form2">
-          <div><label>Business name</label><input name="name" value="${esc(store.name)}" /></div>
+          <div><label>Business name</label>${store.verif?.permit?.status === "approved" ? `<input name="name" value="${esc(store.name)}" readonly style="background:#F3F4F6"/><div class="small muted">🔒 Verified with your business permit — the name is locked. Message support if the permit itself changed.</div>` : `<div class="row" style="gap:6px"><input name="name" value="${esc(store.name)}" ${(Number(store.nameChangedAt) || 0) + 60 * 864e5 > Date.now() ? "readonly style=\"background:#F3F4F6\"" : ""}/><button type="button" class="btn sm ghost" id="renameBtn" ${(Number(store.nameChangedAt) || 0) + 60 * 864e5 > Date.now() ? "disabled" : ""}>Rename</button></div><div class="small muted">${(Number(store.nameChangedAt) || 0) + 60 * 864e5 > Date.now() ? `Renamed ${new Date(store.nameChangedAt).toLocaleDateString("en-PH", { month: "short", day: "numeric" })} · next rename on <b>${new Date(store.nameChangedAt + 60 * 864e5).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}</b>` : "You can rename once every 60 days. Once your business permit is verified, the name is locked."}</div>`}</div>
           <div><label>Tagline (optional)</label><input name="tagline" value="${esc(s.tagline || "")}" placeholder="e.g. Coffee · Pasta · Good vibes" /></div>
           <div><label>Phone</label><input name="phone" value="${esc(store.contact?.phone || "")}" /></div>
           <div><label>Messenger <span class="muted small">(m.me/yourpage)</span></label><input name="cMsgr" value="${esc(store.contact?.messenger || "")}" placeholder="m.me/yourpage" /></div>
@@ -148,7 +148,18 @@ export function renderSettingsPage(root, ctx, opts = {}) {
         <p class="small muted" style="margin:0 0 8px">This is the link customers open (and what your QR codes point to). Store names can be the same as other stores — only the link must be unique.</p>
         <div class="slugrow"><span class="slugbase">/m/</span><input id="slugInput" value="${esc(store.slug || "")}" autocomplete="off" spellcheck="false"/><button class="btn sm" type="button" id="slugSave" disabled>Save link</button></div>
         <div class="small" id="slugMsg" style="margin-top:6px"></div>
-        <p class="small muted" style="margin:6px 0 0">Your old link and old printed QR codes keep working — they forward to the new link. Reprint table QR codes when you can.</p>
+        <p class="small muted" style="margin:6px 0 0">Your old link and old printed QR codes keep working — they forward to the new link. Reprint table QR codes when you can. ${(Number(store.slugChangedAt) || 0) + 30 * 864e5 > Date.now() ? `<b>Next link change: ${new Date(store.slugChangedAt + 30 * 864e5).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}</b>` : "You can change it once every 30 days."}</p>
+      </div>
+      <div class="tile" id="widgetTile">
+        <h3>📣 Booking button for your website &amp; Facebook</h3>
+        <p class="small muted" style="margin:0 0 8px">Let people ${store.mode === "salon" ? "book" : store.mode === "stay" ? "book a stay" : store.mode === "laundry" ? "book a pickup" : "order"} straight from your Facebook page or website.</p>
+        <label>Your link</label><div class="slugrow"><input readonly id="wLink" value="https://taptayo.com/m/${esc(store.slug || "")}?utm_source=facebook"/><button class="btn sm" type="button" data-copy="wLink">Copy</button></div>
+        <details style="margin-top:10px"><summary><b>Facebook page</b> — add a “${store.mode === "salon" || store.mode === "stay" ? "Book now" : "Order now"}” button</summary>
+          <ol class="small" style="margin:6px 0 0;padding-left:18px;line-height:1.7"><li>Open your Facebook page → tap <b>Edit</b> under the cover (or <b>+ Add action button</b>).</li><li>Pick <b>${store.mode === "salon" || store.mode === "stay" ? "Book with you" : "Start order"}</b> → <b>Link to website</b> / <b>Use a link</b>.</li><li>Paste your link above and save. Also put it in your page's <b>About</b> and pin a post with it.</li></ol></details>
+        <details style="margin-top:8px"><summary><b>Website</b> — a floating button (any site: WordPress, Wix, Shopify…)</summary>
+          <div class="row wrap" style="gap:8px;margin:8px 0"><input id="wLabel" value="${store.mode === "salon" ? "Book now" : store.mode === "stay" ? "Book your stay" : store.mode === "laundry" ? "Book a pickup" : "Order now"}" style="max-width:200px"/><input id="wColor" type="color" value="#C62828" style="width:56px;padding:2px"/><select id="wPos" style="max-width:140px"><option value="right">Bottom right</option><option value="left">Bottom left</option></select></div>
+          <textarea id="wCode" readonly rows="3" style="font-family:ui-monospace,monospace;font-size:12.5px;width:100%"></textarea><button class="btn sm" type="button" data-copy="wCode" style="margin-top:6px">Copy code</button>
+          <p class="small muted" style="margin:6px 0 0">Paste it before <code>&lt;/body&gt;</code> (or in a “Custom HTML” block). It opens your TapTayo page in a new tab.</p></details>
       </div>
 
       <div class="tile">
@@ -163,7 +174,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
         <p class="small muted">Choose the look of your customer page. For Halloween, Christmas and other holidays, use <b>Overview → Seasonal theme</b> — one tap on, one tap off.</p>
         <div class="themes" id="themeGrid"></div>
         <label style="margin-top:12px">Menu layout</label>
-        <div class="row wrap" style="gap:8px">${[["list", "☰ List", "name, description, small photo — best for big menus"], ["grid", "▦ Photo grid", "2 big photos per row — best when every item has a photo"], ["compact", "≡ Compact", "names and prices only — fastest to scan"]].map(([k, l, d]) => `<label class="check" style="margin:0;border:1px solid var(--line);border-radius:10px;padding:8px 12px"><input type="radio" name="layout" value="${k}" ${(store.theme?.layout || (mode === "table" ? "grid" : "list")) === k ? "checked" : ""}/> <span><b>${l}</b><br><span class="small muted">${d}</span></span></label>`).join("")}</div>
+        <div class="row wrap" style="gap:8px">${[["list", "☰ List", "name, description, small photo — best for big menus"], ["grid", "▦ Photo grid", "2 big photos per row — best when every item has a photo"], ["compact", "≡ Compact", "names and prices only — fastest to scan"], ["pin", "▥ Pinterest", "photo tiles of different heights, swipe for more photos — best for salons, nails, lashes, photos"]].map(([k, l, d]) => `<label class="check" style="margin:0;border:1px solid var(--line);border-radius:10px;padding:8px 12px"><input type="radio" name="layout" value="${k}" ${(store.theme?.layout === "rows" ? "list" : store.theme?.layout && !(mode === "salon" && store.theme.layout === "list") ? store.theme.layout : mode === "table" ? "grid" : mode === "salon" ? "pin" : "list") === k ? "checked" : ""}/> <span><b>${l}</b><br><span class="small muted">${d}</span></span></label>`).join("")}</div>
         <div class="form2" style="margin-top:8px">
           <div><label>Announcement banner (optional)</label><input name="banner" value="${esc(store.theme?.banner || "")}" placeholder="${esc(resolveTheme(store.theme).banner || "e.g. Buy 1 Take 1 every Friday!")}" /></div>
           <div><label>Custom brand color (optional)</label><div class="row"><input name="primary" type="color" value="${esc(store.theme?.primary || resolveTheme(store.theme).primary)}" style="width:60px;padding:4px;height:42px" /><button class="btn ghost sm" type="button" id="resetColor">Use theme color</button></div></div>
@@ -301,8 +312,9 @@ export function renderSettingsPage(root, ctx, opts = {}) {
             <div><label>How</label><select name="ofMode"><option value="rotate" ${(sl.offers?.mode || "rotate") === "rotate" ? "selected" : ""}>One at a time (rotation) — next staff if no answer</option><option value="race" ${sl.offers?.mode === "race" ? "selected" : ""}>All at once — first to accept gets it</option></select></div>
             <div><label>Time to accept (minutes)</label><input name="ofMin" type="number" min="1" max="15" value="${Math.round((sl.offers?.seconds || 300) / 60)}"/></div>
             <div><label class="check" style="margin-top:30px"><input type="checkbox" name="ofAuto" ${sl.offers?.auto !== false ? "checked" : ""}/> Offer new "Any available" bookings automatically</label></div>
+            <div><label class="check"><input type="checkbox" name="ofNear" ${sl.offers?.nearest !== false ? "checked" : ""}/> Nearest first — staff / freelancers closest to the client (home service) or the shop get the offer first</label></div>
           </div>
-          <p class="small muted">Only staff who are free at that time get the offer. On-call staff must tap "I'm available" first; if they don't answer in time they are set to not available. Staff get a phone notification when they turn on alerts in the staff app.</p>
+          <p class="small muted">Only staff who are free at that time get the offer. On-call staff and freelancers must tap "I'm available" first; if they don't answer in time they are set to not available. Staff get a phone notification when they turn on alerts in the staff app.</p>
           <label class="check"><input type="checkbox" name="slGender" ${sl.genderPick ? "checked" : ""}/> 🚻 Let customers choose a female or male ${store.businessType === "spa" ? "therapist" : "staff"} (set each person's gender in Staff)</label>
           <div id="homeSvcBlock">
           ${place === "home" ? `<p class="small"><b>Home service only</b> — every booking is at the client's place (change in Tools → Advanced → Business setup).</p><input type="checkbox" name="slHome" checked hidden/>` : `<label class="check"><input type="checkbox" name="slHome" ${sl.homeService?.enabled ? "checked" : ""}/> 🏠 Offer home service</label>`}
@@ -679,6 +691,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
         <div class="row wrap" style="gap:8px;margin-top:10px"><button type="button" class="btn ghost sm" id="hrsCopy">Copy Monday to all days</button></div>
         <p class="small muted" style="margin-top:8px">Open past midnight? Set the closing time earlier than the opening time — e.g. <b>6:00 PM to 2:00 AM</b>. A 2nd shift that starts after midnight (e.g. <b>8 AM–8 PM and 12 AM–11 AM</b>) is the <b>next morning</b>: Friday's 12 AM shift = Saturday 12 AM–11 AM.</p>
         <div class="form2" style="margin-top:10px">
+          <div><label class="check" style="margin-top:22px"><input type="checkbox" name="vatReg" ${s.vatRegistered ? "checked" : ""}/> VAT-registered (12% VAT) <span class="small muted">— for the senior / PWD discount</span></label></div>
           <div><label>Your day ends at (for reports &amp; order numbers)</label><select name="dayCutoff">${["00:00", "01:00", "02:00", "03:00", "04:00", "05:00", "06:00"].map((t) => `<option value="${t}" ${(s.businessDayCutoff || "00:00") === t ? "selected" : ""}>${t === "00:00" ? "Midnight (default)" : (Number(t.slice(0, 2))) + ":00 AM — for night shifts"}</option>`).join("")}</select><p class="small muted" style="margin:4px 0 0">Only change this if you're open past midnight: orders before this time count for the previous day.</p></div>
         </div>
       </div>
@@ -872,6 +885,10 @@ export function renderSettingsPage(root, ctx, opts = {}) {
   const tgStat = root.querySelector("#tgStatus");
   const tgRefresh = async () => { try { const r = await call("telegramStatus"); tgStat.innerHTML = r.hasToken ? `Bot: <b>@${esc(r.botName)}</b> ✓ · Chat: ${r.chatId ? `<b>${esc(r.chatTitle || r.chatId)}</b> ✓ — ready` : `<span style="color:#b4423a">not set — tap Detect chat</span>`}` : "No bot token yet."; } catch { tgStat.textContent = ""; } };
   tgRefresh();
+  root.querySelector("#renameBtn")?.addEventListener("click", async (e) => { const name = v("name").value.trim(); if (!name || name === store.name) return toast("Type the new name first"); if (!confirm(`Rename "${store.name}" to "${name}"?\n\nYou can rename again only after 60 days.`)) return; e.target.disabled = true; try { const r = await call("renameStore", { name }); toast(r.same ? "No change" : "Renamed ✓"); store.name = name; reload?.(); } catch (x) { toast(x.message, "error"); e.target.disabled = false; } });
+  { const code = () => { const l = root.querySelector("#wLabel"), c = root.querySelector("#wColor"), p = root.querySelector("#wPos"), t = root.querySelector("#wCode"); if (!t) return; t.value = `<script src="https://taptayo.com/widget.js" data-shop="${store.slug}" data-label="${(l.value || "Book now").replace(/["<>&]/g, "")}" data-color="${c.value}"${p.value === "left" ? ' data-position="left"' : ""} async></script>`; };
+    ["#wLabel", "#wColor", "#wPos"].forEach((sel) => root.querySelector(sel)?.addEventListener("input", code)); code();
+    root.querySelectorAll("#widgetTile [data-copy]").forEach((b) => (b.onclick = async () => { const el = root.querySelector("#" + b.dataset.copy); try { await navigator.clipboard.writeText(el.value); toast("Copied"); } catch { el.select(); document.execCommand("copy"); toast("Copied"); } })); }
   root.querySelector("#tgSave").onclick = async (e) => { e.target.disabled = true; try { const r = await call("saveTelegram", { token: v("tgToken").value.trim() }); v("tgToken").value = ""; toast(`Saved — @${r.botName}`); tgRefresh(); } catch (err) { toast(err.message, "error"); } e.target.disabled = false; };
   root.querySelector("#tgDetect").onclick = async (e) => { e.target.disabled = true; try { const r = await call("telegramDetectChat"); toast(`Connected: ${r.chatTitle || r.chatId}`); tgRefresh(); } catch (err) { toast(err.message, "error"); } e.target.disabled = false; };
   root.querySelector("#tgTest").onclick = async (e) => { e.target.disabled = true; try { await call("telegramTest"); toast("Sent! Check Telegram."); } catch (err) { toast(err.message, "error"); } e.target.disabled = false; };
@@ -959,6 +976,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
     if ((mode === "salon" || mode === "stay") && v("cfMode")) settings.confirm = { mode: v("cfMode").value, minutes: Number(v("cfMinutes").value || 60), messengerLink: v("cfLink").value.trim(), skipReturning: v("cfSkip").checked };
     // These tiles are shown for every business type — save them for every type (was table-only before).
     if (v("dayCutoff")) settings.businessDayCutoff = v("dayCutoff").value || "00:00";
+    if (v("vatReg")) settings.vatRegistered = v("vatReg").checked;
     if (v("shTol")) settings.shifts = { blindCount: true, tolerance: Number(v("shTol").value || 0), externalPos: v("shPos").checked, whoVerify: v("shWho").value, autoEnd: !!v("shAuto").value, autoEndAt: v("shAuto").value || null };
     if (v("smsEnabled")) settings.sms = { enabled: v("smsEnabled").checked, senderName: v("smsSender").value.trim(), optInText: v("smsOptText").value.trim(), quietFrom: v("smsQuietFrom").value || null, quietTo: v("smsQuietTo").value || null };
     if (v("prEnabled")) settings.printing = { enabled: v("prEnabled").checked, paper: Number(v("prPaper").value || 58), header: v("prHeader").value.trim(), footer: v("prFooter").value.trim(), logo: v("prLogo").checked, autoOrder: v("prAutoOrder").checked, autoPaid: v("prAutoPaid").checked, autoStub: v("prAutoStub") ? v("prAutoStub").checked : true, kitchenTicket: v("prKitchen") ? v("prKitchen").checked : false };
@@ -1040,7 +1058,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
         protectClients: v("slProtect") ? v("slProtect").checked : sl.protectClients !== false,
         intake: { enabled: v("slIntake") ? v("slIntake").checked : !!sl.intake?.enabled },
         queue: v("qOn") ? { ...(sl.queue || {}), enabled: v("qOn").checked, maxPeople: Math.max(1, Math.min(50, Number(v("qMax").value) || 8)), maxWaitMin: Math.max(10, Math.min(600, Number(v("qWait").value) || 90)), cutoffMin: Math.max(0, Math.min(240, Number(v("qCut").value) || 0)), graceMin: Math.max(3, Math.min(30, Number(v("qGrace").value) || 10)), callOnCallAt: Math.max(2, Math.min(50, Number(v("qOnCall").value) || 5)), remote: v("qRemote").checked, sms: v("qSms").checked } : (sl.queue || {}),
-        offers: v("ofOn") ? { enabled: v("ofOn").checked, mode: v("ofMode").value === "race" ? "race" : "rotate", seconds: Math.max(1, Math.min(15, Number(v("ofMin").value) || 5)) * 60, auto: v("ofAuto").checked } : (sl.offers || { enabled: false }),
+        offers: v("ofOn") ? { enabled: v("ofOn").checked, mode: v("ofMode").value === "race" ? "race" : "rotate", seconds: Math.max(1, Math.min(15, Number(v("ofMin").value) || 5)) * 60, auto: v("ofAuto").checked, nearest: v("ofNear").checked } : (sl.offers || { enabled: false }),
         slotMinutes: Number(v("slSlot").value || 30), bufferMin: Number(v("slBuffer").value || 0), leadTimeHours: Number(v("slLead").value || 0), cancelHours: Number(v("slCancel").value || 0), graceMin: Number(v("slGrace").value || 15), maxDaysAhead: Number(v("slDays").value || 14), confirmMinutes: Number(v("slConfirm").value || 60), allowAnyone: v("slAnyone").checked, ownerWorks: v("slOwnerWorks").checked, tips: v("slTips").checked, homeService: { ...hs, radiusKm: Math.max(0, Number(v("hsRadius")?.value || 0)), base: (() => { const t = String(v("hsBase")?.value || ""); const m = /(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/.exec(t); return m ? { lat: Number(m[1]), lng: Number(m[2]) } : null; })(), enabled: v("slHome").checked, fee: Number(v("slHomeFee").value || 0), note: v("slHomeNote").value.trim(), travelMin: Math.max(0, Math.min(180, Number(v("hsTravel").value || 0))), minSpend: Number(v("hsMin").value || 0), dpAmount: Number(v("hsDp").value || 0), escort: v("hsEscort") ? v("hsEscort").checked : !!hs.escort, requirePin: v("hsPin") ? v("hsPin").checked : hs.requirePin !== false, requireId: v("hsId") ? v("hsId").checked : hs.requireId !== false, exclusive: v("hsExcl") ? v("hsExcl").checked : hs.exclusive !== false,
           areas: [...root.querySelectorAll("[data-hsarea]")].map((r) => ({ name: r.querySelector("[name=haName]").value.trim().slice(0, 40), fee: Number(r.querySelector("[name=haFee]").value || 0) })).filter((a) => a.name).slice(0, 40),
           days: Object.fromEntries(DAYS.map(([k]) => [k, { on: v("hsOn_" + k).checked, from: v("hsFrom_" + k).value || "09:00", to: v("hsTo_" + k).value || "12:00" }])),
@@ -1052,13 +1070,12 @@ export function renderSettingsPage(root, ctx, opts = {}) {
 
     try {
       await updateDoc(doc(db, "stores", storeId), {
-        name: v("name").value.trim() || store.name,
         theme: {
           preset: selectedTheme,
           primary: customColor ? v("primary").value : null,
           banner: v("banner").value.trim(),
           decor: v("decor").checked,
-          layout: root.querySelector("[name=layout]:checked")?.value || "list",
+          layout: ((v) => (mode === "salon" && v === "list" ? "rows" : v))(root.querySelector("[name=layout]:checked")?.value || "list"), // salons: "rows" = the owner really chose the list
           season: store.theme?.season || null,
         },
         contact: { ...(store.contact || {}), phone: v("phone").value.trim(), address: v("address").value.trim(), messenger: v("cMsgr") ? msgrLink(v("cMsgr").value) : store.contact?.messenger || "", ...(v("cMap") ? { mapUrl: v("cMap").value.trim().slice(0, 400), facebook: v("cFb").value.trim().slice(0, 200), instagram: v("cIg").value.trim().slice(0, 100), tiktok: v("cTt").value.trim().slice(0, 100) } : {}) },

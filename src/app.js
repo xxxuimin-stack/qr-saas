@@ -9,7 +9,7 @@ import { applyTheme, SEASONS } from "./themes.js";
 import { APP_VERSION } from "./version.js";
 import { entitled, limitMode, PRO_FEATURES, FEATURE_TIER, PLANS, planOf, limitsFor, LIMIT_LABEL, UNLIMITED } from "./plans.js";
 import { $, esc, toast, closeModal } from "./ui.js";
-import { onAuthStateChanged, onIdTokenChanged, signOut, signInWithCustomToken } from "firebase/auth";
+import { onAuthStateChanged, onIdTokenChanged, signOut, signInWithCustomToken, sendEmailVerification } from "firebase/auth";
 import { showDeviceBlockedDashboard, ownerIdleGuard, deviceSignIn, savedDevice } from "./device.js";
 import { getDocFromCache, doc, getDoc, updateDoc, serverTimestamp, onSnapshot, collection, getCountFromServer, query, where, getDocs, orderBy, limit, Timestamp } from "firebase/firestore";
 import { branchesAllowed } from "./pages/branches.js";
@@ -28,6 +28,8 @@ import { renderCustomersPage } from "./pages/customers.js";
 import { renderPromosPage } from "./pages/promos.js";
 import { renderFeedbackPage } from "./pages/feedback.js";
 import { renderAnnouncementsPage } from "./pages/announcements.js";
+import { renderFeedPage } from "./pages/feed.js";
+import { renderProsPage } from "./pages/pros.js";
 import { renderBranchesPage, switchTo } from "./pages/branches.js";
 import { renderRoomsPage, renderStaysPage } from "./pages/rooms.js";
 import { renderToolsPage } from "./pages/tools.js";
@@ -197,7 +199,7 @@ function initWizard() {
   const drawSetup = () => {
     if (isFood()) return drawFood();
     const cfg = SETUPS[setupMode()]; if (!cfg) return;
-    $("setupTitle").textContent = cfg.title;
+    $("setupTitle").textContent = wiz.businessType === "spa" ? cfg.title.replace("salon", "spa") : cfg.title;
     const box = $("setupChoices"); box.innerHTML = "";
     cfg.choices.forEach(([k, ic, t, b]) => {
       const btn = document.createElement("button"); btn.type = "button"; btn.className = "type" + (wiz.setup === k ? " active" : "");
@@ -209,12 +211,22 @@ function initWizard() {
     $("ownerWorksBox").classList.toggle("hidden", !(setupMode() === "salon" && wiz.setup === "team"));
     drawPlace();
   };
-  const toDetails = () => { $("ownerBox").classList.toggle("hidden", !needsOwnerProfile()); goStep(3); };
-  $("next1").onclick = () => { if (SETUPS[setupMode()]) { if (!isFood() && !SETUPS[setupMode()].choices.some(([k]) => k === wiz.setup)) wiz.setup = null; drawSetup(); goStep(2); } else { wiz.setup = null; toDetails(); } };
+  const toDetails = () => {
+    $("ownerBox").classList.toggle("hidden", !needsOwnerProfile());
+    const ob = $("ownerBox"); const t = ob?.querySelector("b"), d = ob?.querySelector("p");
+    if (t) t.textContent = isFreelance() ? "Your profile" : "Your staff profile";
+    if (d) d.textContent = isFreelance() ? "Your name is shown to clients. The PIN opens your bookings screen on any phone or tablet." : "You'll use this PIN on the counter and staff screens (for management and to record who did what).";
+    goStep(3);
+  };
+  const isFreelance = () => wiz.businessType === "freelance";
+  $("next1").onclick = () => {
+    // freelancer / creator: always just you (no "how do you run your salon?") — clients book you, you can go to them
+    if (isFreelance()) { wiz.setup = "solo"; wiz.ownerWorks = true; wiz.place = "both"; toDetails(); return; }
+    if (SETUPS[setupMode()]) { if (!isFood() && !SETUPS[setupMode()].choices.some(([k]) => k === wiz.setup)) wiz.setup = null; drawSetup(); goStep(2); } else { wiz.setup = null; toDetails(); } };
   $("ownerWorks").onchange = (e) => (wiz.ownerWorks = e.target.checked);
   $("back2s").onclick = () => goStep(1);
   $("next2s").onclick = toDetails;
-  $("back2").onclick = () => (SETUPS[setupMode()] ? goStep(2) : goStep(1));
+  $("back2").onclick = () => (SETUPS[setupMode()] && !isFreelance() ? goStep(2) : goStep(1));
   $("back3").onclick = () => goStep(3);
   $("bizName").oninput = (e) => ($("slugPreview").textContent = "/m/" + (slugify(e.target.value) || "…"));
   $("next2").onclick = () => {
@@ -257,9 +269,27 @@ function initWizard() {
       box.querySelector("#otpBack").onclick = (e) => { e.preventDefault(); box.remove(); resolve(false); goStep(3); };
     });
   };
+  // email + password sign-ups confirm their email first (free; Google accounts are already verified)
+  const emailStep = () => {
+    const u = currentUser; if (addingBusiness || !u || u.emailVerified || !(u.providerData || []).some((x) => x.providerId === "password")) return Promise.resolve(true);
+    const send = () => sendEmailVerification(u, { url: `${location.origin}/app/` }).catch((e) => { if (!/too-many/.test(e.code || "")) throw e; });
+    return new Promise((resolve) => {
+      let box = document.getElementById("evBox"); box?.remove();
+      box = document.createElement("div"); box.id = "evBox"; box.className = "tile"; box.style.cssText = "margin-top:12px;border:2px solid var(--primary,#C62828)";
+      box.innerHTML = `<b>📧 Confirm your email</b><p class="small muted" style="margin:4px 0 8px">We sent a link to <b>${esc(u.email)}</b>. Open it (check Spam / Promotions too), then come back and tap the button.</p>
+        <div class="row wrap" style="gap:8px"><button class="btn" type="button" id="evDone">I've confirmed it</button><button class="btn ghost" type="button" id="evResend">Send the link again</button></div><div id="evMsg" class="small" style="margin-top:6px;color:#B42318"></div>`;
+      $("review").after(box);
+      const msg = (t, ok) => { const m = box.querySelector("#evMsg"); m.style.color = ok ? "#15803D" : "#B42318"; m.textContent = t; };
+      send().catch((e) => msg(e.message));
+      box.querySelector("#evResend").onclick = async () => { try { await sendEmailVerification(u, { url: `${location.origin}/app/` }); msg("Sent again ✓", true); } catch (e) { msg(/too-many/.test(e.code || "") ? "Please wait a minute before asking again." : e.message); } };
+      box.querySelector("#evDone").onclick = async (e) => { e.target.disabled = true; await u.reload().catch(() => {}); if (u.emailVerified) { await u.getIdToken(true); box.remove(); resolve(true); } else { msg("Not confirmed yet — open the link in the email first."); e.target.disabled = false; } };
+    });
+  };
   $("createBtn").onclick = async () => {
     const btn = $("createBtn");
     btn.disabled = true;
+    btn.textContent = "Confirm your email…";
+    try { await emailStep(); } catch (err) { wizMsg(err.message); btn.disabled = false; btn.textContent = "Create my store"; return; }
     btn.textContent = "Checking your number…";
     try { if (!(await otpStep())) { btn.disabled = false; btn.textContent = "Create my store"; return; } }
     catch (err) { wizMsg(err.message); btn.disabled = false; btn.textContent = "Create my store"; if (/mobile number/i.test(err.message)) goStep(3); return; }
@@ -301,6 +331,8 @@ const PAGES = {
   customers:    { title: "Customers",     icon: "👥", render: renderCustomersPage, ownerOnly: true },
   feedback:     { title: "Feedback",      icon: "⭐", render: renderFeedbackPage, ownerOnly: true, pro: "feedback" },
   announcements:{ title: "Announcements", icon: "📣", render: renderAnnouncementsPage, ownerOnly: true, pro: "announcements" },
+  feed:         { title: "Explore feed", icon: "🌏", render: renderFeedPage, ownerOnly: true },
+  pros:         { title: "Freelancers", icon: "🧑‍🎨", render: renderProsPage, ownerOnly: true, onlyMode: "salon" },
   branches:     { title: "Branches",      icon: "🏬", render: renderBranchesPage, ownerOnly: true },
   staff:        { title: "Staff",         icon: "👥", render: (root, c) => renderSettingsPage(root, c, { group: "team", sec: "staff" }), ownerOnly: true, nav: true },
   tools:        { title: "Tools",         icon: "🧰", render: (root, c, param) => renderToolsPage(root, c, param), ownerOnly: true, nav: true },
@@ -619,11 +651,11 @@ async function drawSideR(store) {
   const st = (k) => (k === "ownerId" && store.kycAt) || v[k]?.status === "approved" ? "✅" : v[k]?.status === "pending" ? "⏳" : v[k]?.status === "more" ? "📎" : v[k]?.status === "expired" ? "⚠️" : "➕";
   const tips = ["Put your QR at the counter and on every table — most orders come from the QR.", "Reply to reviews: shops that reply get more repeat customers.", "Turn on reminders to cut no-shows.", "Post an announcement for holidays and new items — customers see it on your page.", "Share your page link on your Facebook page's button (Book now / Order)."];
   const esc2 = (x) => String(x ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  el.innerHTML = `<section class="tile sr-box"><h3>🔗 Your page</h3><div class="sr-share">${qr}<div><div class="small muted" style="word-break:break-all">${esc2(link.replace("https://", ""))}</div><div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn sm" type="button" data-copy>Copy link</button><a class="btn ghost sm" href="/m/${esc2(store.slug)}" target="_blank" rel="noopener">Open</a></div></div></div></section>
+  el.innerHTML = `<section class="tile sr-box"><h3>🔗 Your page</h3><div class="sr-share">${qr}<div><div class="small muted" style="word-break:break-all">${esc2(link.replace("https://", ""))}</div><div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn sm" type="button" data-copy>Copy link</button><a class="btn ghost sm" target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`https://taptayo.com/s/${store.slug}`)}">📤 Share on Facebook</a><a class="btn ghost sm" href="/m/${esc2(store.slug)}" target="_blank" rel="noopener">Open</a></div></div></div></section>
     <section class="tile sr-box"><h3>✔ Badges</h3>${KL.map(([k, l]) => `<div class="row between small" style="padding:3px 0"><span>${l}</span><span>${st(k)}</span></div>`).join("")}<a class="btn ghost sm" href="#settings" style="margin-top:8px">Get verified</a></section>
     <section class="tile sr-box"><h3>💡 Tip</h3><p class="small" style="margin:0">${esc2(tips[new Date().getDate() % tips.length])}</p></section>
     <section class="tile sr-box"><h3>💬 Need help?</h3><p class="small muted" style="margin:0 0 8px">We reply within 24 hours — no calls needed.</p><button class="btn ghost sm" type="button" data-help>Message TapTayo</button></section>`;
-  el.querySelector("[data-copy]")?.addEventListener("click", async (e) => { try { await navigator.clipboard.writeText(link); e.target.textContent = "✓ Copied"; } catch {} });
+  el.querySelector("[data-copy]")?.addEventListener("click", async (e) => { try { await navigator.clipboard.writeText(`https://taptayo.com/s/${store.slug}`); /* share link: shows the cover photo + name on Facebook / Messenger */ e.target.textContent = "✓ Copied"; } catch {} });
   el.querySelector("[data-help]")?.addEventListener("click", () => document.getElementById("helpBtn")?.click());
   drawUpgrade();
 }

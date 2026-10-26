@@ -1023,3 +1023,57 @@ html.c-big .c-btn, html.c-big button.chip { min-height: 48px; }
   html.dsk .s-rooms { grid-template-columns: repeat(3, 1fr); }
   html.dsk .c-callbtn { right: calc(max(0px, (100vw - 1680px) / 2) + 16px + 310px + 18px + 16px); }
 }
+
+/* shop address under the name */
+.ci-where { display: flex; align-items: center; gap: 8px; margin-top: 6px; font-size: .84rem; color: var(--smoke); text-decoration: none; max-width: 100%; }
+.ci-where span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ci-where b { flex: none; color: var(--primary); font-weight: 600; }
+.s-hero .ci-where, .s-hero .ci-where b { color: #fff; }
+.s-hero .ci-where b { text-decoration: underline; }
+
+/* "How would you like to order?" — one dropdown + Start */
+.c-orderpick { display: flex; gap: 8px; max-width: 520px; margin: 0 auto; }
+.c-orderpick select { flex: 1; min-height: 50px; font-weight: 600; border-radius: 14px; padding: 0 14px; background: #fff; }
+.c-orderpick .c-btn { min-height: 50px; border-radius: 14px; white-space: nowrap; }
+.c-ordersub { text-align: center; margin: 8px auto 0; max-width: 520px; }
+.c-lands .c-linkbtn, .c-body > div > .c-linkbtn { display: block; margin: 14px auto 0; }
+.c-ordertype { margin: 12px 0 4px; }
+.c-ordertype label { display: block; font-weight: 700; font-size: .95rem; margin-bottom: 6px; }
+.c-ordertype .c-ordersub { text-align: left; margin: 6px 2px 0; }
+.c-onlysvc { flex: 1; min-height: 46px; display: flex; align-items: center; padding: 0 14px; border: 1px solid #D1D5DB; border-radius: 14px; font-weight: 600; }
+.c-lastorder { display: flex; align-items: center; gap: 12px; justify-content: space-between; background: #FFF7ED; border: 1px solid #FED7AA; border-radius: 16px; padding: 10px 12px; margin: 10px 0; }
+.c-lastorder span { display: grid; min-width: 0; } .c-lastorder small { color: var(--smoke); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-lastorder .c-btn { min-height: 40px; padding: 8px 14px; white-space: nowrap; }
+.c-ordertype .c-orderpick { margin: 0; max-width: none; }
+
+/* ---------- Pinterest layout (salons, spas, freelancers by default) ---------- */
+.c-catbody.lay-pin { display: block; column-count: 2; column-gap: 12px; padding-top: 12px; padding-bottom: 14px; }
+@media (min-width: 700px) { .c-catbody.lay-pin { column-count: 3; } }
+html.dsk .c-catbody.lay-pin { column-count: 3; }
+@media (min-width: 1500px) { html.dsk .c-catbody.lay-pin { column-count: 4; } }
+.c-pin { break-inside: avoid; display: grid; gap: 2px; margin: 0 0 16px; cursor: pointer; }
+.c-pin.out { opacity: .55; }
+.c-pinph { position: relative; border-radius: 16px; overflow: hidden; background: var(--mist); }
+.c-pinph > img, .c-pinph .c-swipe-in img { width: 100%; height: auto; display: block; aspect-ratio: var(--ar, auto); object-fit: cover; }
+.c-pinno { aspect-ratio: 4 / 3; display: grid; place-items: center; font-size: 34px; }
+.c-pinpr { position: absolute; left: 8px; top: 8px; background: #fff; color: var(--ink); font-weight: 800; font-size: .78rem; border-radius: 999px; padding: 3px 9px; box-shadow: 0 2px 6px rgba(0,0,0,.15); z-index: 2; }
+.c-pinbook { position: absolute; right: 8px; bottom: 8px; z-index: 2; border: 0; background: var(--primary); color: #fff; font-weight: 700; font-size: .78rem; border-radius: 999px; padding: 6px 12px; box-shadow: 0 2px 8px rgba(0,0,0,.2); }
+.c-pinph .c-add { position: absolute; right: 8px; bottom: 8px; z-index: 2; }
+.c-pinn { font-size: .92rem; line-height: 1.3; margin-top: 6px; font-weight: 600; }
+.c-pinm { font-size: .78rem; color: var(--smoke); }
+/* swipe photos */
+.c-swipe { position: relative; }
+.c-swipe-in { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+.c-swipe-in::-webkit-scrollbar { display: none; }
+.c-swipe-in img { flex: 0 0 100%; width: 100%; scroll-snap-align: center; object-fit: cover; }
+.c-pinph .c-swipe-in { align-items: flex-start; }
+
+.c-dots { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; justify-content: center; gap: 4px; pointer-events: none; z-index: 1; }
+.c-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.55); box-shadow: 0 0 2px rgba(0,0,0,.3); }
+.c-dots i.on { background: #fff; }
+.c-swn { position: absolute; right: 8px; top: 8px; background: rgba(0,0,0,.5); color: #fff; font-size: .7rem; border-radius: 999px; padding: 2px 7px; z-index: 1; }
+.c-pinph .c-swn { display: none; }
+.c-swipe.hero { margin: -4px 0 12px; border-radius: 14px; overflow: hidden; }
+.c-swipe.hero .c-swipe-in img { aspect-ratio: 4 / 3; }
+html.dsk .c-catbody.lay-pin { display: block !important; column-count: 3; column-gap: 14px; }
+@media (min-width: 1500px) { html.dsk .c-catbody.lay-pin { column-count: 4; } }

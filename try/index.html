@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" href="/logo/favicon.svg" type="image/svg+xml" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#FFFBF5" />
+  <title>Try TapTayo · Live demo</title>
+  <meta name="description" content="Tap through a real day at a staycation, café, salon, laundry or photographer — see what the customer, staff and owner each see. Nothing to install." />
+  <meta property="og:title" content="Try TapTayo — tap through a real day" />
+  <meta property="og:description" content="Guest books → caretaker checks in → cleaner gets the alert → owner sees it live. Try it in your browser." />
+  <meta property="og:image" content="https://taptayo.com/demo/stay/pool-tropical.jpg" />
+  <link rel="stylesheet" href="/src/fonts.css" />
+</head>
+<body>
+  <header class="ty-top">
+    <a class="ty-logo" href="/"><img src="/logo/favicon.svg" alt="" width="28" height="28" />TapTayo</a>
+    <span class="ty-live"><i></i>Live demo · nothing here is real or charged</span>
+    <span class="ty-sp"></span>
+    <a class="ty-cta" id="ctaTop" href="/login/?signup=1">Start free →</a>
+  </header>
+  <nav class="ty-scenes" id="scenes" aria-label="Business types"></nav>
+  <main class="ty-main">
+    <aside class="ty-guide" id="guide" aria-live="polite"></aside>
+    <section class="ty-stage">
+      <div class="ty-roletabs" id="roletabs" role="tablist"></div>
+      <div class="ty-mini" id="mini" aria-live="polite"></div>
+      <div class="ty-phones" id="phones"></div>
+    </section>
+  </main>
+  <section class="ty-plans" id="plans"></section>
+  <script type="module" src="/src/try/main.js"></script>
+</body>
+</html>

@@ -1,6 +1,5 @@
 // Image upload to Firebase Storage, with client-side resize to keep files fast and small
-import { storage } from "./firebase.js";
-import { ref, uploadBytesResumable, getDownloadURL } from "firebase/storage";
+let SM = null; const sm = async () => (SM ||= await import("./storage.js")); // Storage SDK loads on the first upload only
 
 // ---- upload progress: a floating pill shows "Uploading photo… 42%" for every upload in progress ----
 const live = new Map(); let nUp = 0;
@@ -18,7 +17,8 @@ function drawPill(doneMsg) {
   el.style.display = "flex";
 }
 /** uploadBytes with progress (shown in the pill and passed to onProgress) */
-export function uploadBytes(r, blob, meta, onProgress) {
+export async function uploadBytes(r, blob, meta, onProgress) {
+  const { uploadBytesResumable } = await sm();
   const id = ++nUp; live.set(id, 0); drawPill();
   return new Promise((resolve, reject) => {
     const task = uploadBytesResumable(r, blob, meta);
@@ -59,6 +59,7 @@ export function resizeImage(file, max = 1200, quality = 0.85, { webp = false } =
  * returns download URL
  */
 export async function uploadImage(storeId, name, file, { max = 1200 } = {}) {
+  const { storage, ref, getDownloadURL } = await sm();
   if (!file.type.startsWith("image/")) throw new Error("Image files only (JPG/PNG).");
   const blob = await resizeImage(file, max, 0.82, { webp: name !== "logo" }); // smaller on mobile data; the logo stays JPEG/PNG (QR posters / PDFs embed it)
   const ext = blob.type === "image/png" ? "png" : blob.type === "image/webp" ? "webp" : "jpg";
@@ -72,6 +73,7 @@ export async function uploadImage(storeId, name, file, { max = 1200 } = {}) {
 
 /** Menu/service photo: uploads a full image (800px) + a small thumbnail (360px) for fast lists. Returns { url, thumbUrl } */
 export async function uploadItemImage(storeId, id, file) {
+  const { storage, ref, getDownloadURL } = await sm();
   if (!file.type.startsWith("image/")) throw new Error("Image files only (JPG/PNG).");
   const [full, thumb] = await Promise.all([resizeImage(file, 800, 0.8, { webp: true }), resizeImage(file, 360, 0.72, { webp: true })]);
   const ext = (b) => (b.type === "image/webp" ? "webp" : b.type === "image/png" ? "png" : "jpg");
@@ -82,6 +84,7 @@ export async function uploadItemImage(storeId, id, file) {
 
 /** Customer upload (feedback photo / incident proof) — stores/{storeId}/customer/{uid}/... */
 export async function uploadCustomerImage(storeId, uid, file, { max = 1200 } = {}) {
+  const { storage, ref, getDownloadURL } = await sm();
   if (!file.type.startsWith("image/")) throw new Error("Image files only (JPG/PNG).");
   const blob = await resizeImage(file, max);
   const r = ref(storage, `stores/${storeId}/customer/${uid}/${Date.now()}.jpg`);
@@ -91,6 +94,7 @@ export async function uploadCustomerImage(storeId, uid, file, { max = 1200 } = {
 
 /** Sensitive customer upload (ID, payment proof) → private folder; returns "priv:<path>" (never a public URL) */
 export async function uploadPrivateImage(storeId, uid, file, { max = 1200, name = "" } = {}) {
+  const { storage, ref, getDownloadURL } = await sm();
   if (!file.type.startsWith("image/")) throw new Error("Image files only (JPG/PNG).");
   const blob = await resizeImage(file, max);
   const path = `stores/${storeId}/private/${uid}/${name || Date.now()}.jpg`;

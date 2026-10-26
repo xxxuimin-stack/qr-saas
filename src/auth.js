@@ -12,14 +12,19 @@ import { call } from "./firebase.js";
 
 const $ = (id) => document.getElementById(id);
 let mode = "login"; // login | signup
-let role = (() => { try { const t = new URLSearchParams(location.search).get("type") || ""; const r = new URLSearchParams(location.search).get("role") || ""; return ["client", "creator", "business"].includes(r) ? r : t === "freelance" ? "creator" : "business"; } catch { return "business"; } })();
+// every new sign-up is a personal account first (→ My TapTayo). A business or freelancer / creator account is added from there.
+// What they came for (homepage "Start free", ?type=salon, ?role=creator) is remembered so My TapTayo can offer it first.
+{ try { const q = new URLSearchParams(location.search); const t = q.get("type") || "", r = q.get("role") || ""; const intent = r === "creator" || t === "freelance" ? "creator" : r === "business" || (t && /^[a-z]+$/.test(t)) ? `business:${/^[a-z]+$/.test(t) && t !== "freelance" ? t : ""}` : ""; if (intent) localStorage.setItem("taptayo:intent", intent); } catch {} }
 const ROLE_TXT = { client: ["Your name", "Juan dela Cruz", "Create your free account", "Book shops, hire creators and see all your bookings in one place."], creator: ["Your creator / page name", "Kain Tayo with Bea", "Let's set up your creator page", "Your rate card, offers and bookings — free to start."], business: ["Shop name", "Kapehan sa Kanto", "Let's set up your shop", "Free account. Takes about 10 minutes."] };
+let role = "client";
 function drawRole() {
-  document.querySelectorAll("[data-role]").forEach((b) => { const on = b.dataset.role === role; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); });
-  const t = ROLE_TXT[role]; $("shopLabel").textContent = t[0]; $("a-shop").placeholder = t[1];
-  $("adultField").classList.toggle("hidden", role !== "creator");
-  if (mode === "signup") { $("authTitle").textContent = t[2]; $("authSub").textContent = t[3]; $("ctaText").textContent = "Create free account"; }
+  $("roles")?.closest(".f")?.classList.add("hidden"); $("adultField")?.classList.add("hidden");
+  if ($("shopLabel")) { $("shopLabel").textContent = "Your name"; $("a-shop").placeholder = "Juan dela Cruz"; $("a-shop").autocomplete = "name"; }
+  if (mode === "signup") { $("authTitle").textContent = "Create your free account"; $("authSub").textContent = "One account to book, run a business or work as a freelancer — add those after."; $("ctaText").textContent = "Create free account"; }
   try { localStorage.setItem("taptayo:role", role); if (role === "creator") localStorage.setItem("taptayo:edition", "freelance"); } catch {}
+  return;
+  $("roles")?.closest(".f")?.classList.add("hidden"); // no role picker — add a business / freelancer account after sign-up
+  if (mode === "signup") { $("shopLabel").textContent = "Your name"; $("a-shop").placeholder = "Juan dela Cruz"; $("adultField").classList.add("hidden"); $("authTitle").textContent = "Create your TapTayo account"; $("authSub").textContent = "Free. Next you can add your business or freelancer page."; $("ctaText").textContent = "Create free account"; }
 }
 let showPw = false;
 
@@ -28,8 +33,17 @@ const nextUrl = new URLSearchParams(location.search).get("next");
 let deviceSignedOut = false;
 let checking = false;
 const safeNext = nextUrl && nextUrl.startsWith("/") ? nextUrl : "/app/";
+// on the homepage the same card sits on the right: someone already logged in isn't sent away — they get a shortcut instead
+const EMBED = document.body.dataset.authEmbed === "home"; let acted = false;
+async function showLoggedIn(user) {
+  const card = document.getElementById("login"); if (!card) return;
+  card.innerHTML = `<div><h2>Welcome back${user.displayName ? ", " + user.displayName.split(" ")[0].replace(/[<>&"]/g, "") : ""}!</h2><p class="sub">You're logged in as ${String(user.email || "").replace(/[<>&"]/g, "")}.</p></div><a class="primary" id="goMine" href="/app/" style="display:flex;align-items:center;justify-content:center;text-decoration:none">Open my TapTayo →</a><button type="button" class="google" id="outBtn">Use another account</button>`;
+  try { document.getElementById("goMine").href = await roleNext(user); } catch {}
+  document.getElementById("outBtn").onclick = () => signOut(auth).then(() => location.reload());
+}
 onAuthStateChanged(auth, async (user) => {
   if (!user || user.isAnonymous || checking) return;
+  if (EMBED && !acted) { const c = (await user.getIdTokenResult()).claims; if (c.role !== "device") showLoggedIn(user); return; }
   // a shared tablet (device login) landed here to log in as the owner: sign the device out first
   const claims = (await user.getIdTokenResult()).claims;
   if (claims.role === "device") { if (!deviceSignedOut) { deviceSignedOut = true; await signOut(auth); } return; }
@@ -54,16 +68,18 @@ async function roleNext(user) {
   if (nextUrl && nextUrl.startsWith("/")) return safeNext;
   try {
     if (mode === "signup" || localStorage.getItem("taptayo:newRole")) {
-      const r = mode === "signup" ? role : localStorage.getItem("taptayo:newRole");
-      await call("accountSetup", { role: r, name: $("a-shop")?.value.trim() || user.displayName || "", adult: !!$("a-adult")?.checked });
+      // every new sign-up starts as a personal account and lands on My TapTayo; there they add a business or a freelancer account.
+      // What they came for (homepage button / link type) is remembered so My TapTayo puts that option first.
+      try { if (role !== "client") localStorage.setItem("taptayo:want", role); } catch {}
+      await call("accountSetup", { role: "client", name: $("a-shop")?.value.trim() || user.displayName || "" });
       localStorage.removeItem("taptayo:newRole");
-      if (r === "client") return "/me/";
+      return "/me/";
     }
     const a = await call("myAccount", {});
     if (a.hasStore) return "/app/";
-    if ((a.roles || []).includes("client") && !(a.roles || []).some((x) => x !== "client")) return "/me/";
+    return "/me/";
   } catch (e) { console.warn("role", e); }
-  return "/app/";
+  return "/me/";
 }
 // Opened the 2-step link but not logged in on this browser → ask to log in here to finish
 if (linkCode()) setTimeout(() => { if (!auth.currentUser) showMsg("Log in on this browser to finish confirming your login.", "warn"); }, 1500);
@@ -76,8 +92,8 @@ function setMode(next) {
   $("nameField").classList.toggle("hidden", !signup);
   $("signupNote").classList.toggle("hidden", !signup);
   $("forgot").classList.toggle("hidden", signup);
-  $("authTitle").textContent = signup ? "Let's set up your shop" : "Welcome back!";
-  $("authSub").textContent = signup ? "Free account. Takes about 10 minutes." : "Let's check today's orders.";
+  $("authTitle").textContent = signup ? "Create your TapTayo account" : "Welcome back!";
+  $("authSub").textContent = signup ? "Free. Next you can add your business or freelancer page." : "Good to see you again.";
   $("ctaText").textContent = signup ? "Create free account" : "Log in";
   $("password").placeholder = signup ? "At least 8 characters" : "Your password";
   $("password").autocomplete = signup ? "new-password" : "current-password";
@@ -98,7 +114,7 @@ $("pwToggle").onclick = () => {
 {
   const q = new URLSearchParams(location.search);
   const type = q.get("type");
-  if (type && /^[a-z]+$/.test(type)) try { localStorage.setItem("taptayo:edition", type); } catch {}
+  if (type && /^[a-z]+$/.test(type)) try { localStorage.setItem("taptayo:edition", type === "freelance" ? "freelance" : type); } catch {}
   setMode(q.get("signup") ? "signup" : "login");
 }
 
@@ -123,12 +139,12 @@ function friendly(err) {
 }
 
 $("authForm").onsubmit = async (e) => {
+  acted = true;
   e.preventDefault();
   const email = $("email").value.trim();
   const password = $("password").value;
   if (!email) { $("email").focus(); return showMsg("Enter your email."); }
   if (password.length < (mode === "signup" ? 8 : 6)) { $("password").focus(); return showMsg(mode === "signup" ? "Use at least 8 characters for your password." : "Enter your password."); }
-  if (mode === "signup" && role === "creator" && !$("a-adult").checked) return showMsg("Creators on TapTayo must be 18 or older — please confirm.");
   const btn = $("submitBtn");
   btn.disabled = true;
   showMsg("");
@@ -149,9 +165,8 @@ $("authForm").onsubmit = async (e) => {
 };
 
 $("googleBtn").onclick = async () => {
+  acted = true;
   showMsg("");
-  if (mode === "signup" && role === "creator" && !$("a-adult").checked) return showMsg("Creators on TapTayo must be 18 or older — please confirm.");
-  if (mode === "signup") { const shop = $("a-shop").value.trim(); if (shop) try { localStorage.setItem("taptayo:shopName", shop); } catch {} }
   try {
     await signInWithPopup(auth, googleProvider);
   } catch (err) {

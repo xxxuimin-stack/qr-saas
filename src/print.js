@@ -46,6 +46,7 @@ export function printReceipt(store, orders, { cur = "PHP", cashTendered = null, 
     <hr/>${lines.join("")}<hr/>
     ${disc ? `<div class="row"><span>Promo savings</span><span>-${money(disc, cur)}</span></div>` : ""}
     ${vouch ? `<div class="row"><span>Voucher</span><span>-${money(vouch, cur)}</span></div>` : ""}
+    ${(() => { const sd = list.reduce((a, o) => a + (o.discounts?.senior || 0), 0); const S = list.find((o) => o.senior)?.senior; return sd ? `<div class="row"><span>Senior / PWD discount</span><span>-${money(sd, cur)}</span></div>${(S?.ids || []).map((x) => `<div class="row sm"><span>${x.kind === "pwd" ? "PWD" : "SC"} · ${esc(x.name)}</span><span>ID ${esc(x.id)}</span></div>`).join("")}${S?.vatExempt ? `<div class="row sm"><span>VAT-exempt sale</span><span>${money(S.vatExempt, cur)}</span></div>` : ""}<div class="row sm"><span>Signature: ______________</span><span></span></div>` : ""; })()}
     ${fee ? `<div class="row"><span>Delivery fee</span><span>${money(fee, cur)}</span></div>` : ""}
     ${small ? `<div class="row"><span>Small-order fee</span><span>${money(small, cur)}</span></div>` : ""}
     <div class="row big"><span>TOTAL</span><span>${money(total, cur)}</span></div>

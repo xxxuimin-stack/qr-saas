@@ -1,5 +1,6 @@
 // STAY / AIRBNB — customer side: rooms, photo gallery by area, calendar booking (ID + waiver + signature + downpayment),
 // and the guest status page (countdowns, requests, reschedule, extend, check-out, feedback).
+import { whereLine } from "./addrpin.js";
 import { doc, onSnapshot } from "firebase/firestore";
 import { signaturePad, signAndUploadWaiver } from "./waiver.js";
 import { msgrField, readMsgr } from "./msgr.js";
@@ -59,7 +60,7 @@ function renderHome(keep) {
   C.app.innerHTML = "";
   const root = html(`<div class="c-page s-page">
     <header class="s-hero" style="${store.coverUrl ? `background-image:linear-gradient(180deg,rgba(0,0,0,.1),rgba(0,0,0,.65)),url('${bg(store.coverUrl)}')` : ""}">
-      <div class="s-hero-in">${store.logoUrl ? `<img class="s-logo" src="${esc(store.logoUrl)}" alt=""/>` : ""}<h1>${nameWithBadge(store)}</h1>${store.tagline ? `<p>${esc(store.tagline)}</p>` : ""}${trustChips(store)}
+      <div class="s-hero-in">${store.logoUrl ? `<img class="s-logo" src="${esc(store.logoUrl)}" alt=""/>` : ""}<h1>${nameWithBadge(store)}</h1>${store.tagline ? `<p>${esc(store.tagline)}</p>` : ""}${whereLine(store)}${trustChips(store)}
         <div class="s-chips"><span>🕑 Check-in ${fmt12(store.stay?.checkIn)}</span><span>Check-out ${fmt12(store.stay?.checkOut)}</span>${fb.count ? `<span>★ ${fb.avg} (${fb.count})</span>` : ""}</div></div>
     </header>
     <div class="s-body">

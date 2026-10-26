@@ -97,6 +97,7 @@ export function renderOrdersPage(root, ctx) {
     const acts = card.querySelector("[data-acts]");
     const set = (patch) => updateDoc(doc(col, o.id), { ...patch, updatedAt: serverTimestamp() }).catch((e) => toast(e.message, "error"));
 
+    { const rb = html(`<button class="btn ghost sm" title="Report or block this customer">🚩</button>`); rb.onclick = () => import("../clientreport.js").then((m) => m.openClientActions({ kind: "order", id: o.id, storeId, name: o.customer?.name || "" })); acts.appendChild(rb); }
     if (o.status === "cancelled") return card;
     if (o.status === "unconfirmed") {
       const b = html(`<button class="btn sm" type="button">✅ Confirmed</button>`); b.onclick = () => set({ status: store.mode === "pickup" ? "received" : "pending", confirmedAt: serverTimestamp() }); acts.appendChild(b);

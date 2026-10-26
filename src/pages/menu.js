@@ -232,7 +232,9 @@ export function renderMenuPage(root, ctx) {
               <input name="imageUrl" value="${esc(it?.imageUrl || "")}" placeholder="…or paste an image URL" />
               <div class="small muted" data-upstatus></div>
             </div>
-          </div></div>
+          </div>
+          <label style="margin-top:10px">More photos <span class="small muted">(up to 4 — customers swipe through them)</span></label>
+          <div class="row wrap" data-more style="gap:8px;align-items:center"></div></div>
         <div class="span2">
           <div class="row between"><label style="margin:0">Options / add-ons</label><button class="btn ghost sm" type="button" data-addopt>+ Option group</button></div>
           <p class="small muted">e.g. Size (16oz +0, 22oz +20), Add-ons (Extra shot +30, Oat milk +25)</p>
@@ -283,6 +285,20 @@ export function renderMenuPage(root, ctx) {
       try { const url = await uploadImage(storeId, `plating-${it?.id || Date.now()}`, f, { max: 900 }); body.querySelector("[name=platingPhoto]").value = typeof url === "string" ? url : url?.url || ""; toast("Plating photo uploaded"); } catch (err) { toast(err.message, "error"); }
     });
     let photoJob = null;
+    // extra photos (swipe on the customer page)
+    let morePics = [...(it?.photos || [])].slice(0, 4);
+    const drawMore = () => {
+      const box = body.querySelector("[data-more]");
+      box.innerHTML = morePics.map((u, i) => `<span style="position:relative"><img src="${esc(u)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;display:block"/><button type="button" class="btn ghost sm" data-rmpic="${i}" style="position:absolute;top:-8px;right:-8px;padding:1px 6px">✕</button></span>`).join("")
+        + (morePics.length < 4 ? `<label class="btn ghost sm" style="cursor:pointer">📷 Add<input type="file" accept="image/*" multiple data-morefile hidden/></label>` : "") + `<span class="small muted" data-morest></span>`;
+      box.querySelectorAll("[data-rmpic]").forEach((b) => (b.onclick = () => { morePics.splice(Number(b.dataset.rmpic), 1); drawMore(); }));
+      box.querySelector("[data-morefile]")?.addEventListener("change", async (e) => {
+        const files = [...e.target.files].slice(0, 4 - morePics.length); const st = box.querySelector("[data-morest]");
+        photoJob = (async () => { for (const f of files) { st.textContent = "⏳ Uploading…"; try { const { url } = await uploadItemImage(storeId, `${it?.id || "new"}_p${Date.now()}`, f); morePics.push(url); } catch (x) { toast(x.message || "Upload failed", "error"); } } drawMore(); })();
+        await photoJob; photoJob = null;
+      });
+    };
+    drawMore();
     body.querySelector("[data-file]").onchange = async (e) => {
       const f = e.target.files[0]; if (!f) return;
       const st = body.querySelector("[data-upstatus]"); st.className = "upstatus busy"; st.textContent = "⏳ Uploading photo… don't close this yet";
@@ -316,6 +332,7 @@ export function renderMenuPage(root, ctx) {
         categoryId: g("categoryId").value,
         description: g("description").value.trim(),
         imageUrl: g("imageUrl").value.trim() || null,
+        photos: morePics,
         thumbUrl: body.dataset.thumb && g("imageUrl").value.trim() ? body.dataset.thumb : (g("imageUrl").value.trim() === (it?.imageUrl || "") ? it?.thumbUrl || null : null),
         unit: g("unit")?.value || "piece",
         station: g("station")?.value || null,

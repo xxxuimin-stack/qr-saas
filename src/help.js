@@ -12,7 +12,8 @@ function draw() {
   if (q) { list.innerHTML = rows.length ? rows.map(item).join("") : `<p>No answer found — tap “Message TapTayo” below.</p>`; return; }
   list.innerHTML = Object.keys(FAQ_CATS).filter((k) => !cat || k === cat).map((k) => `<h2>${esc(FAQ_CATS[k])}</h2>${rows.filter((f) => f[0] === k).map(item).join("")}`).join("");
 }
-const item = (f) => `<details><summary>${esc(f[1])}</summary><p>${esc(f[2])}</p></details>`;
+const link = (t) => esc(t).replace(/taptayo\.com\/try/g, '<a href="/try/" style="font-weight:700">taptayo.com/try</a>').replace(/taptayo\.com\/pro\b/g, '<a href="/pro/" style="font-weight:700">taptayo.com/pro</a>');
+const item = (f) => `<details><summary>${esc(f[1])}</summary><p>${link(f[2])}</p></details>`;
 document.getElementById("q").oninput = (e) => { q = e.target.value.trim(); draw(); };
 document.getElementById("chat").onclick = () => openSupport({ start: "new" });
 mountSupportButton();

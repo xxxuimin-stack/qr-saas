@@ -16,7 +16,7 @@ function versionFile() {
 // Sa dev server, ang /app/..., /m/<slug>, /kitchen/... ay ipinapadala sa kanilang index.html
 // (sa production, ginagawa ito ng "rewrites" sa firebase.json)
 function multiPageFallback() {
-  const roots = ["/login/", "/app/", "/m/", "/kitchen/", "/admin/", "/counter/", "/rider/", "/staff/", "/dispatch/", "/join/", "/tv/", "/help/", "/me/", "/collab/", "/terms/", "/privacy/"];
+  const roots = ["/login/", "/app/", "/m/", "/kitchen/", "/admin/", "/counter/", "/rider/", "/staff/", "/dispatch/", "/join/", "/tv/", "/help/", "/me/", "/collab/", "/terms/", "/privacy/", "/try/", "/explore/", "/pro/"];
   return {
     name: "multi-page-fallback",
     configureServer(server) {
@@ -54,6 +54,10 @@ export default defineConfig({
         help: resolve(__dirname, "help/index.html"),
         me: resolve(__dirname, "me/index.html"),
         collab: resolve(__dirname, "collab/index.html"),
+        try: resolve(__dirname, "try/index.html"),
+        explore: resolve(__dirname, "explore/index.html"),
+        pro: resolve(__dirname, "pro/index.html"),
+        tryScreen: resolve(__dirname, "try/screen.html"),
       },
     },
   },

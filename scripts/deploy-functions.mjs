@@ -6,6 +6,7 @@
 //   node scripts/deploy-functions.mjs --size 8 --wait 75
 import { readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
+const PROJ = (() => { const i = process.argv.indexOf("--project"); return i > 0 ? process.argv[i + 1] : ""; })(); // "staging" → the test project
 
 const arg = (k, d) => { const i = process.argv.indexOf(k); return i > 0 ? process.argv[i + 1] : d; };
 const size = Number(arg("--size", 10)), wait = Number(arg("--wait", 70)), from = Number(arg("--from", 1));
@@ -14,7 +15,7 @@ let names = [...new Set([...src.matchAll(/^exports\.([A-Za-z0-9_]+)\s*=/gm)].map
 if (arg("--only")) names = arg("--only").split(",").map((s) => s.trim()).filter(Boolean);
 const list = names.slice(from - 1);
 const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
-const run = (batch) => spawnSync(`npx firebase deploy --only ${batch.map((n) => "functions:" + n).join(",")}`, { stdio: "inherit", shell: true }).status === 0;
+const run = (batch) => spawnSync(`npx firebase deploy${PROJ ? " --project " + PROJ : ""} --only ${batch.map((n) => "functions:" + n).join(",")}`, { stdio: "inherit", shell: true }).status === 0;
 
 console.log(`Deploying ${list.length} of ${names.length} functions, ${size} at a time, ${wait}s apart.`);
 const failed = [];
@@ -29,4 +30,4 @@ for (let i = 0; i < list.length; i += size) {
 if (failed.length) { console.log(`\nNot deployed (${failed.length}): ${failed.join(",")}\nRetry with: node scripts/deploy-functions.mjs --only ${failed.join(",")}`); process.exit(1); }
 console.log("\nAll functions deployed ✓");
 // remember what's live so "npm run deploy:changed" only sends what changes from now on
-if (!arg("--only") && from === 1) spawnSync("node scripts/deploy-changed.mjs --mark", { stdio: "inherit", shell: true });
+if (!arg("--only") && from === 1) spawnSync(`node scripts/deploy-changed.mjs --mark${PROJ ? " --project " + PROJ : ""}`, { stdio: "inherit", shell: true });

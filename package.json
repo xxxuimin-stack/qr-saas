@@ -13,6 +13,7 @@
     "deploy:web": "vite build && firebase deploy --only hosting",
     "deploy:rules": "firebase deploy --only firestore,storage",
     "deploy:changed": "node scripts/deploy-changed.mjs",
+    "deploy:staging": "vite build --mode staging && firebase deploy --project staging --only hosting,firestore,storage && node scripts/deploy-changed.mjs --project staging",
     "emulators": "firebase emulators:start --project demo-orderqr",
     "deploy:functions": "node scripts/deploy-functions.mjs",
     "deploy:functions:fast": "firebase deploy --only functions"
@@ -20,6 +21,7 @@
   "dependencies": {
     "firebase": "^11.10.0",
     "jspdf": "^2.5.2",
+    "leaflet": "^1.9.4",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {

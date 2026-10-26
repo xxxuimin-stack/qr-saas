@@ -11,12 +11,13 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+const PROJ = (() => { const i = process.argv.indexOf("--project"); return i > 0 ? process.argv[i + 1] : ""; })(); // "staging" → the test project
 
 const ROOT = new URL("../", import.meta.url);
 const read = (p) => (existsSync(new URL(p, ROOT)) ? readFileSync(new URL(p, ROOT), "utf8") : "");
 const sha = (s) => createHash("sha256").update(s).digest("hex").slice(0, 16);
 const has = (k) => process.argv.includes(k);
-const SNAP = new URL(".deploy/functions.json", ROOT);
+const SNAP = new URL(`.deploy/functions${PROJ && PROJ !== "default" ? "-" + PROJ : ""}.json`, ROOT); // a separate record per project (live / staging)
 
 // ---- split index.js into top-level chunks
 const src = read("functions/index.js");
@@ -44,7 +45,8 @@ const declared = (c) => {
 };
 for (const c of chunks) Object.assign(c, declared(c));
 const byName = new Map(); for (const c of chunks) for (const n of c.names) byName.set(n, c);
-const globalText = chunks.filter((c) => !c.names.length).map((c) => c.text).join("\n") + read("functions/package.json") + read("functions/package-lock.json");
+const globalText = chunks.filter((c) => !c.names.length).map((c) => c.text).join("\n") + read("functions/package.json") + read("functions/package-lock.json")
+  + read("functions/.env") + read(`functions/.env.${PROJ === "staging" ? "taptayo-staging" : "orderqr-62446"}`); // secrets/settings changed (e.g. TURNSTILE_SECRET) → redeploy (only a hash is saved, never the values)
 const GLOBAL = sha(globalText);
 // direct deps: top-level names mentioned in the chunk
 const words = (t) => new Set(t.match(/[A-Za-z_$][\w$]*/g) || []);
@@ -73,7 +75,7 @@ if (has("--dry") || !changed.length) process.exit(0);
 // deploy in batches (same quota-safe batching as deploy-functions.mjs), record each batch that succeeds
 const size = 10, wait = changed.length > size ? 70 : 0;
 const sleep = (s) => new Promise((r) => setTimeout(r, s * 1000));
-const run = (b) => spawnSync(`npx firebase deploy --only ${b.map((n) => "functions:" + n).join(",")}`, { stdio: "inherit", shell: true }).status === 0;
+const run = (b) => spawnSync(`npx firebase deploy${PROJ ? " --project " + PROJ : ""} --only ${b.map((n) => "functions:" + n).join(",")}`, { stdio: "inherit", shell: true }).status === 0;
 const failed = [];
 for (let i = 0; i < changed.length; i += size) {
   const batch = changed.slice(i, i + size);

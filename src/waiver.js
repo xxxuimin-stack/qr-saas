@@ -1,6 +1,4 @@
 // Waiver: e-signature canvas + ID photo + PDF (jsPDF) + upload. Used by the customer page and the Counter (in-store signing).
-import { storage } from "./firebase.js";
-import { ref, uploadBytes, uploadString } from "firebase/storage";
 import { resizeImage } from "./upload.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -59,6 +57,7 @@ const blobToDataUrl = (b) => new Promise((res) => { const r = new FileReader(); 
 
 /** Full flow: sign → PDF → upload (customer path) → returns { pdfUrl, signatureUrl, idPhotoUrl } */
 export async function signAndUploadWaiver({ storeId, uid, store, resv, waiverText, signerName, sigDataUrl, idFile }) {
+  const { storage, ref, uploadBytes, uploadString } = await import("./storage.js"); // loaded only when signing
   // Files go to the PRIVATE folder: not readable by URL, only through the privateFile function (staff or the customer).
   const base = `stores/${storeId}/private/${uid}`;
   let idPhotoDataUrl = null, idPhotoUrl = null;

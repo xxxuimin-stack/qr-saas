@@ -1,5 +1,6 @@
 // Laundry counter (POS) — used by /counter/ when store.mode === "laundry".
 // Jobs board, New job (walk-in), Fold queue, Claim (stub code), Pause notice, Customers lookup.
+import { pinLinks } from "./addrpin.js";
 import { msgrBtn } from "./msgr.js";
 import { orderOp } from "./orderops.js";
 import { db, call, auth } from "./firebase.js";
@@ -104,7 +105,7 @@ function jobCard(o) {
       <div class="where">${esc(o.customer?.name || "")}${o.customer?.phone ? ` · ${esc(o.customer.phone)}` : ""}${o.customer?.messenger ? " " + msgrBtn(o.customer.messenger, "k-tag", "💬") : ""}</div>
       <div class="small muted">${MODE_SHORT[L.mode] || ""}${L.container && L.container !== "none" ? ` · ${CONTAINERS[L.container] || L.container}` : ""}${L.pcs != null ? ` · ${L.pcs} pcs` : ""}</div></div>
       <div class="time">${t ? t.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" }) : ""}<span class="eta">${rb ? "Ready by " + rb.toLocaleString("en-PH", { weekday: "short", hour: "numeric", minute: "2-digit" }) : ""}</span></div></div>
-    ${o.customer?.address && o.serviceType === "delivery" ? `<div class="small muted">📍 ${esc(o.customer.address)}</div>` : ""}
+    ${o.customer?.address && o.serviceType === "delivery" ? `<div class="small muted">📍 ${esc(o.customer.address)}${o.customer.landmark ? ` · ${esc(o.customer.landmark)}` : ""} ${pinLinks(o.customer, "k-tag")}</div>` : ""}
     ${L.pickupAt?.toDate && ["booked", "picking_up"].includes(o.status) ? `<div class="small" style="color:var(--new)">🛵 Pickup ${L.pickupAt.toDate().toLocaleString("en-PH", { weekday: "short", hour: "numeric", minute: "2-digit" })}</div>` : ""}
     <ul>${(o.items || []).map((l) => `<li><span class="q">${esc(l.label || l.qty)}</span><span>${esc(l.name)}${l.note ? `<span class="opt">${esc(l.note)}</span>` : ""}</span><span class="amt">${money(l.subtotal)}</span></li>`).join("")}</ul>
     ${L.handWash ? `<div class="small" style="color:var(--new)">🧼 Hand wash: ${esc(L.handWash)}</div>` : ""}${L.separateWhites === false ? `<div class="small muted">Mixed wash (no separation)</div>` : ""}${L.fold === false ? `<div class="small muted">No fold</div>` : ""}

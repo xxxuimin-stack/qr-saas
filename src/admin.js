@@ -42,6 +42,10 @@ function shell(user) {
       <div id="collabBox"></div>
       <div id="trustBox"></div>
       <div id="partnerBox"></div>
+      <div id="errorsBox"></div>
+      <div id="prosBox"></div>
+      <div id="userRepBox"></div>
+      <div id="proRepBox"></div>
       <div id="pending"></div>
       <div id="feedback"></div>
       <div class="tile" id="demoTile" style="margin-top:14px"><div class="row between wrap" style="gap:8px"><div><h3 style="margin:0">🧪 Demo stores</h3><p class="small muted" style="margin:4px 0 0">Live sample shops with photos and sample orders, for your homepage and ads. Visitors can order — nothing is charged and their pretend orders clear every 3 hours. Sample data refreshes daily at 4 AM.</p></div><button class="btn sm" type="button" data-seed>Create / refresh demo stores</button></div>
@@ -65,7 +69,7 @@ function shell(user) {
 async function load() {
   try { stores = await call("adminListStores"); draw(); }
   catch (e) { toast(e.message, "error"); }
-  loadFeedback(); loadSettings(); loadSupport(); loadVerify(); loadCollabAdmin(); loadTrust(); loadPartners();
+  loadFeedback(); loadSettings(); loadSupport(); loadVerify(); loadCollabAdmin(); loadTrust(); loadPartners(); loadErrors(); loadPros(); loadUserReports(); loadProReports();
   const sb = document.querySelector("[data-seed]"); if (sb) sb.onclick = async () => {
     if (!confirm("Create or refresh the 4 demo stores? Their sample data is rebuilt (pretend orders are removed).")) return;
     sb.disabled = true; sb.textContent = "Working… (about a minute)"; const out = document.querySelector("[data-seedout]");
@@ -104,9 +108,9 @@ async function loadSettings() {
   mountMaint(document.getElementById("adminSettings"));
   let c; try { c = await call("adminConfig", {}); } catch (e) { box.textContent = e.message; return; }
   const P = c.payment || {};
-  box.innerHTML = `<div class="form2"><div><label>GCash number (owners pay here)</label><input data-k="gcashNumber" value="${esc(P.gcashNumber || "")}" placeholder="0917 123 4567"/></div><div><label>GCash name</label><input data-k="gcashName" value="${esc(P.gcashName || "")}"/></div>
+  box.innerHTML = `<div class="form2"><div><label>GCash number (optional — leave empty to show only the QR)</label><input data-k="gcashNumber" value="${esc(P.gcashNumber || "")}" placeholder="0917 123 4567"/></div><div><label>GCash name</label><input data-k="gcashName" value="${esc(P.gcashName || "")}"/></div>
     <div><label>Bank / other (optional)</label><input data-k="bankNote" value="${esc(P.bankNote || "")}" placeholder="BPI 1234-5678-90 (Name)"/></div><div><label>Contact for questions</label><input data-k="contact" value="${esc(P.contact || "")}" placeholder="Messenger: m.me/taptayo"/></div>
-    <div class="span2"><label>GCash QR image URL (optional)</label><input data-k="qrUrl" value="${esc(P.qrUrl || "")}" placeholder="https://…"/></div></div>
+    <div class="span2"><label>GCash QR image URL (optional)</label><input data-k="qrUrl" value="${esc(P.qrUrl || "")}" placeholder="/pay/taptayo-gcash-qr.png"/><div class="small muted">Number and name are optional — with only the QR, owners scan it and GCash shows your masked name.</div></div></div>
     <button class="btn sm" data-savepay style="margin-top:8px">Save payment details</button>
     <hr style="margin:14px 0"/><b>Telegram alerts to you</b> <span class="muted">(new payment to check)</span>${c.alerts.botName ? ` · bot @${esc(c.alerts.botName)}` : ""}
     <div class="form2"><div><label>Bot token ${c.alerts.hasToken ? "(saved — leave empty to keep)" : ""}</label><input data-tok placeholder="123456789:AAH…"/></div><div><label>Your chat ID</label><input data-chat value="${esc(c.alerts.chatId || "")}" placeholder="e.g. 123456789"/></div></div>
@@ -238,6 +242,59 @@ async function loadTrust() {
     box.querySelectorAll("[data-va]").forEach((b) => (b.onclick = async () => { const [action, storeId, kind] = b.dataset.va.split(":"); const note = action === "reject" ? prompt("Why? (the owner sees this)", "The name on the document doesn't match the shop.") : action === "more" ? prompt("What should they send? (the owner sees this)", "The photo is blurry — please send a clear photo of the whole document.") : ""; if (note === null) return; let nameOk = false; if (action === "approve" && kind !== "ownerId") { nameOk = confirm("Does the name on the document match the shop name or the owner's name? (OK = yes, matches)"); if (!nameOk) return toast("Not approved — use “Ask for another proof” or Reject"); } await call("adminTrust", { verif: true, action, storeId, kind, note, nameOk }); toast(action === "more" ? "Asked for another proof" : action === "approve" ? "Approved — badge is live" : "Rejected"); loadTrust(); }));
     box.querySelectorAll("[data-rp]").forEach((b) => (b.onclick = async () => { const [action, report] = b.dataset.rp.split(":"); const note = prompt("Note (optional):", "") ?? ""; await call("adminTrust", { report, action, note }); loadTrust(); }));
   } catch (e) { box.innerHTML = `<p class="muted small">Trust: ${esc(e.message)}</p>`; }
+}
+
+// 🧑‍🎨 freelancers: check valid IDs / certificates (the file is deleted after the decision — only the badge stays)
+async function loadPros() {
+  const box = document.getElementById("prosBox"); if (!box) return;
+  let L = []; try { L = await call("adminPros", {}); } catch (e) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="tile" style="margin-bottom:14px"><h3 style="margin:0 0 6px">🧑‍🎨 Pro proof to check ${L.length ? `<span class="tag" style="background:#F59E0B;color:#fff">${L.length}</span>` : `<span class="tag" style="background:#16a34a;color:#fff">none</span>`}</h3>
+    ${L.map((x, i) => `<div style="border-top:1px solid var(--line);padding:8px 0" class="small"><b>${esc(x.name)}</b> · ${x.kind === "id" ? "🪪 Valid ID" : "📜 Certificate"} · ${esc((x.skills || []).join(", "))}${x.note ? ` · “${esc(x.note)}”` : ""}
+      <div class="row" style="gap:6px;margin-top:6px">${x.url ? `<a class="btn ghost sm" href="${esc(x.url)}" target="_blank" rel="noopener">👁 View (1 h link)</a>` : `<span class="muted">file missing</span>`}<button class="btn sm" data-pok="${i}">✓ Approve</button><button class="btn ghost sm" data-pno="${i}">✕ Reject</button></div></div>`).join("") || `<p class="small muted" style="margin:0">Nothing waiting.</p>`}</div>`;
+  box.querySelectorAll("[data-pok]").forEach((b) => (b.onclick = async () => { const x = L[Number(b.dataset.pok)]; await call("adminPros", { decide: true, uid: x.uid, kind: x.kind, approve: true }); toast("Approved"); loadPros(); }));
+  box.querySelectorAll("[data-pno]").forEach((b) => (b.onclick = async () => { const x = L[Number(b.dataset.pno)]; const r = prompt("Reason (the freelancer sees it):", "Please send a clearer photo"); if (r === null) return; await call("adminPros", { decide: true, uid: x.uid, kind: x.kind, approve: false, reason: r }); toast("Rejected"); loadPros(); }));
+}
+// 🚩 freelancer reports from shops → confirm = strike (2 = paused 14 days · 3 = closed · fake portfolio = hidden until replaced)
+async function loadProReports() {
+  const box = document.getElementById("proRepBox"); if (!box) return;
+  let L = []; try { L = await call("adminProReports", {}); } catch (e) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="tile" style="margin-bottom:14px"><h3 style="margin:0 0 6px">🚩 Freelancer reports ${L.length ? `<span class="tag" style="background:#B91C1C;color:#fff">${L.length}</span>` : `<span class="tag" style="background:#16a34a;color:#fff">none</span>`}</h3>
+    ${L.map((x, i) => `<div style="border-top:1px solid var(--line);padding:8px 0" class="small"><b>${esc(x.storeName)}</b> → <b>${esc(x.proName)}</b> · ${new Date(x.at).toLocaleString("en-PH")}<br><b>${esc(x.label)}</b>: ${esc(x.details)}
+      ${(x.evidence || []).length ? `<div class="row" style="gap:6px;margin-top:4px">${x.evidence.map((u, k) => `<a class="btn ghost sm" data-priv="${esc(u)}" target="_blank" rel="noopener">📷 Proof ${k + 1}</a>`).join("")}</div>` : ""}
+      <div class="row" style="gap:6px;margin-top:6px"><button class="btn sm" data-pr-ok="${i}">✓ Confirm (strike)</button><button class="btn ghost sm" data-pr-no="${i}">✕ Not enough proof</button></div></div>`).join("")}</div>`;
+  import("./privfiles.js").then((m) => m.hydratePrivate(box)).catch(() => {});
+  box.querySelectorAll("[data-pr-ok]").forEach((b) => (b.onclick = async () => { const x = L[Number(b.dataset.prOk)]; if (!confirm(`Confirm this report against ${x.proName}?`)) return; try { const r = await call("adminProReports", { decide: true, id: x.id, confirm: true }); toast(`Confirmed · ${r.strikes} strike${r.strikes > 1 ? "s" : ""}`); loadProReports(); } catch (e) { toast(e.message, "error"); } }));
+  box.querySelectorAll("[data-pr-no]").forEach((b) => (b.onclick = async () => { const x = L[Number(b.dataset.prNo)]; const note = prompt("Note (optional):", "") ?? null; if (note === null) return; await call("adminProReports", { decide: true, id: x.id, confirm: false, note }); toast("Rejected"); loadProReports(); }));
+}
+// 🚩 client reports from shops → confirm = strike (1 warning · 2 = 30-day ban · 3 = banned; one strike per shop per 30 days)
+async function loadUserReports() {
+  const box = document.getElementById("userRepBox"); if (!box) return;
+  let L = []; try { L = await call("adminUserReports", {}); } catch (e) { box.innerHTML = ""; return; }
+  box.innerHTML = `<div class="tile" style="margin-bottom:14px"><h3 style="margin:0 0 6px">🚩 Client reports ${L.length ? `<span class="tag" style="background:#B91C1C;color:#fff">${L.length}</span>` : `<span class="tag" style="background:#16a34a;color:#fff">none</span>`}</h3>
+    ${L.map((x, i) => `<div style="border-top:1px solid var(--line);padding:8px 0" class="small"><b>${esc(x.storeName)}</b> → <b>${esc(x.name || "client")}</b> ${x.uid ? "· account" : ""}${x.phone ? ` · ☎ …${esc(String(x.phone).slice(-4))}` : ""} · ${esc(x.code || "")}<br>
+      <b>${esc(x.label)}</b>: ${esc(x.details)}<br><span class="muted">Strikes so far: ${x.strikesSoFar} · by ${esc(x.by || "")} · ${new Date(x.at).toLocaleString("en-PH")}</span>
+      ${(x.evidence || []).length ? `<div class="row" style="gap:6px;margin-top:4px">${x.evidence.map((u, k) => `<a class="btn ghost sm" data-priv="${esc(u)}" target="_blank" rel="noopener">📷 Proof ${k + 1}</a>`).join("")}</div>` : ""}
+      <div class="row" style="gap:6px;margin-top:6px"><button class="btn sm" data-uok="${i}">✓ Confirm (strike)</button><button class="btn ghost sm" data-uno="${i}">✕ Not enough proof</button></div></div>`).join("")}</div>`;
+  import("./privfiles.js").then((m) => m.hydratePrivate(box)).catch(() => {});
+  box.querySelectorAll("[data-uok]").forEach((b) => (b.onclick = async () => { const x = L[Number(b.dataset.uok)]; if (!confirm(`Confirm this report? ${x.strikesSoFar + 1 >= 3 ? "This will BAN the client." : x.strikesSoFar + 1 === 2 ? "This pauses their booking for 30 days." : "They get a warning."}`)) return; try { const r = await call("adminUserReports", { decide: true, id: x.id, confirm: true }); toast(`Confirmed · ${r.strikes} strike${r.strikes > 1 ? "s" : ""}${r.banned ? " · banned" : ""}`); loadUserReports(); } catch (e) { toast(e.message, "error"); } }));
+  box.querySelectorAll("[data-uno]").forEach((b) => (b.onclick = async () => { const x = L[Number(b.dataset.uno)]; const note = prompt("Note (optional):", "") ?? null; if (note === null) return; await call("adminUserReports", { decide: true, id: x.id, confirm: false, note }); toast("Rejected"); loadUserReports(); }));
+}
+async function loadErrors() {
+  const box = document.getElementById("errorsBox"); if (!box) return;
+  try {
+    const [list, sec] = await Promise.all([call("adminErrors", {}), call("adminSecurity", {})]);
+    const ago = (t) => { const m = Math.round((Date.now() - t) / 60000); return m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
+    box.innerHTML = `<div class="tile" style="margin-bottom:14px"><h3 style="margin:0 0 6px">🐞 Errors & bot check ${list.length ? `<span class="tag" style="background:#dc2626;color:#fff">${list.length}</span>` : `<span class="tag" style="background:#16a34a;color:#fff">all clear</span>`}</h3>
+      <div class="row wrap small" style="gap:8px;margin-bottom:8px;align-items:center">🛡 Bot check (Cloudflare Turnstile): ${["off", "monitor", "enforce"].map((m) => `<button class="btn sm ${sec.turnstile === m ? "" : "ghost"}" data-ts="${m}">${m === "off" ? "Off" : m === "monitor" ? "Watch only" : "Block bots"}</button>`).join("")} ${sec.hasSecret ? "" : `<span class="muted">· keys not set yet (always allowed)</span>`}</div>
+      <div class="row wrap small" style="gap:8px;margin-bottom:8px;align-items:center">⏱ Too-many-tries limit: ${["on", "off"].map((m) => `<button class="btn sm ${sec.rateLimits === m ? "" : "ghost"}" data-rl="${m}">${m === "on" ? "On" : "Off (big event / testing)"}</button>`).join("")}</div>
+      <div class="row wrap small" style="gap:8px;margin-bottom:8px;align-items:center">📧 Email check at sign-up (free): ${["on", "off"].map((m) => `<button class="btn sm ${sec.emailVerify === m ? "" : "ghost"}" data-ev="${m}">${m === "on" ? "On" : "Off"}</button>`).join("")} <span class="muted">· 📱 SMS code: ${sec.smsOtp ? "on" : "off (no Semaphore key yet)"}</span></div>
+      ${sec.smsCredits != null ? `<p class="small" style="margin:0 0 8px">📱 TapTayo SMS credits: <b ${sec.smsCredits < 200 ? 'style="color:#dc2626"' : ""}>${sec.smsCredits}</b> <span class="muted">(checked ${ago(sec.smsCheckedAt)})</span></p>` : ""}
+      ${list.map((e) => `<div style="border-top:1px solid var(--line);padding:6px 0" class="small"><b>${esc(e.message)}</b><div class="muted">${esc(e.where)} · ${esc(e.fn)} · <b>${e.count}×</b> · last ${ago(e.lastAt)}${e.reopened ? " · came back after a fix" : ""}${e.url ? ` · ${esc(e.url)}` : ""}</div>${e.top ? `<div class="muted" style="font-family:monospace;font-size:11px">${esc(e.top)}</div>` : ""}<div class="row" style="gap:6px;margin-top:4px"><button class="btn ghost sm" data-efix="${e.id}">✓ Fixed</button></div></div>`).join("") || `<p class="small muted" style="margin:0">No errors. 🎉</p>`}</div>`;
+    box.querySelectorAll("[data-ts]").forEach((b) => (b.onclick = async () => { await call("adminSecurity", { turnstile: b.dataset.ts }); toast("Bot check: " + b.textContent); loadErrors(); }));
+    box.querySelectorAll("[data-ev]").forEach((b) => (b.onclick = async () => { await call("adminSecurity", { emailVerify: b.dataset.ev }); toast("Email check: " + b.textContent); loadErrors(); }));
+    box.querySelectorAll("[data-rl]").forEach((b) => (b.onclick = async () => { await call("adminSecurity", { rateLimits: b.dataset.rl }); toast("Limit: " + b.textContent); loadErrors(); }));
+    box.querySelectorAll("[data-efix]").forEach((b) => (b.onclick = async () => { await call("adminErrors", { fixed: b.dataset.efix }); loadErrors(); }));
+  } catch (e) { box.innerHTML = `<p class="muted small">Errors: ${esc(e.message)}</p>`; }
 }
 
 async function loadPartners() {

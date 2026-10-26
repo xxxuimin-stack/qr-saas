@@ -22,6 +22,8 @@ import { drawGiftCard, loadLogo, downloadCanvas, GIFT_DESIGNS } from "./giftcard
 if (!document.getElementById("waiver-css")) { const st = document.createElement("style"); st.id = "waiver-css"; st.textContent = WAIVER_CSS; document.head.appendChild(st); }
 import { collection, query, where, limit } from "firebase/firestore";
 import { watchMaintenance } from "./maint.js";
+import { pinBlock, autoWirePins, whereLine } from "./addrpin.js";
+import { startI18n, langSwitch } from "./i18n.js";
 watchMaintenance("customer");
 
 const slug = location.pathname.replace(/^\/m\/?/, "").split("/")[0];
@@ -53,6 +55,14 @@ function mountReport() {
     openSheet("Report this shop", body, foot);
   };
   (document.getElementById("ttPowered") || app).after(b);
+  // a logged-in client can block a shop: hidden in Explore, can't book there
+  const k = document.createElement("button"); k.id = "ttBlock"; k.type = "button"; k.className = "c-report"; k.style.marginTop = "-16px"; k.textContent = "🚫 Block this shop";
+  k.onclick = async () => {
+    const u = auth.currentUser; if (!u || u.isAnonymous) { toast("Log in with your TapTayo account to block a shop."); return; }
+    if (!confirm(`Block ${store.name}? You won't see it in Explore and can't book here. Unblock anytime in My account.`)) return;
+    try { await call("blockShop", { slug: store.slug }); toast("Blocked — unblock anytime in My account"); k.textContent = "🚫 Blocked"; k.disabled = true; } catch (e) { toast(e.message); }
+  };
+  b.after(k);
 }
 
 /** "A+ Bigger text" — for lolos and lolas; remembered on this phone */
@@ -197,12 +207,14 @@ let filled = false;
 async function fillFromAccount(u) {
   if (filled || !u || u.isAnonymous || !u.email) return; filled = true;
   try { const a = await call("myAccount", {}); const P = a.profile || {}; const cur = loadLocal().customer || {};
-    const add = Object.fromEntries(Object.entries({ name: P.name, phone: P.phone, messenger: P.messenger, address: P.address }).filter(([k, v]) => v && !cur[k]));
+    const add = Object.fromEntries(Object.entries({ name: P.name, phone: P.phone, messenger: P.messenger, address: P.address, landmark: P.landmark, mapUrl: P.mapUrl }).filter(([k, v]) => v && !cur[k]));
     if (Object.keys(add).length) saveLocal({ customer: { ...cur, ...add } });
   } catch {}
 }
 
 function start() {
+  startI18n(); langSwitch({ float: true });
+  autoWirePins((v) => { const cur = loadLocal().customer || {}; if (v.mapUrl) saveLocal({ customer: { ...cur, mapUrl: v.mapUrl, ...(v.address ? { address: v.address } : {}), ...(v.landmark ? { landmark: v.landmark } : {}) } }); });
   onSnapshot(doc(db, "publicStores", slug), async (snap) => {
     if (!snap.exists()) {
       app.innerHTML = `<div class="c-closed"><div class="ic">🔍</div><h2>Store not found</h2><p class="muted">There's no store called "${esc(slug)}".</p></div>`;
@@ -248,7 +260,7 @@ function start() {
       if (lastResv && params.get("view") !== "menu") return renderResvStatus(lastResv);
       const lastAppt = loadLocal().lastAppt;
       if (lastAppt && params.get("view") !== "menu") return renderApptStatus(lastAppt);
-      if (store.mode === "salon") landed = true;
+      if (store.mode === "salon" || store.mode === "table" || store.mode === "pickup") landed = true; // menu right away; order type is a dropdown on top
       if (store.landing !== false && !landed && !store.locked) return renderLanding();
       renderMenu();
     } else if (document.querySelector(".c-page")) {
@@ -271,6 +283,8 @@ function popupNow(now = Date.now()) {
   if (c.from && c.to) { const inWin = c.to > c.from ? hm >= c.from && hm < c.to : hm >= c.from || hm < c.to; if (!inWin) return false; if (c.to < c.from && hm < c.to) di = (di + 6) % 7; }
   return !(c.days || []).length || c.days.includes(["sun", "mon", "tue", "wed", "thu", "fri", "sat"][di]);
 }
+/** came from the printed in-store QR (single-QR mode adds ?qr=1); remembered for this visit */
+function inStore() { try { if (params.get("qr") === "1") sessionStorage.setItem("orderqr:instore:" + slug, "1"); return sessionStorage.getItem("orderqr:instore:" + slug) === "1"; } catch { return params.get("qr") === "1"; } }
 function availableServices() {
   const s = store.service || {};
   const out = [];
@@ -279,8 +293,11 @@ function availableServices() {
     if (preorderFor) return [["dine_in", "📅 Pre-order"]];
     if (popupNow() && !table) { out.push(["take_out", "🌙 Order now, pick up at the stall"]); if (s.pickup) out.push(["pickup", "🛍️ Pick up later"]); if (s.delivery) out.push(["delivery", "🛵 Delivery"]); return out; }
     const later = advanceOnly(); // closed → only "order for later" services
-    if ((table || single || testing()) && s.dineIn !== false && !later) out.push(["dine_in", "🍽️ Dine-in"]);
-    if ((table || single || testing()) && s.takeOut !== false && !later) out.push(["take_out", "🥡 Take-out"]);
+    // dine-in / take-out only for people AT the shop: they scanned a table QR (or the in-store QR in single-QR mode).
+    // Someone who found the page on the web / Explore / Facebook sees pickup, delivery and reservations only — no prank table orders.
+    const atShop = !!table || (single && inStore()) || (testing() && !store.demo);
+    if (atShop && s.dineIn !== false && !later) out.push(["dine_in", "🍽️ Dine-in"]);
+    if (atShop && s.takeOut !== false && !later) out.push(["take_out", "🥡 Take-out"]);
     if (s.pickup) out.push(["pickup", "🛍️ Pickup"]);
     if (s.delivery) out.push(["delivery", "🛵 Delivery"]);
   } else if (store.mode === "laundry" || store.mode === "salon") {
@@ -297,6 +314,30 @@ function reserveFeatures() {
   if (store.events?.enabled) out.push("event");
   if (store.vip?.enabled && (store.vip.rooms || []).length) out.push("vip");
   return out;
+}
+/** "How would you like to order?" — a dropdown on top of the menu; changing it updates the page right away */
+function orderTypeHTML(services) {
+  const single = store.qrMode === "single";
+  const SUB = { dine_in: table ? `Ordering for ${table.label}` : single ? "You'll pick your table number" : "", take_out: popupNow() && !table ? "Pay first, walk around — we'll alert you when it's ready" : "Pick up at the counter", pickup: "Order ahead, pick up in store", delivery: "Delivered to your address" };
+  const cur = services.some(([k]) => k === serviceType) ? serviceType : services[0][0];
+  return `<div class="c-ordertype"><label for="ttSvc">How would you like to order?</label>
+    <div class="c-orderpick">${services.length > 1 ? `<select id="ttSvc" data-svcsel>${services.map(([k, l]) => `<option value="${k}" ${k === cur ? "selected" : ""}>${esc(l)}</option>`).join("")}</select>` : `<div class="c-onlysvc">${esc(services[0][1])}</div>`}</div>
+    ${SUB[cur] ? `<p class="c-ordersub small muted">${esc(SUB[cur])}</p>` : ""}
+    ${store.mode === "table" && !table && store.service?.dineIn !== false && !(single && inStore()) ? `<p class="c-ordersub small muted">🍽️ Eating here? Scan the QR on your table to order dine-in.</p>` : ""}</div>`;
+}
+/** last order at this shop → one tap to order the same again */
+function lastOrderHTML() {
+  const o = (myOrders || []).find((r) => r.storeId === store.storeId && (r.lines || []).length);
+  if (!o || cart.length) return "";
+  const avail = new Set((store.items || []).filter((i) => i.available !== false).map((i) => i.id));
+  const ok = o.lines.filter((l) => avail.has(l.itemId)); if (!ok.length) return "";
+  return `<div class="c-lastorder"><span><b>🧾 Your last order</b><small>${esc(ok.map((l) => `${l.name}${l.qty > 1 ? ` ×${l.qty}` : ""}`).join(", ")).slice(0, 90)}</small></span><button class="c-btn brand" data-reorder>Order again</button></div>`;
+}
+function reorderLast() {
+  const o = (myOrders || []).find((r) => r.storeId === store.storeId && (r.lines || []).length); if (!o) return;
+  const byId = new Map((store.items || []).map((i) => [i.id, i])); let n = 0;
+  for (const l of o.lines) { const it = byId.get(l.itemId); if (!it || it.available === false) continue; const ex = cart.find((c) => c.key === l.key); if (ex) ex.qty += l.qty; else cart.push({ ...l, unitPrice: l.choices?.length ? l.unitPrice : it.price }); n++; }
+  toast(n ? "Added your last order — check the cart" : "Those items aren't available right now"); renderMenu(true);
 }
 function defaultService() {
   const list = availableServices();
@@ -359,25 +400,29 @@ function renderLanding() {
   const services = availableServices();
   const feats = reserveFeatures();
   const single = store.qrMode === "single";
+  // one dropdown instead of a tall list of big buttons
+  const SUB = { dine_in: single && !table ? "You'll pick your table number" : table ? `Ordering for ${table.label}` : "", take_out: popupNow() && !table ? "Pay first, walk around — we'll alert you when it's ready" : "Pick up at the counter", pickup: "Order ahead, pick up in store", delivery: "Delivered to your address", reserve: feats.map((f) => ({ table: "Table", event: "Event", vip: "VIP room" }[f])).join(" · ") };
+  const choices = [...services.map(([k, l]) => [k, l]), ...(feats.length ? [["reserve", "📅 Reserve / Book"]] : [])];
+  const first = choices[0]?.[0] || "";
   const opts = [];
-  for (const [k, l] of services) {
-    const sub = { dine_in: single && !table ? "You'll pick your table number" : table ? table.label : "", take_out: popupNow() && !table ? "Pay first, walk around — we'll alert you when it's ready" : "Pick up at the counter", pickup: "Order ahead, pick up in store", delivery: "Delivered to your address" }[k];
-    opts.push(`<button class="c-land" data-svc="${k}"><span class="ic">${l.split(" ")[0]}</span><span><b>${l.slice(l.indexOf(" ") + 1)}</b><small>${esc(sub)}</small></span><span class="chev">›</span></button>`);
-  }
-  if (popupNow() && !table) opts.unshift(`<div class="c-alert ok" style="text-align:left;margin-bottom:10px">🌙 <b>Night market mode</b> — order here and pay first, then walk around. We'll alert you the moment it's ready.${store.popup?.note ? `<br><span class="small">📍 ${esc(store.popup.note)}</span>` : ""}</div>`);
-  if (feats.length) opts.push(`<button class="c-land" data-reserve><span class="ic">📅</span><span><b>Reserve / Book</b><small>${feats.map((f) => ({ table: "Table", event: "Event", vip: "VIP room" }[f])).join(" · ")}</small></span><span class="chev">›</span></button>`);
-  opts.push(`<button class="c-land ghost" data-browse><span class="ic">📋</span><span><b>Just browse the ${esc((store.labels?.items || "menu").toLowerCase())}</b><small>Just take a look</small></span><span class="chev">›</span></button>`);
+  if (popupNow() && !table) opts.push(`<div class="c-alert ok" style="text-align:left;margin-bottom:10px">🌙 <b>Night market mode</b> — order here and pay first, then walk around. We'll alert you the moment it's ready.${store.popup?.note ? `<br><span class="small">📍 ${esc(store.popup.note)}</span>` : ""}</div>`);
+  if (choices.length) opts.push(`<div class="c-orderpick"><select data-svcsel aria-label="How would you like to order?">${choices.map(([k, l]) => `<option value="${k}">${esc(l)}</option>`).join("")}</select><button class="c-btn brand" data-svcgo>Start →</button></div><p class="c-ordersub small muted" data-svcsub>${esc(SUB[first] || "")}</p>`);
+  if (store.mode === "table" && !table && store.service?.dineIn !== false && !(single && inStore())) opts.push(`<p class="c-ordersub small muted">🍽️ Eating here? Scan the QR on your table to order dine-in.</p>`);
+  opts.push(`<button class="c-linkbtn" data-browse>📋 Just browse the ${esc((store.labels?.items || "menu").toLowerCase())}</button>`);
 
   app.innerHTML = `<div class="c-page">
     ${infoCard(store.tagline || "Welcome")}${seasonBar()}
     <div class="c-body">${annHTML(2)}<h2 class="c-landq">How would you like to order?</h2><div class="c-lands">${opts.join("")}</div></div></div>`;
   bindAnn(app);
-  app.querySelectorAll("[data-svc]").forEach((b) => (b.onclick = () => {
-    serviceType = b.dataset.svc;
-    if (single && !table && (serviceType === "dine_in")) return pickTable();
+  const sel = app.querySelector("[data-svcsel]");
+  sel?.addEventListener("change", () => { app.querySelector("[data-svcsub]").textContent = SUB[sel.value] || ""; });
+  app.querySelector("[data-svcgo]")?.addEventListener("click", () => {
+    const v = sel.value;
+    if (v === "reserve") { uiTab = "reserve"; return done(); }
+    serviceType = v;
+    if (single && !table && serviceType === "dine_in") return pickTable();
     done();
-  }));
-  app.querySelector("[data-reserve]")?.addEventListener("click", () => { uiTab = "reserve"; done(); });
+  });
   app.querySelector("[data-browse]").onclick = () => done();
   function done() { landed = true; sessionStorage.setItem("orderqr:landed:" + slug, "1"); renderMenu(); }
 }
@@ -408,10 +453,25 @@ function floaties(t) {
 }
 function infoCard(tag, extra = "") {
   return `<header class="c-cover ${store.coverUrl ? "has-cover" : ""}">${store.coverUrl ? `<img class="cover" src="${esc(store.coverUrl)}" alt=""/>` : ""}<div class="decor">${(resolveTheme(store.theme || {}, store.name).decor || []).map((e, i) => `<span class="dc d${i % 6}">${e}</span>`).join("")}</div></header>
-    <section class="c-info"><div class="ci-top"><div class="ci-logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div class="ci-name"><h1>${nameWithBadge(store)}</h1><div class="ci-tag">${esc(tag)}</div>${trustHTML()}</div></div>${extra}</section>`;
+    <section class="c-info"><div class="ci-top"><div class="ci-logo">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc(store.name.trim()[0] || "·")}</div><div class="ci-name"><h1>${nameWithBadge(store)}</h1><div class="ci-tag">${esc(tag)}</div>${whereLine(store)}${trustHTML()}</div></div>${extra}</section>`;
 }
 const trustHTML = () => trustChips(store);
-const layoutOf = () => store.theme?.layout || "list";
+// salons, spas & freelancers: Pinterest-style tiles by default (photos first); others: what the owner picked
+const layoutOf = () => { const l = store.theme?.layout; if (l === "rows") return "list"; if (["grid", "compact", "pin"].includes(l)) return l; return store.mode === "salon" ? "pin" : l || "list"; };
+/** all photos of an item: main + extra (max 5) */
+const photosOf = (it) => [it.imageUrl, ...(it.photos || [])].filter(Boolean).slice(0, 5);
+/** swipeable photos with dots (native scroll-snap — works with a finger, trackpad or the arrows) */
+function swipeHTML(list, cls = "") {
+  if (list.length < 2) return list[0] ? `<img class="${cls}" src="${esc(list[0])}" alt="" loading="lazy" decoding="async"/>` : "";
+  return `<div class="c-swipe ${cls}"><div class="c-swipe-in">${list.map((u, i) => `<img src="${esc(u)}" alt="" ${i ? 'loading="lazy"' : ""} decoding="async"/>`).join("")}</div><div class="c-dots">${list.map((_, i) => `<i class="${i ? "" : "on"}"></i>`).join("")}</div><span class="c-swn">1/${list.length}</span></div>`;
+}
+function wireSwipes(root) {
+  root.querySelectorAll(".c-swipe-in:not([data-w])").forEach((el) => {
+    el.setAttribute("data-w", ""); const dots = el.parentElement.querySelectorAll(".c-dots i"), n = el.parentElement.querySelector(".c-swn");
+    el.addEventListener("scroll", () => { const i = Math.round(el.scrollLeft / el.clientWidth); dots.forEach((d, k) => d.classList.toggle("on", k === i)); if (n) n.textContent = `${i + 1}/${dots.length}`; }, { passive: true });
+    el.addEventListener("click", (e) => { if (el._dragged) { e.stopPropagation(); e.preventDefault(); } }, true);
+  });
+}
 function sizePill(it) {
   const g = (it.options || []).find((o) => !o.multi && /size|serving/i.test(o.name || ""));
   const ch = g?.choices?.find((c) => Number(c.add) > 0);
@@ -488,7 +548,8 @@ function renderMenu(keepScroll = false) {
       ${protectHTML(true)}
       ${store.mode === "laundry" && laundryBookModes().length ? `<div class="c-ctabox"><span><b>Book a pickup</b><small>A rider picks up your laundry — or just drop it off</small></span><button class="c-btn brand" data-golbook>Book</button></div>` : ""}
       ${store.mode === "laundry" ? `${store.laundry?.pause?.active ? `<div class="c-alert warn"><b>⏸ ${esc(store.laundry.pause.reason)}</b>${store.laundry.pause.until ? ` · expected to resume ${esc(store.laundry.pause.until)}` : ""}</div>` : ""}${store.laundry?.busy ? `<div class="c-alert warn"><b>🔥 Busy right now</b> — jobs take about +${store.laundry.busy.extraDays} day${store.laundry.busy.extraDays > 1 ? "s" : ""} longer. Rush service is available for faster turnaround.</div>` : ""}<div class="c-alert ok" style="margin-top:12px"><b>Pricelist</b> · min ${store.laundry?.minKg || 0} kg${store.laundry?.rushValue ? ` · Rush ${store.laundry.rushMode === "fixed" ? "+₱" + store.laundry.rushValue : store.laundry.rushMode === "double" ? "2× price" : "+" + store.laundry.rushValue + "%"}` : ""}<br><span class="small">Your total is computed after weighing at the shop. Drop off your laundry and follow the price and status here with your claim stub.</span></div>` : ""}
-      ${services.length > 1 && !addTo ? `<div class="c-service">${services.map(([k, l]) => `<button data-svc="${k}" class="${serviceType === k ? "active" : ""}">${l}</button>`).join("")}</div>` : ""}
+      ${services.length && !addTo && store.mode !== "salon" && store.mode !== "laundry" ? orderTypeHTML(services) : ""}
+      ${store.mode === "table" && !addTo ? lastOrderHTML() : ""}
       ${store.mode === "salon" ? `<div data-livewait></div>` : ""}
       ${upcomingStrip()}
       ${store.mode === "salon" ? salonPromoBanner() : (() => { const live = (store.promos || []).filter((p) => promoActive(p) && (!p.validFor || p.validFor === "all" || p.validFor === "adult" || table?.isRoom) && (p.type !== "free_delivery" || (store.service || {}).delivery)); return live.length ? `<div class="c-promos">${live.map((p) => `<span class="c-promo"><b>${esc(promoLabel(p))}</b>${p.name && p.name.toLowerCase() !== promoLabel(p).toLowerCase() ? " " + esc(p.name) : ""}${p.type === "free_delivery" && Number(p.value) ? ` · ₱${Number(p.value).toLocaleString()}+` : ""}${p.validFor === "vip" || p.validFor === "vip_adult" ? " · VIP room" : ""}</span>`).join("")}</div>` : ""; })()}
@@ -497,6 +558,8 @@ function renderMenu(keepScroll = false) {
       <div class="c-search"><span>⌕</span><input type="search" placeholder="Search ${esc((store.labels?.items || "menu").toLowerCase())}…" value="${esc(uiSearch)}" /></div>
       <div class="c-cats"></div>`;
     body.querySelectorAll("[data-svc]").forEach((b) => (b.onclick = () => { serviceType = b.dataset.svc; renderMenu(true); }));
+    body.querySelector("[data-svcsel]")?.addEventListener("change", (e) => { serviceType = e.target.value; if (store.qrMode === "single" && !table && serviceType === "dine_in") return pickTable(); renderMenu(true); });
+    body.querySelector("[data-reorder]")?.addEventListener("click", reorderLast);
     body.querySelector("[data-cancelAdd]")?.addEventListener("click", (e) => { e.preventDefault(); setAddTo(null); cart = []; serviceType = defaultService(); renderMenu(); });
     body.querySelectorAll("[data-jump]").forEach((b) => (b.onclick = () => {
       const id = b.dataset.jump;
@@ -523,7 +586,7 @@ function renderMenu(keepScroll = false) {
       // 🔥 Top picks — grid tiles (Grab "For you")
       const best = (store.bestsellers || []).map((id) => items.find((it) => it.id === id)).filter(Boolean).filter((it) => !q || (it.name + " " + (it.description || "")).toLowerCase().includes(q));
       if (best.length && !q) {
-        const sec = html(`<section class="c-cat open best" id="cat-best"><h2 class="c-sech">For you <small>Customer favorites</small></h2><div class="c-catbody lay-grid"></div></section>`);
+        const sec = html(`<section class="c-cat open best" id="cat-best"><h2 class="c-sech">For you <small>Customer favorites</small></h2><div class="c-catbody lay-${layoutOf() === "pin" ? "pin" : "grid"}"></div></section>`);
         best.slice(0, 6).forEach((it) => sec.querySelector(".c-catbody").appendChild(itemRow(it, closedMsg, noService)));
         catsEl.appendChild(sec); any = true;
       }
@@ -595,16 +658,32 @@ function renderMenu(keepScroll = false) {
 }
 
 function openItemView(it, why) {
-  const body = html(`<div>${it.imageUrl ? `<img class="hero" src="${esc(it.imageUrl)}" alt=""/>` : ""}${it.description ? `<p class="desc">${esc(it.description)}</p>` : ""}<div class="price-big">${it.unit === "estimate" ? "Quote after inspection" : money(it.price)}${it.durationMinutes && store.mode === "salon" ? ` <span class="muted small">· ~${it.durationMinutes} min</span>` : ""}</div>${why ? `<div class="c-alert warn" style="margin-top:12px">${esc(why)}</div>` : ""}</div>`);
+  const body = html(`<div>${photosOf(it).length ? swipeHTML(photosOf(it), "hero") : ""}${it.description ? `<p class="desc">${esc(it.description)}</p>` : ""}<div class="price-big">${it.unit === "estimate" ? "Quote after inspection" : money(it.price)}${it.durationMinutes && store.mode === "salon" ? ` <span class="muted small">· ~${it.durationMinutes} min</span>` : ""}</div>${why ? `<div class="c-alert warn" style="margin-top:12px">${esc(why)}</div>` : ""}</div>`);
   openSheet(it.name, body, html(`<div></div>`));
 }
 let imgCount = 0;
+/** Pinterest tile: photo first (natural height → staggered columns), price on the photo, swipe for more photos */
+function pinTile(it, { inCart, canOrder, quick, promo, promoPrice }) {
+  const pics = photosOf(it);
+  const priceTxt = store.mode === "salon" && (it.variants || []).length ? `from ${money(Math.min(...it.variants.map((v) => Number(v.price) || 0)))}` : store.mode === "salon" && !Number(it.price) ? "Consult" : it.unit === "estimate" ? "Quote" : money(promoPrice ?? it.price) + (it.unit && it.unit !== "piece" && store.mode === "laundry" ? ` / ${esc(it.unit)}` : "");
+  const meta = [it.durationMinutes && store.mode === "salon" ? `${it.durationMinutes} min` : "", promo ? (store.mode === "salon" ? salonPromoTag(promo) : promoLabel(promo)) : "", inCart ? `${inCart} in cart` : ""].filter(Boolean).join(" · ");
+  const card = html(`<div class="c-pin ${it.available ? "" : "out"}">
+    <div class="c-pinph" style="--ar:${["3/4", "4/5", "1/1", "2/3", "4/5", "5/6"][[...it.id].reduce((a, c) => a + c.charCodeAt(0), 0) % 6]}">${pics.length ? swipeHTML(pics) : `<div class="c-pinno">${store.mode === "salon" ? "✂️" : "🍽️"}</div>`}<span class="c-pinpr">${priceTxt}</span>
+      ${store.mode === "salon" && it.available ? `<button class="c-pinbook" type="button">Book</button>` : quick ? `<button class="c-add" aria-label="Add ${esc(it.name)}">+</button>` : ""}</div>
+    <b class="c-pinn">${esc(it.name)}</b>${meta ? `<span class="c-pinm">${esc(meta)}</span>` : ""}${!it.available ? `<span class="c-pinm" style="color:var(--soldout)">Not available</span>` : ""}</div>`);
+  wireSwipes(card);
+  card.querySelector(".c-add")?.addEventListener("click", (e) => { e.stopPropagation(); quickAdd(it); });
+  if (store.mode === "salon") { if (it.available) card.onclick = () => { bookSel = new Set([...(bookSel || []), it.id]); uiTab = "book"; renderMenu(); window.scrollTo({ top: 0 }); }; }
+  else if (canOrder) card.onclick = () => openItem(it); else card.onclick = () => openItemView(it, "");
+  return card;
+}
 function itemRow(it, closedMsg, noService) {
   const inCart = cart.filter((l) => l.itemId === it.id).reduce((a, l) => a + l.qty, 0);
   const canOrder = it.available && !closedMsg && !noService;
   const quick = canOrder && !(it.options || []).length;
   const promo = itemPromo(it);
   const promoPrice = promo && promo.type !== "bogo" && (store.mode !== "salon" || promoActive(promo)) ? Math.max(0, it.price - lineDiscount(promo, it.price, it.price, 1).discount) : null;
+  if (layoutOf() === "pin") return pinTile(it, { inCart, canOrder, quick, promo, promoPrice });
   const card = html(`<div class="c-item ${it.available ? "" : "out"}">
     ${inCart ? `<span class="inbag"></span>` : ""}
     <div><div class="n">${inCart ? `<span class="inbag-n">${inCart}×</span>` : ""}${esc(it.name)}${promo ? ` <span class="c-badge">${esc(store.mode === "salon" ? salonPromoTag(promo) : promoLabel(promo))}</span>` : ""}${it.compareAt ? ` <span class="c-badge combo">COMBO</span>` : ""}${(store.bestsellers || []).includes(it.id) ? ` <span class="c-badge hot">🔥 Top pick</span>` : ""}${it.isNew ? ` <span class="c-badge new">NEW</span>` : ""}</div><div class="d">${esc(it.description)}</div>
@@ -644,7 +723,7 @@ function openItem(it) {
   let qty = 1;
   const picked = {}; // group -> [labels]
   const body = html(`<div>
-    ${it.imageUrl ? `<img class="hero" src="${esc(it.imageUrl)}" alt=""/>` : ""}
+    ${photosOf(it).length ? swipeHTML(photosOf(it), "hero") : ""}
     ${it.description ? `<p class="desc">${esc(it.description)}</p>` : ""}
     <div class="price-big">${money(it.price)}</div>
     <div data-opts></div>
@@ -738,7 +817,7 @@ function openCart() {
     <div class="c-total big"><span data-totlbl>Total</span><span data-total></span></div>
     ${isAdd ? "" : `<label>Name ${needInfo ? "" : "(optional)"}</label><input data-name value="${esc(saved.name || "")}" placeholder="Your name"/>`}
     ${needInfo ? `<label>Phone number</label><input data-phone type="tel" value="${esc(saved.phone || "")}" placeholder="09XX XXX XXXX"/>${msgrField(saved)}` : ""}
-    ${serviceType === "delivery" ? `<label>Delivery address</label><input data-address value="${esc(saved.address || "")}" placeholder="House no., street, barangay"/>` : ""}
+    ${serviceType === "delivery" ? `<div class="c-step" style="margin-top:12px"><span>📍</span> Deliver to</div>${pinBlock(saved, { who: "the rider", required: false })}` : ""}
     ${needInfo && svc.allowSchedule !== false ? `<label>When?</label>
       <div class="c-service" style="padding:0"><button type="button" data-when="asap" class="active">⚡ ASAP</button><button type="button" data-when="later">⏰ Pick a time</button></div>
       <div data-slots class="hidden" style="margin-top:8px"><div class="c-grid2"><div><label>Date</label><select data-sdate></select></div><div><label>Time</label><select data-stime></select></div></div></div>` : ""}
@@ -902,6 +981,7 @@ function openCart() {
       phone: body.querySelector("[data-phone]")?.value.trim() || "",
       address: body.querySelector("[data-address]")?.value.trim() || "",
       messenger: readMsgr(body),
+      ...(serviceType === "delivery" ? { landmark: body.querySelector("[data-landmark]")?.value.trim() || "", mapUrl: body.querySelector("[data-map]")?.value || "" } : {}),
     };
     err.innerHTML = "";
     if (store.qrMode === "single" && serviceType === "dine_in" && !table) { closeSheet(); return pickTable(() => openCart()); }
@@ -930,7 +1010,7 @@ function openCart() {
       voucher = null;
       if (preorderFor) { preorderFor = null; sessionStorage.removeItem("orderqr:preorder:" + slug); }
       if (customer.name || customer.phone) saveLocal({ customer: { ...(loadLocal().customer || {}), ...Object.fromEntries(Object.entries(customer).filter(([, v]) => v)) } });
-      const rec = { id: res.orderId, storeId: res.storeId, at: Date.now() };
+      const rec = { id: res.orderId, storeId: res.storeId, at: Date.now(), lines: cart.slice(0, 20).map(({ key, itemId, name, qty, unitPrice, choices, note }) => ({ key, itemId, name, qty, unitPrice, choices: choices || [], note: note || "" })) };
       myOrders = [rec, ...myOrders].slice(0, 10);
       saveLocal({ orders: myOrders, lastOrder: rec });
       cart = [];
@@ -1115,9 +1195,7 @@ function renderSalonBook(body) {
     <div data-homebox ${home ? "" : 'style="display:none"'} class="c-homebox">
       <div class="eyebrow">🏠 Where should we go?</div>
       ${areas.length ? `<label>Area</label><select data-area><option value="">Choose your area</option>${areas.map((a) => `<option value="${esc(a.name)}" ${saved.area === a.name ? "selected" : ""}>${esc(a.name)} · ${Number(a.fee) ? money(a.fee) : "free"}</option>`).join("")}</select>` : ""}
-      <label>Address</label><input data-address placeholder="House no., street, barangay, city" value="${esc(saved.address || "")}" autocomplete="street-address"/>
-      <label>Landmark <span class="muted small">(optional)</span></label><input data-landmark placeholder="e.g. green gate beside the sari-sari store" value="${esc(saved.landmark || "")}"/>
-      <label>Map pin <span class="muted small">(required — so the stylist can find you)</span></label><div style="display:flex;gap:6px"><input data-map placeholder="Paste a Google Maps link" value="${esc(saved.mapUrl || "")}" style="flex:1"/><button type="button" class="c-btn ghost sm" data-loc>📍 My location</button></div>
+      ${pinBlock(saved, { who: "the stylist" })}
       <div data-idbox ${saved.homeIdOk ? 'style="display:none"' : ""}><label>Valid ID <span class="muted small">(first home service only)</span></label><input type="file" accept="image/*" data-hsid/><p class="muted small" style="margin:4px 0 0">🔒 ${esc(PRIVACY_NOTE)}</p></div>
       ${(hs.prep || []).length ? `<div class="c-prep" data-prepbox><div class="eyebrow" style="margin-top:10px">🧺 What to prepare</div><p class="muted small" style="margin:0 0 6px">Tell us what you have, so we bring the rest.</p>${hs.prep.map((x, i) => x.bring ? `<div class="c-prep-row" data-prep="${i}"><span><b>${esc(x.name)}</b>${x.fee ? ` <span class="muted small">· bring: +${money(x.fee)}</span>` : ` <span class="muted small">· bring: free</span>`}</span><span class="c-chips" role="radiogroup" aria-label="${esc(x.name)}"><button type="button" class="chip on" data-pc="have" role="radio" aria-checked="true">I have it</button><button type="button" class="chip" data-pc="bring" role="radio" aria-checked="false">Please bring</button></span></div>` : `<label class="c-agree c-prep-row" data-prep="${i}"><input type="checkbox" data-pready/> <span><b>${esc(x.name)}</b> <span class="muted small">· please prepare this</span></span></label>`).join("")}<p class="small" data-prepsum style="margin:6px 0 0"></p></div>` : ""}
       <p class="muted small">${hs.minSpend ? `Minimum ${money(hs.minSpend)} in services. ` : ""}${areas.length ? "The transport fee is added to your bill." : esc(hs.note || "Transport fee depends on your area; the final fee is confirmed by the salon and shown on your status page.")}${areas.length && hs.note ? " " + esc(hs.note) : ""}</p>
@@ -1421,6 +1499,8 @@ function renderApptStatus(rec) {
         ${a.gift?.balanceAfter > 0 ? `<div class="c-alert ok">🎁 Gift card ${esc(a.gift.code)} balance left: <b>${money(a.gift.balanceAfter)}</b></div>` : ""}
         ${a.myRefCode && store.salon?.referral?.enabled ? `<div class="c-ticket main"><div class="eyebrow">💌 Invite your friends</div><div class="c-orderno" style="font-size:1.6rem">${esc(a.myRefCode)}</div><p class="small">Friends get <b>₱${Number(store.salon.referral.reward) || 100} off</b> their first visit with your code — and you get ₱${Number(store.salon.referral.reward) || 100} off too!</p><button class="c-btn brand block" data-share>Share my code</button></div>` : ""}
         ${a.packageBought ? `<div class="c-alert ok">🎁 Package <b>${esc(a.packageBought.name)}</b> — ${a.packageBought.remaining} of ${a.packageBought.sessions} sessions left · valid until ${new Date(a.packageBought.expires).toLocaleDateString("en-PH", { dateStyle: "medium" })}. Use it at your next visit (same mobile number).</div>` : ""}
+        ${a.change?.status === "pending" && a.change.client === null ? `<div class="c-ticket main"><div class="eyebrow">🔁 Service change</div><p class="small" style="margin:4px 0 8px">${esc(a.change.by || "Your stylist")} says you're changing to: <b>${esc((a.change.items || []).map((x) => x.name).join(", "))}</b> — new price <b>${money(a.change.to)}</b> (was ${money(a.change.from)}).${a.change.reason ? ` <span class="muted">“${esc(a.change.reason)}”</span>` : ""}</p><div class="row" style="gap:8px"><button class="c-btn brand block" data-chg="1">✓ Yes, that's right</button><button class="c-btn ghost block" data-chg="0">✕ No</button></div></div>` : a.change?.status === "pending" ? `<div class="c-alert warn">🔁 Service change waiting for the salon's approval: ${esc((a.change.items || []).map((x) => x.name).join(", "))} · ${money(a.change.to)}</div>` : ""}
+        ${done && a.providerId && !a.verify && a.verifyAsk !== false ? `<div class="c-ticket main" data-vfy><div class="eyebrow">Quick check</div><p class="small" style="margin:4px 0 8px">Is this what you got today? <b>${esc((a.items || []).filter((x) => !x.retail).map((x) => x.name).join(", "))}</b></p><div class="row" style="gap:8px"><button class="c-btn brand block" data-verify="1">✓ Yes</button><button class="c-btn ghost block" data-verify="0">✕ Not exactly</button></div></div>` : a.verify && !a.verify.ok ? `<div class="c-alert warn">Thanks — the salon was told your service didn't match.</div>` : ""}
         ${["pending", "confirmed", "in_progress"].includes(a.status) ? `<button class="c-btn ghost block" data-addsvc style="margin-bottom:8px">➕ Add a service</button>` : ""}
         ${a.followUpId ? `<div class="c-alert ok">Your added service is booked as a follow-up right after — it will show on your status when this one is done.</div>` : ""}
         ${canChange ? `<div class="row" style="gap:8px"><button class="c-btn ghost block" data-resched>📅 Reschedule</button><button class="c-btn ghost block" data-cancel>Cancel</button></div>` : !bad && !done && a.status !== "in_progress" ? `<p class="muted small" style="text-align:center">Changes are allowed up to ${cfg.cancelHours || 0} h before. Please message the salon for changes.</p>` : ""}
@@ -1447,6 +1527,8 @@ function renderApptStatus(rec) {
     app.querySelector("[data-copymsg]")?.addEventListener("click", () => { navigator.clipboard?.writeText(`Hi! Confirming my booking ${a.code} on ${start?.toLocaleString("en-PH", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} — ${a.customer?.name}`); toast("Copied — paste it in Messenger"); });
     app.querySelector("[data-cancel]")?.addEventListener("click", async () => { if (!confirm("Cancel this appointment?")) return; try { await call("cancelAppointment", { storeId: rec.storeId, id: rec.id }); toast("Cancelled"); } catch (e) { toast(e.message); } });
     app.querySelector("[data-resched]")?.addEventListener("click", () => openReschedule(rec, a));
+    app.querySelectorAll("[data-chg]").forEach((b) => (b.onclick = async () => { b.disabled = true; try { await call("apptChange", { action: "client", storeId: rec.storeId, id: rec.id, ok: b.dataset.chg === "1" }); toast(b.dataset.chg === "1" ? "Confirmed ✓" : "OK — we keep what you booked"); } catch (e) { toast(e.message); b.disabled = false; } }));
+    app.querySelectorAll("[data-verify]").forEach((b) => (b.onclick = async () => { const ok = b.dataset.verify === "1"; const note = ok ? "" : prompt("What did you get instead? (optional)", "") ?? ""; b.disabled = true; try { await call("apptChange", { action: "verify", storeId: rec.storeId, id: rec.id, ok, note }); toast(ok ? "Thanks! ✓" : "Thanks — the salon will look into it"); } catch (e) { toast(e.message); b.disabled = false; } }));
     app.querySelector("[data-addsvc]")?.addEventListener("click", () => openAddService(rec, a));
     app.querySelector("[data-here]")?.addEventListener("click", async (ev) => { ev.target.disabled = true; try { await call("apptCheckIn", { storeId: rec.storeId, id: rec.id }); toast("Checked in ✓"); } catch (e) { toast(e.message); ev.target.disabled = false; } });
     app.querySelector("[data-late]")?.addEventListener("click", async () => { const m = prompt("About how many minutes late?", "10"); if (!m) return; try { await call("apptCheckIn", { storeId: rec.storeId, id: rec.id, action: "late", minutes: Number(m) }); toast("Thanks — we'll let your stylist know"); } catch (e) { toast(e.message); } });
@@ -1507,7 +1589,7 @@ function renderLaundryBook(body) {
       <label>Name</label><input data-name value="${esc(saved.name || "")}"/>
       <label>Phone</label><input data-phone type="tel" value="${esc(saved.phone || "")}" placeholder="09XX XXX XXXX"/>
       ${msgrField(saved)}
-      <label>Address</label><input data-address value="${esc(saved.address || "")}" placeholder="House no., street, barangay — landmarks help"/>
+      <div class="c-step" style="margin-top:12px"><span>📍</span> Pickup address</div>${pinBlock(saved, { who: "the rider" })}
       <label>Notes</label><input data-note placeholder="optional"/>
       ${store.policies?.laundry ? `<label>Shop policy</label><div class="waiver-text">${esc(store.policies.laundry)}</div><label class="c-agree"><input type="checkbox" data-agree/> I have read and agree to the policy</label>` : ""}
       <button class="c-btn brand block" data-book style="margin-top:14px">Book now</button>
@@ -1519,7 +1601,7 @@ function renderLaundryBook(body) {
   g("[data-book]").onclick = async (e) => {
     const items = [...body.querySelectorAll("[data-svc]:checked")].map((cb) => ({ itemId: cb.dataset.svc, qty: Number(body.querySelector(`[data-qty="${cb.dataset.svc}"]`)?.value || 0) }));
     if (!items.length) return toast("Pick at least one service");
-    const customer = { name: g("[data-name]").value.trim(), phone: g("[data-phone]").value.trim(), address: g("[data-address]").value.trim(), messenger: readMsgr(body) };
+    const customer = { name: g("[data-name]").value.trim(), phone: g("[data-phone]").value.trim(), address: g("[data-address]").value.trim(), landmark: g("[data-landmark]")?.value.trim() || "", mapUrl: g("[data-map]")?.value || "", messenger: readMsgr(body) };
     if (!customer.name || !customer.phone || !customer.address) return toast("Name, phone and address are required");
     const mode = body.querySelector("[name=lbmode]:checked")?.value;
     if (g("[data-agree]") && !g("[data-agree]").checked) return toast("Please agree to the shop policy");
@@ -1639,6 +1721,7 @@ function renderStatus(rec) {
           ${o.deliveryFee ? `<div class="c-mini muted"><span>Delivery fee</span><span class="amt">${money(o.deliveryFee)}</span></div>` : o.freeDelivery ? `<div class="c-mini muted"><span>Delivery fee</span><span class="amt">FREE 🛵</span></div>` : o.deliveryFeePending ? `<div class="c-mini muted"><span>Delivery fee</span><span class="amt">to be confirmed by the store</span></div>` : ""}
           ${o.smallOrderFee ? `<div class="c-mini muted"><span>Small-order fee</span><span class="amt">${money(o.smallOrderFee)}</span></div>` : ""}
           ${o.discounts?.incident ? `<div class="c-mini muted"><span>Sorry discount</span><span class="amt">−${money(o.discounts.incident)}</span></div>` : ""}
+          ${o.discounts?.senior ? `<div class="c-mini muted"><span>Senior / PWD discount (${o.senior?.count || 1})</span><span class="amt">−${money(o.discounts.senior)}</span></div>` : ""}
           <div class="c-total big"><span>Total</span><span>${money(o.total)}</span></div>
           <div data-alltotal></div>
           ${o.note ? `<div class="muted small" style="margin-top:8px">Note: ${esc(o.note)}</div>` : ""}
@@ -2083,7 +2166,7 @@ function openReceipt(o) {
   const r = { kind: "Order", code: o.orderNo, date: o.createdAt?.toDate?.() || new Date(),
     rows: [["Type", `${{ dine_in: "Dine-in", take_out: "Take-out", pickup: "Pickup", delivery: "Delivery" }[o.serviceType] || ""}${o.tableLabel ? " · " + o.tableLabel : ""}`]],
     lines: (o.items || []).map((l) => ({ name: `${l.qty}× ${l.name}`, sub: (l.choices || []).map((c) => c.label).join(", "), amt: l.subtotal })),
-    adj: [["Promo savings", -(o.discounts?.promo || 0)], [o.voucher ? `Voucher ${o.voucher.code}` : "Voucher", -(o.voucher?.discount || 0)], ["Delivery fee", o.deliveryFee || 0], ["Small-order fee", o.smallOrderFee || 0], ["Sorry discount", -(o.discounts?.incident || 0)], ["Refunded (sold out)", -(o.refund?.amount || 0)]],
+    adj: [["Promo savings", -(o.discounts?.promo || 0)], ["Senior / PWD discount", -(o.discounts?.senior || 0)], [o.voucher ? `Voucher ${o.voucher.code}` : "Voucher", -(o.voucher?.discount || 0)], ["Delivery fee", o.deliveryFee || 0], ["Small-order fee", o.smallOrderFee || 0], ["Sorry discount", -(o.discounts?.incident || 0)], ["Refunded (sold out)", -(o.refund?.amount || 0)]],
     total: o.total, paid: !!o.paid, paidText: `PAID${o.paymentMethodName || o.paymentMethod ? " · " + String(o.paymentMethodName || o.paymentMethod).toUpperCase() : ""}${paidAt ? " · " + paidAt.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" }) : ""}` };
   openSheet("Receipt", html(receiptHTML(store, r)), receiptFoot(html, store, r), `#${o.orderNo}`);
 }
@@ -2172,7 +2255,7 @@ function openSheet(title, body, foot, subtitle) {
   if (foot) wrap.querySelector(".ft").appendChild(foot);
   wrap.querySelector(".x").onclick = closeSheet;
   wrap.addEventListener("click", (e) => e.target === wrap && closeSheet());
-  document.body.appendChild(wrap);
+  document.body.appendChild(wrap); wireSwipes(wrap);
   document.body.style.overflow = "hidden";
 }
 function closeSheet() {

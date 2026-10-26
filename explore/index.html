@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" href="/logo/favicon.svg" type="image/svg+xml" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#FFFFFF" />
+  <title>Explore · TapTayo</title>
+  <meta name="description" content="Find salons, nail spas, photographers, laundry, staycations and cafés near you — or where you're going. Book in a few taps." />
+  <meta property="og:title" content="Find services near you · TapTayo" />
+  <meta property="og:description" content="Nails, hair, spa, photographers, laundry, staycations — near you or where you're going." />
+  <meta property="og:image" content="https://taptayo.com/demo/studio/wedding.jpg" />
+  <link rel="stylesheet" href="/src/fonts.css" />
+</head>
+<body>
+  <header class="ex-top">
+    <a class="ex-logo" href="/"><img src="/logo/favicon.svg" alt="" width="26" height="26" /><span>TapTayo</span></a>
+    <button class="ex-place" id="placeBtn" type="button"><span class="ic">📍</span><span id="placeTxt">Near you</span><span class="cv">▾</span></button>
+    <span class="ex-sp"></span>
+    <span id="langSlot"></span>
+    <a class="ex-me" id="meBtn" href="/login/?next=/explore/&signup=1&role=client">Log in</a>
+  </header>
+  <main class="ex-main" id="app">
+    <form class="ex-search" id="sf" role="search"><span>🔎</span><input id="sq" placeholder="Search nails, photographer, staycation…" autocomplete="off" /><button type="submit">Search</button></form>
+    <div id="trip"></div>
+    <h2 class="ex-h" id="catH">Find services near you</h2>
+    <div class="ex-cats" id="cats"></div>
+    <div class="ex-forrow"><h2 class="ex-h" style="margin:0">For you</h2><button class="ex-link" id="editInt" type="button">✎ My interests</button></div>
+    <div class="ex-chips" id="chips"></div>
+    <div class="ex-feed" id="feed"><div class="ex-skel"></div><div class="ex-skel"></div><div class="ex-skel"></div></div>
+    <div id="more"></div>
+  </main>
+  <section class="ex-soon" aria-label="Coming soon"><b>🔜 Coming soon on TapTayo</b><div>🎬 <b>Reels</b> — short videos of shops' work (before/after, room tours) right here in Explore · 💸 auto-confirmed GCash/Maya payments · 📱 all your bookings, loyalty cards and gift cards in one place.</div></section>
+  <footer class="ex-foot">Own a shop or do freelance work? <a href="/login/?signup=1&utm_source=explore">List it free on TapTayo →</a></footer>
+  <script type="module" src="/src/explore.js"></script>
+</body>
+</html>

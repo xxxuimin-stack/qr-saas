@@ -4,12 +4,72 @@ const { onCall: onCallRaw, HttpsError, onRequest } = require("firebase-functions
 // Exempt (use onCallRaw): createStore, securityStatus, trustDevice, logoutEverywhere.
 const onCall = (opts, fn) => {
   if (typeof opts === "function") { fn = opts; opts = {}; }
-  return onCallRaw(opts, async (req) => { await ownerSessionGuard(req); return fn(req); });
+  return onCallRaw(opts, async (req) => {
+    await ownerSessionGuard(req);
+    try { return await fn(req); }
+    catch (e) { if (!(e instanceof HttpsError)) { recordError("server", process.env.FUNCTION_TARGET || process.env.K_SERVICE || "?", e).catch(() => {}); throw new HttpsError("internal", "Something went wrong on our side. Please try again — if it keeps happening, message us."); } throw e; }
+  });
 };
 const { setGlobalOptions } = require("firebase-functions/v2");
 const { onDocumentWritten, onDocumentCreated } = require("firebase-functions/v2/firestore");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const logger = require("firebase-functions/logger");
+const crypto0 = require("crypto");
+
+/* ---------- 🐞 error tracking: same error = one record with a count; admin is told about new errors and spikes ---------- */
+const ERR_NOISE = /ResizeObserver loop|Script error\.?$|Load failed$|NetworkError|Failed to fetch|cancelled-popup|popup-closed|The operation was aborted|Non-Error promise rejection|chrome-extension:|moz-extension:/i;
+async function recordError(where, fn, err, extra = {}) {
+  const message = String(err?.message || err || "").slice(0, 300);
+  if (!message || ERR_NOISE.test(message)) return;
+  const stack = String(err?.stack || extra.stack || "").slice(0, 1500);
+  const top = (stack.split("\n").find((l) => /\.(m?js|ts)/.test(l)) || "").replace(/\?[^:)\s]*/g, "").replace(/:\d+:\d+/g, "").trim().slice(0, 160);
+  const fp = crypto0.createHash("sha1").update([where, fn, message.replace(/\d+/g, "#"), top].join("|")).digest("hex").slice(0, 20);
+  const ref = db.doc(`errors/${fp}`), now = Date.now(), hour = new Date(now + 8 * 3600e3).toISOString().slice(0, 13);
+  const r = await db.runTransaction(async (tx) => {
+    const cur = (await tx.get(ref)).data();
+    const hourCount = cur?.hour === hour ? (cur.hourCount || 0) + 1 : 1;
+    tx.set(ref, { where, fn: String(fn).slice(0, 60), message, stack, top, count: (cur?.count || 0) + 1, firstAt: cur?.firstAt || now, lastAt: now, hour, hourCount,
+      url: String(extra.url || cur?.url || "").slice(0, 200), ua: String(extra.ua || cur?.ua || "").slice(0, 160), status: "open", ...(cur?.status === "fixed" ? { reopened: now } : {}) }, { merge: true });
+    return { isNew: !cur || cur.status === "fixed", spike: hourCount === 20 };
+  });
+  if (r.isNew || r.spike) notifyAdmin(`🐞 ${r.spike ? "20+ times this hour" : "New error"} · ${where} · ${fn}\n${message}\ntaptayo.com/admin/`);
+}
+
+/* ---------- 🛡 abuse guard: rate limits (per browser and per network) + Cloudflare Turnstile (invisible) ---------- */
+const GUARD = { order: [6, 20, 300], booking: [6, 40, 600], report: [3, 10, 3600], inquiry: [5, 30, 3600], signup: [4, 15, 3600] }; // [per uid, per IP, window seconds]
+const ipOf = (req) => String(req.rawRequest?.headers?.["x-forwarded-for"] || req.rawRequest?.ip || "").split(",")[0].trim().slice(0, 60);
+async function hitLimit(key, max, windowSec) {
+  const ref = db.doc(`rl/${crypto0.createHash("sha1").update(key).digest("hex").slice(0, 24)}`), now = Date.now();
+  return db.runTransaction(async (tx) => {
+    const ts = ((await tx.get(ref)).data()?.ts || []).filter((t) => t > now - windowSec * 1000);
+    if (ts.length >= max) return true;
+    tx.set(ref, { ts: [...ts, now].slice(-max), exp: Timestamp.fromMillis(now + windowSec * 1000) });
+    return false;
+  }).catch(() => false);
+}
+let _secCfg = { at: 0, v: {} };
+async function securityCfg() { if (Date.now() - _secCfg.at < 60000) return _secCfg.v; const v = (await db.doc("config/security").get().catch(() => null))?.data?.() || {}; _secCfg = { at: Date.now(), v }; return v; }
+async function turnstileOk(token, ip) {
+  const secret = process.env.TURNSTILE_SECRET || ""; if (!secret) return { ok: true, skipped: true };
+  if (!token) return { ok: false, why: "no-token" };
+  try {
+    const r = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", { method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ secret, response: String(token).slice(0, 2048), remoteip: ip }) });
+    const j = await r.json(); return { ok: !!j.success, why: (j["error-codes"] || []).join(",") };
+  } catch (e) { return { ok: true, skipped: true, why: "verify-unreachable" }; } // never block customers because Cloudflare is down
+}
+/** call at the top of customer-facing actions. Staff / owner devices (store claims) are not limited. */
+async function abuseGuard(req, kind, { demo = false } = {}) {
+  const tok = req.auth?.token || {}; if (tok.storeId || tok.admin === true) return;
+  const sec = await securityCfg(); if (sec.rateLimits === "off" && sec.turnstile === "off") return;
+  const [perUid, perIp, win] = GUARD[kind] || GUARD.order; const ip = ipOf(req), uid = req.auth?.uid || "";
+  if (sec.rateLimits !== "off") {
+  if (uid && (await hitLimit(`${kind}:u:${uid}`, perUid, win))) throw new HttpsError("resource-exhausted", "Too many tries from this phone — please wait a few minutes and try again.");
+  if (ip && (await hitLimit(`${kind}:ip:${ip}`, perIp * (demo ? 2 : 1), win))) throw new HttpsError("resource-exhausted", "Too many tries from this network — please wait a few minutes and try again.");
+  }
+  const mode = sec.turnstile || "monitor"; if (mode === "off") return;
+  const t = await turnstileOk(req.data?.cf, ip);
+  if (!t.ok) { recordError("bot-check", kind, new Error(`Turnstile failed (${t.why || "?"})${mode === "enforce" ? " — blocked" : " — allowed (monitor mode)"}`)).catch(() => {}); if (mode === "enforce") throw new HttpsError("permission-denied", "We couldn't confirm you're not a bot. Please refresh the page and try again."); }
+}
 const admin = require("firebase-admin");
 const { getFirestore, FieldValue, Timestamp } = require("firebase-admin/firestore");
 const { PRESETS, MODE_DEFAULTS, TRIAL_DAYS, TRIAL_LIMITS } = require("./presets");
@@ -261,6 +321,7 @@ exports.changeSetup = onCall(async (req) => {
 const otpHash = (uid, code) => crypto.createHash("sha256").update(`${uid}:${code}`).digest("hex");
 exports.sendSignupOtp = onCallRaw(async (req) => {
   const { uid } = requireAuth(req);
+  await abuseGuard(req, "signup");
   const cfg = (await db.doc("config/platformSms").get()).data() || {};
   if (!cfg.apiKey || cfg.required === false) return { skipped: true };
   const phone = phPhone(req.data?.phone);
@@ -290,6 +351,13 @@ exports.verifySignupOtp = onCallRaw(async (req) => {
   await ref.update({ verifiedPhone: o.phone, verifiedAt: Date.now(), hash: null });
   return { ok: true, phone: o.phone };
 });
+/** email + password accounts confirm their email first (free — Firebase sends the link). Google accounts are already verified.
+ *  Turn off with config/security { emailVerify: "off" }. */
+async function requireVerifiedEmail(token) {
+  if (token?.firebase?.sign_in_provider !== "password" || token.email_verified === true) return;
+  if ((await securityCfg()).emailVerify === "off") return;
+  throw new HttpsError("failed-precondition", "Confirm your email first — open the link we sent to your inbox, then try again.");
+}
 async function requireVerifiedPhone(uid, phone) {
   const cfg = (await db.doc("config/platformSms").get()).data() || {};
   if (!cfg.apiKey || cfg.required === false) return;
@@ -310,6 +378,7 @@ exports.createStore = onCallRaw(async (req) => {
   const userRef = db.doc(`users/${uid}`);
   const userSnap = await userRef.get();
   if (userSnap.exists && userSnap.data().storeId) throw new HttpsError("already-exists", "This account already has a store.");
+  await requireVerifiedEmail(token);
   await requireVerifiedPhone(uid, data.phone);
   const orgRef = db.collection("orgs").doc();
   const { storeId, slug, mode } = await buildStore({ uid, token, data, orgId: orgRef.id });
@@ -568,7 +637,7 @@ async function storeEntitled(storeId, key) {
 }
 /** plan staff slots: the oldest N active staff can work; the rest get planLocked (kept, logged out) until the plan allows them */
 async function enforceStaffLimit(storeId, max) {
-  const all = (await db.collection(`stores/${storeId}/staff`).where("active", "==", true).get()).docs.sort((a, b) => (a.data().createdAt?.toMillis?.() || 0) - (b.data().createdAt?.toMillis?.() || 0));
+  const all = (await db.collection(`stores/${storeId}/staff`).where("active", "==", true).get()).docs.filter((d) => !d.data().linkedUid).sort((a, b) => (a.data().createdAt?.toMillis?.() || 0) - (b.data().createdAt?.toMillis?.() || 0));
   const b = db.batch(); let n = 0;
   all.forEach((d, i) => { const lock = i >= max; if (!!d.data().planLocked !== lock) { b.update(d.ref, { planLocked: lock }); n++; } });
   if (n) await b.commit();
@@ -613,6 +682,7 @@ async function rebuildPublicStore(storeId) {
         description: it.description || "",
         imageUrl: it.imageUrl || null,
         thumbUrl: it.thumbUrl || null,
+        photos: Array.isArray(it.photos) ? it.photos.filter((u) => typeof u === "string" && /^https:\/\//.test(u)).slice(0, 4) : [], // extra photos (swipe)
         options: it.options || [],
         available: it.available !== false,
         ...(it.available === false && Number(it.soldUntil) > Date.now() ? { soldUntil: Number(it.soldUntil) } : {}),
@@ -719,6 +789,8 @@ async function rebuildPublicStore(storeId) {
     bestsellers: s.showBestsellers === false ? [] : (store.stats?.bestsellers || []),
     rooms: roomsSnap.docs.filter((d) => d.data().active !== false).slice(0, planLim.rooms ?? 1e9).map((d) => { const r = d.data(); return { id: d.id, name: r.name, theme: r.theme || "", description: r.description || "", capacity: r.capacity || 2, beds: r.beds || "", price: Number(r.price) || 0, weekendPrice: Number(r.weekendPrice) || 0, shortPrices: r.shortPrices || null, inventory: (r.inventory || []).map((i) => ({ name: i.name, qty: i.qty, price: i.price || 0 })), deposit: r.deposit ?? null, selfDoor: !!r.passcode && r.doorType !== "meet", doorType: r.doorType || (r.passcode ? "smartlock" : "meet"), notices: (r.notices || []).filter((n) => n && n.label).map((n) => ({ label: n.label, percent: Number(n.percent) || 0 })), rating: (r.ratingCount || 0) >= 1 ? { avg: Math.round((r.ratingSum / r.ratingCount) * 10) / 10, n: r.ratingCount, cats: r.ratingCats || null } : null, amenities: r.amenities || [], photos: (r.photos || []).slice(0, Math.min(30, planLim.photos ?? 30)), posters: (r.posters || []).slice(0, 6), rules: r.rules || "" }; }),
     stay: store.mode === "stay" ? { ...stayCfg(store), policy: s.stay?.policy || "", waiverText: s.waiver?.text || s.stay?.waiverText || "", requireId: s.stay?.requireId !== false } : null,
+    discover: discoverOf(store, items, locked),
+    hiring: s.hiring?.on && !locked && s.live !== false ? { on: true, skills: s.hiring.skills || [], note: s.hiring.note || "", requireCert: !!s.hiring.requireCert, rating: store.proRating?.count ? { avg: Math.round((store.proRating.sum / store.proRating.count) * 10) / 10, count: store.proRating.count, paysOnTime: store.proRating.paysAsked ? Math.round((store.proRating.paysYes / store.proRating.paysAsked) * 100) : null } : null } : null,
     updatedAt: FieldValue.serverTimestamp(),
   });
 }
@@ -733,6 +805,28 @@ exports.checkSlug = onCall(async (req) => {
   const mine = snap.exists && (snap.data().storeId === t.storeId || snap.data().redirectStoreId === t.storeId);
   return { slug, ok: !snap.exists || mine, reason: !snap.exists || mine ? "" : "Already taken by another store." };
 });
+/** owner: rename the business. Once every 60 days; LOCKED once the business permit badge is approved (the badge is for that name). */
+const RENAME_DAYS = 60, SLUG_DAYS = 30, USER_NAME_DAYS = 90;
+exports.renameStore = onCall(async (req) => {
+  const t = requireOwner(req); const name = String(req.data?.name || "").trim().replace(/\s+/g, " ").slice(0, 60);
+  if (name.length < 2) throw new HttpsError("invalid-argument", "Enter the business name.");
+  const ref = db.doc(`stores/${t.storeId}`); const st = (await ref.get()).data(); if (!st) throw new HttpsError("not-found", "Store not found.");
+  if (st.name === name) return { ok: true, same: true };
+  if (st.verif?.permit?.status === "approved") throw new HttpsError("failed-precondition", "Your business name is locked — it's verified with your business permit. Message TapTayo support if the permit itself was renamed.");
+  const last = Number(st.nameChangedAt) || 0, next = last + RENAME_DAYS * 864e5;
+  if (next > Date.now()) throw new HttpsError("failed-precondition", `You can rename again on ${new Date(next).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })} (once every ${RENAME_DAYS} days).`);
+  await ref.update({ name, nameChangedAt: Date.now(), nameHistory: FieldValue.arrayUnion({ from: st.name || "", to: name, at: Date.now() }), updatedAt: FieldValue.serverTimestamp() });
+  notifyAdmin(`✏️ Store renamed: "${st.name}" → "${name}" (${st.slug})`).catch(() => {});
+  return { ok: true, name, nextAt: Date.now() + RENAME_DAYS * 864e5 };
+});
+/** roadmap: what's coming — owners tap "I want this" so we build the most-wanted first (one vote per store per item) */
+exports.roadmapVote = onCall(async (req) => {
+  const t = requireOwner(req); const key = String(req.data?.key || "").replace(/[^a-z0-9_-]/g, "").slice(0, 30); if (!key) throw new HttpsError("invalid-argument", "Bad item.");
+  const ref = db.doc(`stores/${t.storeId}`); const st = (await ref.get()).data() || {}; const had = (st.wants || []).includes(key);
+  await ref.update({ wants: had ? FieldValue.arrayRemove(key) : FieldValue.arrayUnion(key) });
+  await db.doc(`roadmap/${key}`).set({ votes: FieldValue.increment(had ? -1 : 1), updatedAt: Date.now() }, { merge: true });
+  return { ok: true, on: !had, votes: Math.max(0, ((await db.doc(`roadmap/${key}`).get()).data()?.votes) || 0) };
+});
 exports.changeSlug = onCall(async (req) => {
   const t = requireOwner(req);
   const slug = slugify(req.data?.slug || "");
@@ -744,13 +838,15 @@ exports.changeSlug = onCall(async (req) => {
     if (!st) throw new HttpsError("not-found", "Store not found.");
     const old = st.slug;
     if (old === slug) return { slug, old, same: true };
+    const nextSlug = (Number(st.slugChangedAt) || 0) + SLUG_DAYS * 864e5;
+    if (nextSlug > Date.now()) throw new HttpsError("failed-precondition", `You can change your link again on ${new Date(nextSlug).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })} (once every ${SLUG_DAYS} days). Your old link keeps working.`);
     const newRef = db.doc(`publicStores/${slug}`);
     const taken = await tx.get(newRef);
     if (taken.exists && taken.data().storeId !== t.storeId && taken.data().redirectStoreId !== t.storeId) throw new HttpsError("already-exists", "That link is already taken by another store.");
     tx.set(newRef, { storeId: t.storeId, name: st.name, slug, mode: st.mode, categories: [], items: [], updatedAt: FieldValue.serverTimestamp() });
     // old link → redirect (printed QR codes keep working)
     if (old) tx.set(db.doc(`publicStores/${old}`), { redirectTo: slug, redirectStoreId: t.storeId, updatedAt: FieldValue.serverTimestamp() });
-    tx.update(storeRef, { slug, previousSlugs: FieldValue.arrayUnion(...(old ? [old] : [])), updatedAt: FieldValue.serverTimestamp() });
+    tx.update(storeRef, { slug, slugChangedAt: Date.now(), previousSlugs: FieldValue.arrayUnion(...(old ? [old] : [])), updatedAt: FieldValue.serverTimestamp() });
     return { slug, old };
   });
   if (!result.same) {
@@ -1327,6 +1423,7 @@ exports.createLaundryJob = onCall(async (req) => {
 exports.bookLaundryJob = onCall(withIndex("order", async (req) => {
   await maintGuard(req);
   const { uid } = requireAuth(req);
+  await abuseGuard(req, "order");
   const d = req.data || {};
   const pubSnap = await db.doc(`publicStores/${String(d.slug || "")}`).get();
   if (!pubSnap.exists) throw new HttpsError("not-found", "Store not found.");
@@ -1337,10 +1434,11 @@ exports.bookLaundryJob = onCall(withIndex("order", async (req) => {
   const mode = ["rider_rider", "rider_pickup", "dropoff_delivery"].includes(d.mode) ? d.mode : null;
   if (!mode || cfg.modes?.[mode] === false) throw new HttpsError("invalid-argument", "That service mode is not available.");
   if (!(await storeEntitled(storeId, "delivery"))) throw new HttpsError("failed-precondition", "Pickup / delivery is not available at this shop.");
-  const customer = { name: String(d.customer?.name || "").trim().slice(0, 60), phone: String(d.customer?.phone || "").trim().slice(0, 30), address: String(d.customer?.address || "").trim().slice(0, 200), messenger: msgrOf(d.customer?.messenger) };
+  const customer = { name: String(d.customer?.name || "").trim().slice(0, 60), phone: String(d.customer?.phone || "").trim().slice(0, 30), address: String(d.customer?.address || "").trim().slice(0, 200), messenger: msgrOf(d.customer?.messenger), ...geoOf(d.customer) };
   if (customer.name.length < 2 || !customer.phone) throw new HttpsError("invalid-argument", "Name and phone number are required.");
   if (!customer.address) throw new HttpsError("invalid-argument", "Address is required for pickup / delivery.");
   const phoneKey = customer.phone.replace(/\D/g, "");
+  await customerGate(req, storeId, customer.phone);
   if (phoneKey.length >= 7) { const c = (await db.doc(`stores/${storeId}/customers/${phoneKey}`).get()).data(); if (c?.flagged) throw new HttpsError("permission-denied", "We can't accept this booking. Please call the shop."); }
   const catalog = await laundryCatalog(storeId);
   const lines = (Array.isArray(d.items) ? d.items : []).map((l) => { const it = catalog.get(String(l.itemId || "")); if (!it) throw new HttpsError("not-found", "A service is no longer on the list."); const unit = it.unit || "piece"; const q = Math.max(0, Number(l.qty) || 0); return { itemId: it.id, name: it.name, unit, qty: q, unitPrice: Number(it.price) || 0, subtotal: 0, label: unit === "kg" ? (q ? `~${q} kg` : "to weigh") : unit === "estimate" ? "to quote" : q ? `${q} ${unit}` : "", choices: [], station: "counter" }; });
@@ -1790,7 +1888,7 @@ exports.myAccount = onCall(async (req) => {
   if (!realAccount(req)) return { guest: true };
   const u = (await db.doc(`users/${req.auth.uid}`).get()).data() || {};
   const businesses = (u.businesses || []).map((b) => ({ storeId: b.storeId, name: b.name, businessType: b.businessType }));
-  return { roles: [...new Set([...(u.accountRoles || []), ...(u.storeId ? [businesses.some((b) => b.businessType === "freelance") ? "creator" : "business"] : [])])], hasStore: !!u.storeId, businesses, profile: u.profile || {}, adult: !!u.adult, email: u.email || req.auth.token.email };
+  return { roles: [...new Set([...(u.accountRoles || []), ...(u.storeId ? [businesses.some((b) => b.businessType === "freelance") ? "creator" : "business"] : [])])], hasStore: !!u.storeId, businesses, profile: u.profile || {}, adult: !!u.adult, notice: u.notice || null, blockedShops: (u.blockedShops || []).map((id) => ({ storeId: id, name: u.blockedNames?.[id] || "A shop" })), nameDays: USER_NAME_DAYS, email: u.email || req.auth.token.email };
 });
 /** logged in with Google on a phone that already booked as a guest (and that Google account existed before) →
  *  move the guest's bookings to the account. Proof: the guest session's own ID token (only that browser has it). */
@@ -1816,6 +1914,28 @@ exports.reminderOptOut = onCall(async (req) => {
   await ref.update({ noSms: !!d.off, updatedAt: FieldValue.serverTimestamp() });
   return { ok: true, noSms: !!d.off };
 });
+/** browser errors → errors collection (no login needed; a few per page at most, noise filtered) */
+exports.logClientError = onCallRaw({ maxInstances: 5 }, async (req) => {
+  const d = req.data || {}; const ip = ipOf(req);
+  if (ip && (await hitLimit(`err:ip:${ip}`, 30, 3600))) return { ok: false };
+  await recordError("browser", String(d.page || "?").slice(0, 60), { message: String(d.message || ""), stack: String(d.stack || "") }, { url: d.url, ua: req.rawRequest?.headers?.["user-agent"] });
+  return { ok: true };
+});
+exports.adminSecurity = onCall(async (req) => {
+  requireAdmin(req); const d = req.data || {};
+  if (["off", "monitor", "enforce"].includes(d.turnstile)) { await db.doc("config/security").set({ turnstile: d.turnstile, updatedAt: Date.now() }, { merge: true }); _secCfg.at = 0; }
+  if (["on", "off"].includes(d.rateLimits)) { await db.doc("config/security").set({ rateLimits: d.rateLimits, updatedAt: Date.now() }, { merge: true }); _secCfg.at = 0; }
+  if (["on", "off"].includes(d.emailVerify)) { await db.doc("config/security").set({ emailVerify: d.emailVerify, updatedAt: Date.now() }, { merge: true }); _secCfg.at = 0; }
+  const cfg = (await db.doc("config/security").get()).data() || {};
+  const sms = (await db.doc("config/platformSms").get()).data() || {};
+  return { turnstile: cfg.turnstile || "monitor", rateLimits: cfg.rateLimits === "off" ? "off" : "on", emailVerify: cfg.emailVerify === "off" ? "off" : "on", smsOtp: !!sms.apiKey && sms.required !== false, hasSecret: !!process.env.TURNSTILE_SECRET, smsCredits: sms.lastCredits ?? null, smsCheckedAt: sms.creditsAt || null };
+});
+exports.adminErrors = onCall(async (req) => {
+  requireAdmin(req); const d = req.data || {};
+  if (d.fixed) { await db.doc(`errors/${String(d.fixed)}`).set({ status: "fixed", fixedAt: Date.now() }, { merge: true }); return { ok: true }; }
+  const q = await db.collection("errors").orderBy("lastAt", "desc").limit(60).get();
+  return q.docs.map((x) => ({ id: x.id, ...x.data() })).filter((x) => d.all || x.status !== "fixed").slice(0, 40);
+});
 exports.myBookings = onCall(async (req) => {
   if (!realAccount(req)) throw new HttpsError("unauthenticated", "Log in to see your bookings.");
   const snap = await db.collection(`users/${req.auth.uid}/bookings`).orderBy("at", "desc").limit(40).get();
@@ -1824,12 +1944,116 @@ exports.myBookings = onCall(async (req) => {
     return { ...b, status: doc.status || "removed", code: b.code || doc.code || (doc.orderNo ? `#${doc.orderNo}` : ""), when: ms(doc.startAt) || ms(doc.checkIn) || ms(doc.scheduledAt) || (doc.date ? new Date(`${doc.date}T${doc.time || "12:00"}:00+08:00`).getTime() : null) || ms(doc.createdAt), total: doc.total ?? doc.quote?.total ?? null, title: (doc.items || []).map((l) => l.name).slice(0, 3).join(", ") || doc.roomName || doc.brief?.kind || doc.kind || "" }; }));
 });
 /** client: save my details once → every booking form is filled for me */
+// ===========================================================================
+// REPORTS · BANS · BLOCKS
+// A shop can report a client to TapTayo (no-show, booked outside the app to skip the shop, fake payment, abuse…).
+// TapTayo checks it. Confirmed strikes: 1 = warning · 2 = 30-day ban · 3 = banned. One strike per shop per 30 days.
+// A shop can block a client (account + phone) from booking with them; a client can block a shop.
+// ===========================================================================
+const USER_REPORT_REASONS = { bypass: "Booked / paid outside the app to skip the shop", noshow: "No-show / didn't pay", fakepay: "Fake payment proof", abuse: "Harassment or abuse of staff", prank: "Fake / prank booking", other: "Other" };
+const SHOP_REPORTS_PER_MONTH = 5;
+const phKey = (v) => String(v || "").replace(/\D/g, "").slice(-10);
+async function customerGate(req, storeId, phone) {
+  const uid = req.auth?.uid || ""; const tok = req.auth?.token || {}; if (tok.storeId === storeId) return; // the shop's own counter
+  const pk = phKey(phone); const ids = [uid ? `u_${uid}` : null, pk.length >= 10 ? `p_${pk}` : null].filter(Boolean); if (!ids.length) return;
+  const [bans, blocks, me] = await Promise.all([Promise.all(ids.map((k) => db.doc(`bans/${k}`).get())), Promise.all(ids.map((k) => db.doc(`stores/${storeId}/blocked/${k}`).get())), uid ? db.doc(`users/${uid}`).get() : null]);
+  const ban = bans.map((x) => x.data()).find((b) => b && (b.permanent || Number(b.until) > Date.now()));
+  if (ban) throw new HttpsError("permission-denied", ban.permanent ? "This account can't book or order on TapTayo (banned after confirmed reports). Message TapTayo support if you think this is a mistake." : `This account can't book or order until ${new Date(ban.until).toLocaleDateString("en-PH", { month: "short", day: "numeric" })} (confirmed reports). Message TapTayo support if you think this is a mistake.`);
+  if (blocks.some((x) => x.exists)) throw new HttpsError("permission-denied", "We can't accept this booking. Please message the shop.");
+  if (me?.data()?.blockedShops?.includes(storeId)) throw new HttpsError("failed-precondition", "You blocked this shop. Unblock it first (on the shop page or in My account).");
+}
+/** who is the client of this order / booking / stay (server-side — the shop never sends a uid) */
+async function clientOf(storeId, kind, id) {
+  const col = { order: "orders", appt: "appointments", stay: "stays", resv: "reservations" }[kind]; if (!col) throw new HttpsError("invalid-argument", "Bad record.");
+  const r = (await db.doc(`stores/${storeId}/${col}/${String(id || "")}`).get()).data(); if (!r) throw new HttpsError("not-found", "Booking not found.");
+  const c = r.customer || r.guest || {}; return { uid: r.customerUid || null, phone: phKey(c.phone || r.phone || r.customerKey || ""), name: c.name || r.name || "", code: r.code || r.orderNo || r.ref || id, rec: r };
+}
+/** shop: block / unblock a client (account + phone) · report a client to TapTayo */
+exports.shopClient = onCall(async (req) => {
+  const who = await staffFrom(req); const d = req.data || {}; const storeId = who.storeId;
+  if (!who.owner && !(who.roles || []).includes("manager")) throw new HttpsError("permission-denied", "Only the owner or a manager can do this.");
+  const c = await clientOf(storeId, d.kind, d.id); const ids = [c.uid ? `u_${c.uid}` : null, c.phone.length >= 10 ? `p_${c.phone}` : null].filter(Boolean);
+  if (d.action === "block" || d.action === "unblock") {
+    if (!ids.length) throw new HttpsError("failed-precondition", "No account or phone number on this booking to block.");
+    const reason = String(d.reason || "").trim().slice(0, 120);
+    await Promise.all(ids.map((k) => d.action === "block" ? db.doc(`stores/${storeId}/blocked/${k}`).set({ name: c.name, reason, by: who.name || "Owner", at: Date.now(), from: `${d.kind}:${d.id}` }) : db.doc(`stores/${storeId}/blocked/${k}`).delete()));
+    if (c.phone.length >= 7) await db.doc(`stores/${storeId}/customers/${c.phone}`).set({ flagged: d.action === "block", flagReason: d.action === "block" ? reason || "Blocked by the shop" : null, updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+    return { ok: true, blocked: d.action === "block" };
+  }
+  if (d.action === "report") {
+    if (!USER_REPORT_REASONS[d.reason]) throw new HttpsError("invalid-argument", "Pick a reason.");
+    if (!c.uid && c.phone.length < 10) throw new HttpsError("failed-precondition", "No account or phone number on this booking to report.");
+    const details = String(d.details || "").trim().slice(0, 600); if (details.length < 10) throw new HttpsError("invalid-argument", "Tell us what happened (at least a sentence).");
+    const evidence = (Array.isArray(d.evidence) ? d.evidence : []).filter((x) => typeof x === "string" && x.startsWith(`priv:stores/${storeId}/private/`)).slice(0, 4);
+    const id = `${storeId}_${d.kind}_${String(d.id).slice(0, 60)}`; if ((await db.doc(`userReports/${id}`).get()).exists) throw new HttpsError("already-exists", "You already reported this booking.");
+    const recent = (await db.collection("userReports").where("storeId", "==", storeId).where("at", ">", Date.now() - 30 * 864e5).get()).size;
+    if (recent >= SHOP_REPORTS_PER_MONTH) throw new HttpsError("resource-exhausted", `You can send up to ${SHOP_REPORTS_PER_MONTH} reports a month. Block the client instead, or message TapTayo support.`);
+    const store = (await db.doc(`stores/${storeId}`).get()).data() || {};
+    await db.doc(`userReports/${id}`).set({ storeId, storeName: store.name || "", kind: d.kind, refId: String(d.id), code: c.code, uid: c.uid, phone: c.phone, name: c.name, reason: d.reason, details, evidence, by: who.name || "Owner", status: "pending", at: Date.now() });
+    if (d.block !== false && ids.length) await Promise.all(ids.map((k) => db.doc(`stores/${storeId}/blocked/${k}`).set({ name: c.name, reason: USER_REPORT_REASONS[d.reason], by: who.name || "Owner", at: Date.now(), from: `${d.kind}:${d.id}` })));
+    notifyAdmin(`🚩 ${store.name} reported a client (${USER_REPORT_REASONS[d.reason]}) — Admin → Client reports.`).catch(() => {});
+    return { ok: true, id };
+  }
+  if (d.action === "status") return { blocked: (await Promise.all(ids.map((k) => db.doc(`stores/${storeId}/blocked/${k}`).get()))).some((x) => x.exists), reported: (await db.doc(`userReports/${storeId}_${d.kind}_${String(d.id).slice(0, 60)}`).get()).exists, reasons: USER_REPORT_REASONS, hasId: ids.length > 0 };
+  throw new HttpsError("invalid-argument", "Unknown action.");
+});
+/** admin: confirm / reject client reports → strikes → ban */
+exports.adminUserReports = onCall(async (req) => {
+  requireAdmin(req); const d = req.data || {};
+  if (d.decide) {
+    const ref = db.doc(`userReports/${String(d.id || "")}`); const r = (await ref.get()).data(); if (!r || r.status !== "pending") throw new HttpsError("failed-precondition", "Already decided.");
+    if (!d.confirm) { await ref.update({ status: "rejected", note: String(d.note || "").slice(0, 200), decidedAt: Date.now() }); return { ok: true }; }
+    const keys = [r.uid ? `u_${r.uid}` : null, r.phone?.length >= 10 ? `p_${r.phone}` : null].filter(Boolean);
+    let strikes = 0;
+    for (const k of keys) { // one strike per shop per 30 days — one angry shop can't ban someone alone
+      const sref = db.doc(`userStrikes/${k}`); const st = (await sref.get()).data() || { list: [] };
+      const dup = (st.list || []).some((x) => x.storeId === r.storeId && x.at > Date.now() - 30 * 864e5);
+      const list = dup ? st.list : [...(st.list || []), { storeId: r.storeId, reason: r.reason, report: ref.id, at: Date.now() }];
+      await sref.set({ list, count: list.length, updatedAt: Date.now() }, { merge: true }); strikes = Math.max(strikes, list.length);
+    }
+    const ban = strikes >= 3 ? { permanent: true } : strikes === 2 ? { until: Date.now() + 30 * 864e5 } : null;
+    if (ban) await Promise.all(keys.map((k) => db.doc(`bans/${k}`).set({ ...ban, strikes, at: Date.now(), reason: USER_REPORT_REASONS[r.reason] })));
+    if (r.uid) await db.doc(`users/${r.uid}`).set({ notice: { kind: strikes >= 3 ? "banned" : strikes === 2 ? "suspended" : "warning", strikes, reason: USER_REPORT_REASONS[r.reason], at: Date.now(), ...(ban?.until ? { until: ban.until } : {}) } }, { merge: true }).catch(() => {});
+    await ref.update({ status: "confirmed", strikes, decidedAt: Date.now(), note: String(d.note || "").slice(0, 200) });
+    return { ok: true, strikes, banned: !!ban };
+  }
+  if (d.unban) { await Promise.all([`u_${d.uid || "x"}`, `p_${phKey(d.phone)}`].map((k) => db.doc(`bans/${k}`).delete().catch(() => {}))); return { ok: true }; }
+  const q = await db.collection("userReports").where("status", "==", "pending").limit(50).get();
+  return Promise.all(q.docs.map(async (x) => { const r = x.data(); const st = r.uid ? (await db.doc(`userStrikes/u_${r.uid}`).get()).data() : r.phone ? (await db.doc(`userStrikes/p_${r.phone}`).get()).data() : null; return { id: x.id, ...r, strikesSoFar: st?.count || 0, label: USER_REPORT_REASONS[r.reason] }; }));
+});
+/** client: block / unblock a shop (hidden in Explore, can't book there) */
+exports.blockShop = onCall(async (req) => {
+  if (!realAccount(req)) throw new HttpsError("unauthenticated", "Log in to block a shop.");
+  const d = req.data || {}; const pub = (await db.doc(`publicStores/${String(d.slug || "")}`).get()).data(); const storeId = pub?.storeId || String(d.storeId || "");
+  if (!storeId) throw new HttpsError("not-found", "Shop not found.");
+  await db.doc(`users/${req.auth.uid}`).set({ blockedShops: d.unblock ? FieldValue.arrayRemove(storeId) : FieldValue.arrayUnion(storeId), ...(d.unblock ? {} : { blockedNames: { [storeId]: pub?.name || "" } }) }, { merge: true });
+  return { ok: true, blocked: !d.unblock };
+});
 exports.saveProfile = onCall(async (req) => {
   if (!realAccount(req)) throw new HttpsError("unauthenticated", "Log in first.");
-  const d = req.data || {}; const profile = { name: String(d.name || "").trim().slice(0, 60), phone: String(d.phone || "").trim().slice(0, 30), messenger: msgrOf(d.messenger), city: String(d.city || "").trim().slice(0, 40), address: String(d.address || "").trim().slice(0, 200) };
-  await db.doc(`users/${req.auth.uid}`).set({ profile, email: req.auth.token.email, accountRoles: FieldValue.arrayUnion("client"), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  const d = req.data || {}; const prev = (await db.doc(`users/${req.auth.uid}`).get()).data()?.profile || {};
+  const F = { name: (v) => String(v || "").trim().slice(0, 60), phone: (v) => String(v || "").trim().slice(0, 30), messenger: msgrOf, city: (v) => String(v || "").trim().slice(0, 40), address: (v) => String(v || "").trim().slice(0, 200) };
+  const profile = { ...prev };
+  for (const [k, f] of Object.entries(F)) if (k in d) profile[k] = f(d[k]);
+  if (Array.isArray(d.interests)) profile.interests = d.interests.filter((k) => NICHE_KEYS.includes(k)).slice(0, 11);
+  if ("name" in d && prev.name && profile.name !== prev.name) { // name: once every 90 days (stops people dodging reports / bans by renaming)
+    const next = (Number(prev.nameChangedAt) || 0) + USER_NAME_DAYS * 864e5;
+    if (next > Date.now()) throw new HttpsError("failed-precondition", `You can change your name again on ${new Date(next).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })} (once every ${USER_NAME_DAYS} days).`);
+    if (profile.name.length < 2) throw new HttpsError("invalid-argument", "Enter your name.");
+    profile.nameChangedAt = Date.now(); profile.nameHistory = [...(prev.nameHistory || []), { from: prev.name, to: profile.name, at: Date.now() }].slice(-10);
+  }
+  if ("mapUrl" in d || "landmark" in d) { for (const k of ["landmark", "mapUrl", "lat", "lng"]) delete profile[k]; Object.assign(profile, geoOf(d)); }
+  await db.doc(`users/${req.auth.uid}`).set({ email: req.auth.token.email, accountRoles: FieldValue.arrayUnion("client"), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  await db.doc(`users/${req.auth.uid}`).update({ profile });
   return { ok: true, profile };
 });
+/** landmark + map pin from a customer form (Google Maps link with coordinates) */
+function geoOf(c) {
+  const landmark = String(c?.landmark || "").trim().slice(0, 120); const u = String(c?.mapUrl || "").trim();
+  const mapUrl = /^https:\/\/(www\.)?(google\.[a-z.]+\/maps|maps\.google\.[a-z.]+|maps\.app\.goo\.gl|goo\.gl\/maps)/i.test(u) ? u.slice(0, 300) : "";
+  const m = /(?:q=|@|ll=|query=)(-?\d{1,2}\.\d+),\s*(-?\d{1,3}\.\d+)/.exec(mapUrl);
+  return { ...(landmark ? { landmark } : {}), ...(mapUrl ? { mapUrl } : {}), ...(m ? { lat: Number(m[1]), lng: Number(m[2]) } : {}) };
+}
 /** client / freelancer Messenger: "m.me/name", "facebook.com/name", "messenger.com/t/name" or a bare username → https://m.me/name */
 function msgrOf(v) {
   const t = String(v || "").trim(); if (!t) return "";
@@ -1840,6 +2064,7 @@ const custFrom = (c, def = "") => ({ messenger: msgrOf(c?.messenger), name: Stri
 exports.bookAppointment = onCall(HOT, withIndex("appt", async (req) => {
   await maintGuard(req);
   const { uid } = requireAuth(req);
+  await abuseGuard(req, "booking");
   const d = req.data || {};
   const pub = (await db.doc(`publicStores/${String(d.slug || "")}`).get()).data(); if (!pub) throw new HttpsError("not-found", "Store not found.");
   if (pub.locked || pub.acceptOrders === false) throw new HttpsError("failed-precondition", "Not accepting bookings right now."); await requireBookingAccount(req, pub); if (pub.comingSoon && !(pub.testMode && pub.testMode.until > Date.now())) throw new HttpsError("failed-precondition", "This shop is not open yet — coming soon!");
@@ -1847,6 +2072,7 @@ exports.bookAppointment = onCall(HOT, withIndex("appt", async (req) => {
   const customer = custFrom(d.customer);
   if (customer.name.length < 2 || !customer.phone) throw new HttpsError("invalid-argument", "Name and phone number are required.");
   const phoneKey = customer.phone.replace(/\D/g, "");
+  await customerGate(req, storeId, customer.phone);
   let cRec = null;
   if (phoneKey.length >= 7) {
     const c = (await db.doc(`stores/${storeId}/customers/${phoneKey}`).get()).data(); cRec = c || null; if (c?.flagged) throw new HttpsError("permission-denied", "We can't accept this booking. Please call the salon.");
@@ -2330,11 +2556,14 @@ function queueTickets(appts) {
 /** estimated start per ticket: each goes to the capable staff who is free first, around the booked clients */
 function simulateQueue(ctx, appts, tickets, now, extra = null) {
   const buf = Number(ctx.cfg.bufferMin) || 0;
-  const staff = ctx.stylists.filter((s) => !s.planLocked && !awayNow(ctx, s));
+  // an owner who stepped out still serves the line when back (unless walk-ins are paused while away)
+  const staff = ctx.stylists.filter((s) => !s.planLocked && (!awayNow(ctx, s) || ctx.cfg.walkInWhenAway !== "off"));
+  const backAt = (() => { const b = atToday(ctx.store.salonLive?.presence?.backAt); return b && b > now ? b : now + 30 * 60000; })();
   const free = new Map();
   for (const s of staff) {
     const off = offReason(s, now, now + 15 * 60000);
     let t = staffFreeAt(s, appts, now).t;
+    if (awayNow(ctx, s)) t = Math.max(t, backAt);
     if (off === "on break") t = Math.max(t, atToday(s.schedule?.breakTo) || t);
     else if (off === "off duty at that time") { const day = s.schedule?.days?.[WEEK[new Date(now + 8 * 3600e3).getUTCDay()]]; const from = atToday(day?.from); if (!(from && from > now)) continue; t = Math.max(t, from); }
     else if (off) continue;
@@ -2433,11 +2662,14 @@ async function refreshQueue(storeId) {
   }
   return { count: tickets.length };
 }
-exports.queueTick = onSchedule({ schedule: "every 1 minutes", timeZone: "Asia/Manila" }, async () => {
+const queueTickRun = async () => {
   const snap = await db.collectionGroup("appointments").where("waiting", "==", true).get();
   const stores = new Set(snap.docs.filter((x) => APPT_ACTIVE.includes(x.data().status)).map((x) => x.ref.parent.parent.id));
   for (const s of stores) await refreshQueue(s).catch((e) => logger.warn("queueTick", s, e.message));
-});
+};
+// every minute from 6 AM to 12:59 AM; every 5 minutes overnight (1–5 AM), when shops are closed — saves ~20k runs a month
+exports.queueTick = onSchedule({ schedule: "* 6-23,0 * * *", timeZone: "Asia/Manila" }, queueTickRun);
+exports.queueTickNight = onSchedule({ schedule: "*/5 1-5 * * *", timeZone: "Asia/Manila" }, queueTickRun);
 /** public Queue TV: now serving (called / just started from the line), next numbers, wait — numbers and staff first names only */
 exports.queueBoard = onCall(HOT, async (req) => {
   const d = req.data || {};
@@ -2541,6 +2773,9 @@ exports.apptTip = onCall(async (req) => {
 // − remit    : remittance the staff sent (GCash / bank / cash), counted once the owner confirms
 // + payout   : pay the owner gave the staff
 // balance > 0 → staff must remit · balance < 0 → the shop owes the staff
+/** freelancer earns the price minus the shop's cut for that service (₱ fixed or %, per category; default 30%) */
+function shopCutOf(line, hiring) { const c = (hiring?.cuts || {})[line.categoryId] || hiring?.cutDefault || { type: "percent", value: 30 }; const q = Number(line.qty) || 1, price = (Number(line.price) || 0) * q; return Math.min(price, c.type === "fixed" ? (Number(c.value) || 0) * q : (price * (Number(c.value) || 0)) / 100); }
+const freelancerShare = (a, hiring) => round2((a.items || []).filter((l) => !l.retail).reduce((sum, l) => sum + Math.max(0, (Number(l.price) || 0) * (Number(l.qty) || 1) - shopCutOf(l, hiring)), 0));
 const commissionOf = (a) => round2((a.items || []).reduce((sum, l) => { const p = l.staffPay; if (!p) return sum; const q = Number(l.qty) || 1; return sum + (p.type === "percent" ? (Number(l.price) || 0) * q * (Number(p.value) || 0) / 100 : (Number(p.value) || 0) * q); }, 0));
 async function ledgerAdd(storeId, id, e) { await db.doc(`stores/${storeId}/staffLedger/${id}`).set({ ...e, amount: round2(e.amount), at: e.at || Date.now() }, { merge: true }); }
 const ledgerSign = (e) => (e.type === "collect" || e.type === "payout" ? 1 : e.type === "earn" || (e.type === "remit" && e.status === "confirmed") ? -1 : 0);
@@ -2670,21 +2905,34 @@ async function sendPush(storeId, { staffIds = null, roles = null } = {}, data = 
 }
 
 // ===== Job offers: pass a client to staff (one at a time with a countdown, or first to accept) =====
-const offerCfg = (cfg) => ({ enabled: !!cfg.offers?.enabled, mode: cfg.offers?.mode === "race" ? "race" : "rotate", seconds: Math.max(60, Math.min(900, Number(cfg.offers?.seconds) || 300)), auto: cfg.offers?.auto !== false });
+const offerCfg = (cfg) => ({ enabled: !!cfg.offers?.enabled, mode: cfg.offers?.mode === "race" ? "race" : "rotate", seconds: Math.max(60, Math.min(900, Number(cfg.offers?.seconds) || 300)), auto: cfg.offers?.auto !== false, nearest: cfg.offers?.nearest !== false });
 const onCallStaff = (st) => st?.payType === "oncall";
 const readyForJobs = (st, now) => !onCallStaff(st) || (Number(st.available?.until) || 0) > now;
 async function offerCandidates(storeId, ctx, a, id) {
   const t = a.waiting ? Date.now() : a.startAt.toMillis(); const dateStr = new Date(t + 8 * 3600e3).toISOString().slice(0, 10);
   const dayA = (await dayAppointments(storeId, dateStr)).filter((x) => x.id !== id);
   const now = Date.now();
-  return freeProviders(ctx, dayA, t, a.durationConfirmed || a.durationEst || 60, a.categories || [], { home: !!a.homeService, gender: a.genderPref || null }).filter((st) => !st.planLocked && readyForJobs(st, now));
+  const free = freeProviders(ctx, dayA, t, a.durationConfirmed || a.durationEst || 60, a.categories || [], { home: !!a.homeService, gender: a.genderPref || null }).filter((st) => !st.planLocked && readyForJobs(st, now));
+  // on-call pros: skip if paused, or busy with another shop at that time
+  const e = t + (a.durationConfirmed || a.durationEst || 60) * 60000 + (a.homeService ? 3600e3 : 0); const out = [];
+  for (const st of free) { if (!st.linkedUid) { out.push(st); continue; } const p = (await proRef(st.linkedUid).get()).data() || {}; if (p.banned || (Number(p.pausedUntil) || 0) > now) continue; if (await proBusyElsewhere(st.linkedUid, storeId, t, e)) continue; out.push(st); }
+  return out;
+}
+/** nearest staff / freelancer first: distance to the client's pin (home service) or to the shop. Shop staff count as "at the shop". */
+async function nearestFirst(storeId, ctx, a, cands) {
+  const shop = pinOf(ctx.store.contact?.mapUrl); const target = (a.homeService && pinOf(a.homeService.mapUrl)) || shop; if (!target) return cands;
+  const dist = new Map();
+  for (const st of cands) { let at = shop; if (st.linkedUid) { const p = (await proRef(st.linkedUid).get()).data() || {}; at = p.base || null; } dist.set(st.id, at ? kmBetween(at, target) : 999); }
+  return cands.map((st, i) => ({ st, i })).sort((x, y) => dist.get(x.st.id) - dist.get(y.st.id) || x.i - y.i).map((x) => x.st);
 }
 async function pushOffer(storeId, id, a, to, seconds) {
   const when = a.startAt.toDate().toLocaleString("en-PH", { timeZone: "Asia/Manila", weekday: "short", hour: "numeric", minute: "2-digit" });
+  for (const sid of to) { const st = (await db.doc(`stores/${storeId}/staff/${sid}`).get()).data(); if (st?.linkedUid) proPush(st.linkedUid, { title: `📣 New job — accept within ${Math.round(seconds / 60)} min`, body: `${(a.items || []).map((l) => l.name).join(", ")} · ${when}${a.homeService ? ` · 🏠 ${a.homeService.area || "home service"}` : ""}`, url: "/pro/", tag: "offer-" + id, ttl: seconds }); }
   await sendPush(storeId, { staffIds: to }, { title: `📣 New job — accept within ${Math.round(seconds / 60)} min`, body: `${(a.items || []).map((l) => l.name).join(", ")} · ${when}${a.homeService ? ` · 🏠 ${a.homeService.area || a.homeService.address || "home service"}` : ""}`, url: "/staff/", tag: "offer-" + id, ttl: seconds, badge: 1 });
 }
 async function advanceOffer(storeId, ref, a, ctx, oc, tried, by) {
-  const cands = (await offerCandidates(storeId, ctx, a, ref.id)).filter((x) => !tried.includes(x.id));
+  let cands = (await offerCandidates(storeId, ctx, a, ref.id)).filter((x) => !tried.includes(x.id));
+  if (oc.nearest && cands.length > 1) cands = await nearestFirst(storeId, ctx, a, cands);
   const now = Date.now(); const prev = a.offer?.status === "open" ? a.offer : null;
   if (!cands.length) {
     await ref.update({ offer: { ...(a.offer || {}), status: "none", tried, to: [], endedAt: now }, offerTo: [], offerOpen: false, updatedAt: FieldValue.serverTimestamp() });
@@ -2714,10 +2962,38 @@ async function expireOffer(storeId, ref, a) {
   for (const sid of miss) {
     const sref = db.doc(`stores/${storeId}/staff/${sid}`); const st = (await sref.get()).data(); if (!st) continue;
     await sref.update({ missedJobs: FieldValue.increment(1), lastMissedAt: Date.now(), ...(onCallStaff(st) ? { available: null } : {}) });
+    if (st.linkedUid) { await proSetAvailable(st.linkedUid, null).catch(() => {}); proPush(st.linkedUid, { title: "⏸ You missed a job", body: "You're now unavailable at all your shops. Turn Available on again when you're ready.", url: "/pro/", tag: "promiss" }); }
   }
   const ctx = await salonContext(storeId);
   if (!APPT_ACTIVE.includes(a.status) || a.providerId) { await ref.update({ "offer.status": "cancelled", offerTo: [], offerOpen: false }); return { status: "cancelled" }; }
   return advanceOffer(storeId, ref, { ...a, offer: { ...o, status: "open" } }, ctx, offerCfg(ctx.cfg), [...(o.tried || []), ...miss], o.by);
+}
+/** accept / decline a job offer (staff app, or an on-call pro from their own account) */
+async function offerRespond(storeId, staffId, staffName, ref, a, action) {
+  if (action === "accept") {
+    const o = a.offer || {};
+    if (o.status !== "open") throw new HttpsError("failed-precondition", "This job was already taken or closed.");
+    if (!(o.to || []).includes(staffId)) throw new HttpsError("failed-precondition", "This job is no longer offered to you.");
+    if (Date.now() > o.expiresAt + 15000) throw new HttpsError("deadline-exceeded", "Too late — the time to accept ran out.");
+    const ctx = await salonContext(storeId);
+    if (!(await offerCandidates(storeId, ctx, a, ref.id)).some((x) => x.id === staffId)) throw new HttpsError("failed-precondition", "You already have a client at that time.");
+    const me = ctx.stylists.find((x) => x.id === staffId);
+    await db.runTransaction(async (tx) => {
+      const cur = (await tx.get(ref)).data();
+      if (cur?.offer?.status !== "open" || !(cur.offer.to || []).includes(staffId) || cur.providerId) throw new HttpsError("failed-precondition", "Someone else accepted this job first.");
+      tx.update(ref, { ...(cur.waiting ? { waiting: false, startAt: Timestamp.fromMillis(Date.now()), queueCalled: { at: Date.now(), by: me?.name || staffName, auto: true }, queue: null } : {}), providerId: staffId, providerName: me?.name || staffName, acceptedAt: FieldValue.serverTimestamp(), assignedBy: "offer", assignedAt: FieldValue.serverTimestamp(), status: cur.status === "pending" ? "confirmed" : cur.status, "offer.status": "accepted", "offer.acceptedBy": staffId, "offer.acceptedName": me?.name || staffName, "offer.acceptedAt": Date.now(), offerTo: [], offerOpen: false, updatedAt: FieldValue.serverTimestamp() });
+    });
+    await db.doc(`stores/${storeId}/staff/${staffId}`).update({ lastAssignedAt: FieldValue.serverTimestamp(), acceptedJobs: FieldValue.increment(1) }).catch(() => {});
+    return { ok: true };
+  }
+  if (action === "decline") {
+    const o = a.offer || {};
+    if (o.status !== "open" || !(o.to || []).includes(staffId)) return { ok: true };
+    if (o.mode === "race" && o.to.length > 1) { await ref.update({ "offer.to": FieldValue.arrayRemove(staffId), offerTo: FieldValue.arrayRemove(staffId), "offer.tried": FieldValue.arrayUnion(staffId) }); return { ok: true }; }
+    const ctx = await salonContext(storeId);
+    return advanceOffer(storeId, ref, a, ctx, offerCfg(ctx.cfg), [...(o.tried || []), staffId], o.by);
+  }
+  throw new HttpsError("invalid-argument", "Unknown action.");
 }
 exports.apptOffer = onCall(async (req) => {
   const who = await staffFrom(req); const { storeId } = who; const d = req.data || {};
@@ -2735,35 +3011,16 @@ exports.apptOffer = onCall(async (req) => {
     return { ok: true };
   }
   if (d.action === "check") return expireOffer(storeId, ref, a);
-  if (d.action === "accept") {
-    const o = a.offer || {};
-    if (o.status !== "open") throw new HttpsError("failed-precondition", "This job was already taken or closed.");
-    if (!(o.to || []).includes(who.staffId)) throw new HttpsError("failed-precondition", "This job is no longer offered to you.");
-    if (Date.now() > o.expiresAt + 15000) throw new HttpsError("deadline-exceeded", "Too late — the time to accept ran out.");
-    const ctx = await salonContext(storeId);
-    if (!(await offerCandidates(storeId, ctx, a, ref.id)).some((x) => x.id === who.staffId)) throw new HttpsError("failed-precondition", "You already have a client at that time.");
-    const me = ctx.stylists.find((x) => x.id === who.staffId);
-    await db.runTransaction(async (tx) => {
-      const cur = (await tx.get(ref)).data();
-      if (cur?.offer?.status !== "open" || !(cur.offer.to || []).includes(who.staffId) || cur.providerId) throw new HttpsError("failed-precondition", "Someone else accepted this job first.");
-      tx.update(ref, { ...(cur.waiting ? { waiting: false, startAt: Timestamp.fromMillis(Date.now()), queueCalled: { at: Date.now(), by: me?.name || who.name, auto: true }, queue: null } : {}), providerId: who.staffId, providerName: me?.name || who.name, acceptedAt: FieldValue.serverTimestamp(), assignedBy: "offer", assignedAt: FieldValue.serverTimestamp(), status: cur.status === "pending" ? "confirmed" : cur.status, "offer.status": "accepted", "offer.acceptedBy": who.staffId, "offer.acceptedName": me?.name || who.name, "offer.acceptedAt": Date.now(), offerTo: [], offerOpen: false, updatedAt: FieldValue.serverTimestamp() });
-    });
-    await db.doc(`stores/${storeId}/staff/${who.staffId}`).update({ lastAssignedAt: FieldValue.serverTimestamp(), acceptedJobs: FieldValue.increment(1) }).catch(() => {});
-    return { ok: true };
-  }
-  if (d.action === "decline") {
-    const o = a.offer || {};
-    if (o.status !== "open" || !(o.to || []).includes(who.staffId)) return { ok: true };
-    if (o.mode === "race" && o.to.length > 1) { await ref.update({ "offer.to": FieldValue.arrayRemove(who.staffId), offerTo: FieldValue.arrayRemove(who.staffId), "offer.tried": FieldValue.arrayUnion(who.staffId) }); return { ok: true }; }
-    const ctx = await salonContext(storeId);
-    return advanceOffer(storeId, ref, a, ctx, offerCfg(ctx.cfg), [...(o.tried || []), who.staffId], o.by);
-  }
+  if (d.action === "accept" || d.action === "decline") return offerRespond(storeId, who.staffId, who.name, ref, a, d.action);
   throw new HttpsError("invalid-argument", "Unknown action.");
 });
-exports.offerTick = onSchedule({ schedule: "every 1 minutes", timeZone: "Asia/Manila" }, async () => {
+const offerTickRun = async () => {
   const snap = await db.collectionGroup("appointments").where("offerOpen", "==", true).get();
   for (const x of snap.docs) { const a = x.data(); if (a.offer?.expiresAt <= Date.now()) await expireOffer(x.ref.parent.parent.id, x.ref, a).catch((e) => logger.warn("offerTick", e.message)); }
-});
+};
+// every minute from 6 AM to 12:59 AM; every 5 minutes overnight (1–5 AM), when shops are closed — saves ~20k runs a month
+exports.offerTick = onSchedule({ schedule: "* 6-23,0 * * *", timeZone: "Asia/Manila" }, offerTickRun);
+exports.offerTickNight = onSchedule({ schedule: "*/5 1-5 * * *", timeZone: "Asia/Manila" }, offerTickRun);
 /** staff: "Available for jobs until …" (on-call staff); off when they miss a job */
 exports.staffAvailability = onCall(async (req) => {
   const who = await staffFrom(req); if (who.owner) throw new HttpsError("failed-precondition", "Log in with your own staff PIN.");
@@ -2802,7 +3059,7 @@ exports.onApptWrite = onDocumentWritten("stores/{storeId}/appointments/{id}", as
   // staff ledger: commission when done · collected payment when the staff took it
   if (a && !a.test && a.providerId) {
     const sid = event.params.storeId;
-    if (a.status === "done" && b?.status !== "done") { const st = (await db.doc(`stores/${sid}/staff/${a.providerId}`).get()).data() || {}; const c = st.salary?.commission === false ? 0 : commissionOf(a); if (c > 0) await ledgerAdd(sid, `earn_${event.params.id}`, { staffId: a.providerId, staffName: a.providerName || st.name || "", type: "earn", amount: c, label: `Commission · ${(a.items || []).map((l) => l.name).join(", ").slice(0, 60)}`, apptId: event.params.id }); }
+    if (a.status === "done" && b?.status !== "done") { const st = (await db.doc(`stores/${sid}/staff/${a.providerId}`).get()).data() || {}; const c = st.linkedUid ? freelancerShare(a, (await db.doc(`stores/${sid}`).get()).data()?.settings?.hiring) : st.salary?.commission === false ? 0 : commissionOf(a); if (c > 0) await ledgerAdd(sid, `earn_${event.params.id}`, { staffId: a.providerId, staffName: a.providerName || st.name || "", type: "earn", amount: c, label: `Commission · ${(a.items || []).map((l) => l.name).join(", ").slice(0, 60)}`, apptId: event.params.id }); }
     if (b?.status === "done" && a.status !== "done") await db.doc(`stores/${sid}/staffLedger/earn_${event.params.id}`).delete().catch(() => {});
     const collector = a.collectedById || null;
     if (a.paid && collector && !(b?.paid && b.collectedById)) await ledgerAdd(sid, `collect_${event.params.id}`, { staffId: collector, staffName: a.cashCollectedBy || a.providerName || "", type: "collect", amount: round2(a.amountDue ?? (a.total || 0) + (a.homeFee || 0)), method: a.paymentMethod || "cash", label: `Collected from ${a.customer?.name || "client"} · ${(a.paymentMethod || "cash").toUpperCase()}`, apptId: event.params.id });
@@ -3037,6 +3294,7 @@ const giftCode = () => `GC-${rnd(4)}-${rnd(4)}`;
 exports.buyGiftCard = onCall(async (req) => {
   await maintGuard(req);
   const { uid } = requireAuth(req);
+  await abuseGuard(req, "order");
   const d = req.data || {};
   const pub = (await db.doc(`publicStores/${String(d.slug || "")}`).get()).data(); if (!pub) throw new HttpsError("not-found", "Store not found.");
   const gc = pub.salon?.giftcards || {};
@@ -3545,7 +3803,7 @@ exports.syncTables = onDocumentWritten("stores/{storeId}/tables/{id}", async (ev
 // ---------------------------------------------------------------------------
 const SERVICE_TYPES = ["dine_in", "take_out", "pickup", "delivery"];
 /** Test mode: on for a limited time (max 4 h). Test orders are numbered T1, T2… and never count in sales. */
-const SERVER_VERSION = "2026-10-25z"; // keep in sync with src/version.js — the dashboard warns when functions weren't deployed
+const SERVER_VERSION = "2026-10-26v"; // keep in sync with src/version.js — the dashboard warns when functions weren't deployed
 const testOn = (settings) => !!(settings?.demo || (settings?.testMode?.on && Number(settings.testMode.until || 0) > Date.now()));
 
 function dayKey(d = new Date(), cutoff = "00:00") {
@@ -3622,6 +3880,7 @@ exports.reportStaffOffer = onCall(async (req) => {
 exports.placeOrder = onCall(HOT, withIndex("order", async (req) => {
   await maintGuard(req);
   const { uid } = requireAuth(req); // anonymous ok
+  if (!req.data?.addTo) await abuseGuard(req, "order");
   const d = req.data || {};
   const slug = String(d.slug || "").trim();
   let serviceType = String(d.serviceType || "");
@@ -3632,6 +3891,7 @@ exports.placeOrder = onCall(HOT, withIndex("order", async (req) => {
     phone: String(d.customer?.phone || "").trim().slice(0, 30),
     address: String(d.customer?.address || "").trim().slice(0, 200),
     messenger: msgrOf(d.customer?.messenger),
+    ...(d.serviceType === "delivery" ? geoOf(d.customer) : {}),
   };
   const note = String(d.note || "").trim().slice(0, 300);
 
@@ -3792,6 +4052,7 @@ exports.placeOrder = onCall(HOT, withIndex("order", async (req) => {
   }
 
   // --- customer record (phone-based): returning? flagged? ---
+  if (!d.addTo) await customerGate(req, storeId, customer.phone);
   let customerRec = null;
   const phoneKey = customer.phone.replace(/\D/g, "");
   if (phoneKey.length >= 7) {
@@ -4135,6 +4396,12 @@ exports.trustDaily = onSchedule({ schedule: "0 8 * * *", timeZone: "Asia/Manila"
     for (const x of snap.docs) { const at = x.data().verif?.[kind]?.at || 0; if (at && Date.now() - at > 2 * 864e5) { waiting++; oldest = Math.max(oldest, Math.floor((Date.now() - at) / 864e5)); } }
   }
   if (waiting) notifyAdmin(`🛡 ${waiting} document${waiting > 1 ? "s" : ""} waiting 2+ days (oldest: ${oldest} days). Goal is 3 days — taptayo.com/admin/`);
+  // TapTayo's own SMS credits (sign-up codes, alerts): warn before they run out — when they do, texts silently stop
+  try {
+    const ps = db.doc("config/platformSms"); const cfg = (await ps.get()).data() || {};
+    if (cfg.apiKey) { const acct = await semGet("account", cfg.apiKey); const credits = Number(acct?.credit_balance ?? NaN);
+      if (Number.isFinite(credits)) { await ps.set({ lastCredits: credits, creditsAt: Date.now() }, { merge: true }); if (credits < 200) notifyAdmin(`📱 TapTayo SMS credits are low: ${credits} left. Top up Semaphore so sign-up codes and alerts keep working.`); } }
+  } catch (e) { logger.warn("sms credits", e.message); }
 });
 
 /** Weekly Firestore backup (Sunday 3 AM PH) → gs://<project>-backups/firestore/<date>. One-time setup in DEPLOY notes. */
@@ -4155,6 +4422,8 @@ exports.weeklyBackup = onSchedule({ schedule: "0 3 * * 0", timeZone: "Asia/Manil
 });
 
 exports.privateFilesCleanup = onSchedule({ schedule: "40 3 * * *", timeZone: "Asia/Manila", timeoutSeconds: 540 }, async () => {
+  // old rate-limit counters (rl/*) — gone after their window
+  try { const old = await db.collection("rl").where("exp", "<", Timestamp.fromMillis(Date.now())).limit(450).get(); const b = db.batch(); old.docs.forEach((x) => b.delete(x.ref)); if (old.size) await b.commit(); } catch (e) { logger.warn("rl cleanup", e.message); }
   const bucket = admin.storage().bucket();
   const stores = await db.collection("stores").select("settings.privacy").get();
   for (const st of stores.docs) {
@@ -4557,7 +4826,7 @@ exports.acceptStaffInvite = onCall(async (req) => {
   const col = db.collection(`stores/${storeId}/staff`);
   const subSnap = await db.doc(`stores/${storeId}/subscription/current`).get();
   const limit = subSnap.exists ? subSnap.data().limits?.staff ?? 3 : 3;
-  const active = (await col.where("active", "==", true).get()).docs;
+  const active = (await col.where("active", "==", true).get()).docs.filter((d) => !d.data().linkedUid);
   if (active.length >= limit) throw new HttpsError("resource-exhausted", "The shop has reached its staff limit. Please tell the owner.");
   if (active.some((d) => (d.data().name || "").toLowerCase() === name.toLowerCase())) throw new HttpsError("already-exists", "Someone with that name is already on the team. Add your last name or initial.");
   const pins = (await db.doc(`stores/${storeId}/private/staffPins`).get()).data() || {};
@@ -4775,11 +5044,33 @@ exports.orderOps = onCall(HOT, async (req) => {
     await audit(storeId, who, "unpaid", { orderId: o.id, orderNo: o.orderNo, total: o.total || 0 });
     return { ok: true };
   }
+  // Senior citizen / PWD discount (RA 9994 · RA 10754): 20% off the senior's share of the bill; VAT-registered shops also remove the 12% VAT on that share.
+  // Group bill → share = bill ÷ people at the table. Name + ID no. of each senior/PWD is kept for the shop's BIR records.
+  if (action === "senior") {
+    if (!hasRole(who, "crew")) deny("Your role can't give discounts.");
+    if (orders.some((x) => x.paid)) throw new HttpsError("failed-precondition", "Apply the senior/PWD discount before marking it paid.");
+    const people = Math.max(1, Math.min(60, Math.floor(Number(d.people) || 1)));
+    const list = (Array.isArray(d.ids) ? d.ids : []).slice(0, people).map((x) => ({ name: String(x?.name || "").trim().slice(0, 60), id: String(x?.id || "").trim().slice(0, 30), kind: x?.kind === "pwd" ? "pwd" : "senior" })).filter((x) => x.name && x.id);
+    if ((Array.isArray(d.ids) ? d.ids : []).length !== list.length) throw new HttpsError("invalid-argument", "Enter the name and ID number of each senior / PWD.");
+    const vatReg = store.settings?.vatRegistered === true;
+    const baseOf = (x) => Math.max(0, (x.subtotal || 0) - (x.discounts?.voucher || 0));
+    const base = orders.reduce((a, x) => a + baseOf(x), 0), share = base / people;
+    const perHead = vatReg ? share - (share / 1.12) * 0.8 : share * 0.2;
+    const totalDisc = round2(perHead * list.length);
+    const b = db.batch(); let left = totalDisc;
+    orders.forEach((x, i) => {
+      const part = i === orders.length - 1 ? round2(left) : base ? round2((totalDisc * baseOf(x)) / base) : 0; left = round2(left - part);
+      b.update(x.ref, { "discounts.senior": part, total: round2(Math.max(0, (x.total || 0) + (x.discounts?.senior || 0) - part)), senior: list.length ? { people, count: list.length, ids: list, vatRegistered: vatReg, vatExempt: vatReg ? round2((share - share / 1.12) * list.length) : 0, by: who.name, at: Date.now() } : null, ...stamp });
+    });
+    await b.commit();
+    await audit(storeId, who, "senior_discount", { orderIds: ids, people, count: list.length, amount: totalDisc });
+    return { ok: true, discount: totalDisc, perHead: round2(perHead), people, count: list.length };
+  }
   if (action === "deliveryFee") {
     if (!hasRole(who, "crew", "dispatch")) deny("Your role can't set delivery fees.");
     if (o.serviceType !== "delivery") throw new HttpsError("failed-precondition", "Not a delivery order.");
     const fee = Math.max(0, Math.min(5000, Number(d.fee) || 0));
-    const total = round2(Math.max(0, (o.subtotal || 0) - (o.discounts?.voucher || 0) - (o.discounts?.incident || 0) + fee + (o.smallOrderFee || 0) + (o.laundry?.storageFee || 0)));
+    const total = round2(Math.max(0, (o.subtotal || 0) - (o.discounts?.voucher || 0) - (o.discounts?.incident || 0) - (o.discounts?.senior || 0) + fee + (o.smallOrderFee || 0) + (o.laundry?.storageFee || 0)));
     await o.ref.update({ deliveryFee: fee, total, deliveryFeePending: false, deliveryFeeSetBy: who.name, ...stamp });
     await audit(storeId, who, "delivery_fee", { orderId: o.id, orderNo: o.orderNo, fee });
     return { ok: true, total };
@@ -4869,7 +5160,7 @@ exports.orderOps = onCall(HOT, async (req) => {
     const deliveryFee = serviceType === "delivery" ? Math.max(0, Math.min(5000, d.deliveryFee != null && d.deliveryFee !== "" ? Number(d.deliveryFee) || 0 : o.deliveryFee || 0)) : 0;
     if (serviceType === "delivery" && deliveryFee !== (o.deliveryFee || 0)) ch.push(`delivery fee ₱${deliveryFee}`);
     const voucherDisc = Math.min(o.voucher?.discount || 0, subtotal);
-    const total = round2(Math.max(0, subtotal - voucherDisc - (o.discounts?.incident || 0) + deliveryFee + smallOrderFee));
+    const total = round2(Math.max(0, subtotal - voucherDisc - (o.discounts?.incident || 0) - (o.discounts?.senior || 0) + deliveryFee + smallOrderFee));
     const stations = { ...(o.stations || {}) };
     for (const l of added) if (!stations[l.station] || stations[l.station] === "ready") stations[l.station] = "pending";
     for (const st of Object.keys(stations)) if (!items.some((l) => (l.station || "kitchen") === st)) delete stations[st];
@@ -5025,7 +5316,7 @@ exports.onShiftWrite = onDocumentWritten("stores/{storeId}/shifts/{id}", async (
   } catch (e) { logger.warn("onShiftWrite", e.message); }
 });
 
-exports.minuteTick = onSchedule({ schedule: "every 1 minutes", timeZone: "Asia/Manila" }, async () => {
+const minuteTickRun = async () => {
   const snap = await db.collectionGroup("orders").where("status", "==", "pending").get();
   const byStore = {};
   for (const d of snap.docs) { const o = d.data(); if (o.acceptedAt || o.test || o.isScheduled) continue; const sid = d.ref.parent.parent.id; (byStore[sid] = byStore[sid] || []).push({ ref: d.ref, ...o }); }
@@ -5045,7 +5336,10 @@ exports.minuteTick = onSchedule({ schedule: "every 1 minutes", timeZone: "Asia/M
       }
     } catch (e) { logger.warn("minuteTick", storeId, e.message); }
   }
-});
+};
+// every minute from 6 AM to 12:59 AM; every 5 minutes overnight (1–5 AM), when shops are closed — saves ~20k runs a month
+exports.minuteTick = onSchedule({ schedule: "* 6-23,0 * * *", timeZone: "Asia/Manila" }, minuteTickRun);
+exports.minuteTickNight = onSchedule({ schedule: "*/5 1-5 * * *", timeZone: "Asia/Manila" }, minuteTickRun);
 exports.soldUntilTick = onSchedule({ schedule: "every 5 minutes", timeZone: "Asia/Manila" }, async () => {
   const snap = await db.collectionGroup("items").where("soldUntil", "<=", Date.now()).get();
   for (const d of snap.docs) await d.ref.update({ available: true, soldUntil: null, updatedAt: FieldValue.serverTimestamp() }).catch(() => {});
@@ -5137,6 +5431,7 @@ function refCode() {
 exports.createReservation = onCall(withIndex("resv", async (req) => {
   await maintGuard(req);
   const { uid } = requireAuth(req);
+  await abuseGuard(req, "booking");
   const d = req.data || {};
   const slug = String(d.slug || "").trim();
   const kind = ["table", "event", "vip"].includes(d.kind) ? d.kind : "table";
@@ -5157,6 +5452,7 @@ exports.createReservation = onCall(withIndex("resv", async (req) => {
   const pub = pubSnap.data();
   await requireBookingAccount(req, pub);
   if (pub.mode !== "table") throw new HttpsError("failed-precondition", "This store does not take reservations.");
+  await customerGate(req, pub.storeId, phone);
   if (pub.locked) throw new HttpsError("failed-precondition", "Reservations are not being accepted right now."); if (pub.comingSoon && !(pub.testMode && pub.testMode.until > Date.now())) throw new HttpsError("failed-precondition", "This shop is not open yet — coming soon!");
 
   const scheduled = new Date(`${date}T${time}:00+08:00`);
@@ -5415,7 +5711,7 @@ const inquirySendFn = async (req) => {
   await maintGuard(req);
   const { uid } = requireAuth(req); const d = req.data || {};
   const pub = await inqStore(d.slug);
-  if (!d.fromStoreId) await requireBookingAccount(req, pub);
+  if (!d.fromStoreId) { await requireBookingAccount(req, pub); await abuseGuard(req, "inquiry", { demo: !!pub?.demo }); }
   if (pub.locked || pub.acceptOrders === false) throw new HttpsError("failed-precondition", "Not accepting inquiries right now.");
   const B = d.brief || {}; const C = d.customer || {};
   const brief = { kind: String(B.kind || "").slice(0, 40), brand: String(B.brand || "").trim().slice(0, 80), platform: String(B.platform || "").slice(0, 60), budget: String(B.budget || "").slice(0, 40), deadline: /^\d{4}-\d{2}-\d{2}$/.test(String(B.deadline || "")) ? B.deadline : "", date: /^\d{4}-\d{2}-\d{2}$/.test(String(B.date || "")) ? B.date : "", location: String(B.location || "").slice(0, 120), details: String(B.details || "").trim().slice(0, 1500), deliverables: String(B.deliverables || "").slice(0, 300), rush: !!B.rush };
@@ -5903,6 +6199,7 @@ exports.xfileCleanup = onSchedule({ schedule: "every 6 hours", timeZone: "Asia/M
 /** anyone: report a shop (scam, fake, unsafe) → TapTayo reviews it. One report per person per shop a day. */
 exports.reportShop = onCall(async (req) => {
   const uid = req.auth?.uid; if (!uid) throw new HttpsError("unauthenticated", "Open the shop page again.");
+  await abuseGuard(req, "report");
   const d = req.data || {}; const pub = (await db.doc(`publicStores/${String(d.slug || "")}`).get()).data(); if (!pub) throw new HttpsError("not-found", "Shop not found.");
   const reason = ["scam", "fake", "unsafe", "wrong", "other"].includes(d.reason) ? d.reason : "other"; const details = String(d.details || "").trim().slice(0, 800);
   if (details.length < 10) throw new HttpsError("invalid-argument", "Tell us what happened (a sentence or two).");
@@ -6085,6 +6382,7 @@ exports.supportSend = onCall(async (req) => {
 const PARTNER_KINDS = { partner: "Business partner", investor: "Investor", reseller: "Reseller / agent", media: "Media / press", other: "Other" };
 exports.partnerInquiry = onCall(async (req) => {
   const { uid, token } = requireAuth(req); const d = req.data || {};
+  await abuseGuard(req, "inquiry");
   const name = String(d.name || "").trim().slice(0, 80), contact = String(d.contact || "").trim().slice(0, 100), org = String(d.org || "").trim().slice(0, 100);
   const kind = PARTNER_KINDS[d.kind] ? d.kind : "other", msg = String(d.message || "").trim().slice(0, 2000);
   if (name.length < 2) throw new HttpsError("invalid-argument", "Please add your name.");
@@ -6928,6 +7226,7 @@ exports.getStayCalendar = onCall(async (req) => {
 exports.bookStay = onCall(withIndex("stay", async (req) => {
   await maintGuard(req);
   const { uid } = requireAuth(req);
+  await abuseGuard(req, "booking");
   const d = req.data || {};
   const { pub, store, storeId, cfg } = await staySetup(d.slug); await requireBookingAccount(req, pub);
   if (pub.locked || pub.acceptOrders === false) throw new HttpsError("failed-precondition", "Not accepting bookings right now."); if (pub.comingSoon && !(pub.testMode && pub.testMode.until > Date.now())) throw new HttpsError("failed-precondition", "This shop is not open yet — coming soon!");
@@ -6979,6 +7278,7 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
     : stayConflict(await roomStays(storeId, roomRef.id), room, startMs, endMs, null, inYmd, outYmd);
   if (conflict) throw new HttpsError("already-exists", conflict);
   const phoneKey = customer.phone.replace(/\D/g, "");
+  await customerGate(req, storeId, customer.phone);
   const cRec = (await db.doc(`stores/${storeId}/customers/${phoneKey}`).get()).data();
   if (cRec?.flagged) throw new HttpsError("permission-denied", "We can't accept this booking. Please message us.");
   if (cfg.guestIds && adults > 1 && guestIds.length < adults - 1) throw new HttpsError("invalid-argument", `Please upload a valid ID for each adult guest (${adults - 1} more).`);
@@ -7464,4 +7764,618 @@ exports.syncRooms = onDocumentWritten("stores/{storeId}/rooms/{id}", async (even
   const strip = (x) => { if (!x) return x; const { housekeeping, updatedAt, icalBlocks, icalStatus, icalSyncedAt, icalAlerted, ...rest } = x; return JSON.stringify(rest); };
   if (strip(b) === strip(a)) return;
   await rebuildPublicStore(event.params.storeId);
+});
+
+
+// ---------------------------------------------------------------------------
+// EXPLORE — "Find services near you / in Tagaytay": shops ranked by what the person likes + distance,
+// and short posts from businesses (what's new, portfolio, promos). Only shops with a map pin are listed.
+// ---------------------------------------------------------------------------
+const GH32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+function geohash(lat, lng, p = 4) {
+  let latR = [-90, 90], lngR = [-180, 180], h = "", bit = 0, ch = 0, even = true;
+  while (h.length < p) {
+    const r = even ? lngR : latR, v = even ? lng : lat, mid = (r[0] + r[1]) / 2;
+    if (v >= mid) { ch |= 16 >> bit; r[0] = mid; } else r[1] = mid;
+    even = !even; if (++bit === 5) { h += GH32[ch]; bit = 0; ch = 0; }
+  }
+  return h;
+}
+/** the cell of the point + its 8 neighbours: snap to the cell's centre, then step exactly one cell each way */
+function ghAround(lat, lng, p) {
+  const bits = p * 5, lngBits = Math.ceil(bits / 2), latBits = Math.floor(bits / 2);
+  const dLat = 180 / 2 ** latBits, dLng = 360 / 2 ** lngBits;
+  const cLat = Math.floor((lat + 90) / dLat) * dLat - 90 + dLat / 2, cLng = Math.floor((lng + 180) / dLng) * dLng - 180 + dLng / 2;
+  const out = new Set();
+  for (const a of [-1, 0, 1]) for (const b of [-1, 0, 1]) out.add(geohash(Math.max(-89.99, Math.min(89.99, cLat + a * dLat)), ((cLng + b * dLng + 540) % 360) - 180, p));
+  return [...out];
+}
+const NICHES = {
+  photo: [/photo|shoot|pre-?nup|portrait|wedding|debut|video|reel|prenup/i, "Photography"],
+  nails: [/nail|mani|pedi|gel|polish|press-?on/i, "Nails"],
+  hair: [/hair|haircut|cut|color|rebond|keratin|blow ?dry|balayage|perm/i, "Hair"],
+  spa: [/massage|spa|facial|reflex|hilot|scrub|ventosa|hot stone/i, "Spa & massage"],
+  makeup: [/make ?up|mua|glam|bridal/i, "Makeup"],
+  lashes: [/lash|brow|eyebrow/i, "Lashes & brows"],
+  laundry: [/laundry|wash|dry clean|fold/i, "Laundry"],
+  stay: [/stay|room|villa|resort|airbnb|pool/i, "Staycation"],
+  food: [/rice|meal|silog|pasta|burger|chicken|pork|beef|pizza|noodle|lomi|sisig|ulam/i, "Food"],
+  coffee: [/coffee|latte|espresso|frappe|milk ?tea|matcha|tea\b/i, "Coffee & drinks"],
+  creator: [/ugc|vlog|tiktok|content|creator|collab|review/i, "Creators"],
+};
+const NICHE_KEYS = Object.keys(NICHES);
+function nichesOf(store, items) {
+  const set = new Set(); const bt = store.businessType, m = store.mode;
+  if (m === "stay") set.add("stay"); if (m === "laundry") set.add("laundry");
+  if (["cafe", "coffee", "milktea"].includes(bt)) set.add("coffee");
+  if (m === "table" || m === "pickup") set.add("food");
+  if (bt === "salon") set.add("hair"); if (bt === "spa") set.add("spa"); if (bt === "nails") set.add("nails"); if (bt === "freelance") set.add("creator");
+  if (["salon", "spa", "freelance", "nails"].includes(bt) || m === "salon") {
+    const names = (items || []).slice(0, 80).map((i) => `${i.name || ""} ${i.description || ""}`).join(" | ");
+    for (const k of ["photo", "nails", "hair", "spa", "makeup", "lashes", "creator"]) if (NICHES[k][0].test(names)) set.add(k);
+  }
+  return [...set].slice(0, 6);
+}
+function discoverOf(store, items, locked) {
+  try {
+    const s = store.settings || {}, hs = s.salon?.homeService;
+    const shopPin = pinOf(store.contact?.mapUrl);
+    const base = hs?.enabled && hs.base && Number.isFinite(Number(hs.base.lat)) ? { lat: Number(hs.base.lat), lng: Number(hs.base.lng) } : null;
+    const at = shopPin || base; if (!at) return { listed: false, why: "no-pin", sample: !!s.demo };
+    // no shop address → round to ~1 km so a home-based freelancer's house isn't pinpointed
+    const r = shopPin ? 1000 : 100; const lat = Math.round(at.lat * r) / r, lng = Math.round(at.lng * r) / r;
+    const home = !!hs?.enabled;
+    const reachKm = store.mode === "stay" ? 150 : home ? Math.max(5, Math.min(80, Number(hs.radiusKm) || 15)) : 12;
+    const sell = (items || []).filter((i) => i.available !== false && !i.retail && Number(i.price) > 0);
+    const top = sell.find((i) => i.imageUrl) || sell[0] || null;
+    const fromPrice = store.mode === "stay" ? null : sell.length ? Math.min(...sell.map((i) => Number(i.price))) : null;
+    return { listed: !locked && s.live !== false && s.discover !== false && !s.demo, sample: !!s.demo, lat, lng, g3: geohash(lat, lng, 3), g4: geohash(lat, lng, 4), reachKm, home, shopVisit: !!shopPin,
+      niches: nichesOf(store, items), fromPrice, topService: top ? String(top.name || "").slice(0, 70) : "", topImage: top?.imageUrl || null, city: String(s.city || store.contact?.city || "").slice(0, 40) };
+  } catch (e) { return { listed: false, why: "error" }; }
+}
+let _samples = { at: 0, v: [] };
+async function sampleShops() {
+  if (Date.now() - _samples.at < 600000) return _samples.v;
+  const q = await db.collection("publicStores").where("demo", "==", true).limit(12).get().catch(() => ({ docs: [] }));
+  _samples = { at: Date.now(), v: q.docs.map((d) => d.data()) }; return _samples.v;
+}
+function shopCard(p, at, want, niche) {
+  const D = p.discover || {}; const dist = Number.isFinite(D.lat) && at ? kmBetween(at, { lat: D.lat, lng: D.lng }) : null;
+  const t = p.trust || {}; const fb = p.feedback || {};
+  const nicheHit = niche && (D.niches || []).includes(niche), likeHit = (D.niches || []).filter((k) => want.has(k)).length;
+  const score = (nicheHit ? 40 : 0) + likeHit * 18 + (dist == null ? 0 : Math.max(0, 22 - (dist / Math.max(1, D.reachKm || 12)) * 22)) + (fb.count >= 3 ? (fb.avg || 0) * 3 : 0) + Math.log10((t.tx || 0) + 1) * 6 + ((t.badges || []).includes("verified") ? 8 : 0) + Math.random() * 3;
+  return { slug: p.slug, name: p.name, logoUrl: p.logoUrl || null, coverUrl: p.coverUrl || null, businessType: p.businessType, mode: p.mode, niches: D.niches || [], distKm: dist == null ? null : Math.round(dist * 10) / 10,
+    serves: !!D.home && dist != null && dist <= (D.reachKm || 0), visit: !!D.shopVisit, fromPrice: D.fromPrice ?? null, topService: D.topService || "", topImage: D.topImage || null, currency: p.currency || "PHP",
+    by: p.businessType === "freelance" ? String((Array.isArray(p.team) && p.team[0]?.name) || "").split(" ")[0] : "", rating: fb.count >= 3 ? fb.avg : null, ratingCount: fb.count || 0, tx: t.tx || 0, verified: (t.badges || []).includes("verified"), tagline: p.tagline || "", city: D.city || "", sample: !!p.demo, score: Math.round(score * 10) / 10 };
+}
+exports.exploreFeed = onCallRaw({ maxInstances: 20, concurrency: 40, memory: "512MiB" }, async (req) => {
+  const ip = ipOf(req); if (ip && (await hitLimit(`explore:ip:${ip}`, 90, 600))) throw new HttpsError("resource-exhausted", "Too many searches — please wait a minute.");
+  const d = req.data || {};
+  let lat = Number(d.lat), lng = Number(d.lng); if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) { lat = 14.5995; lng = 120.9842; }
+  const at = { lat, lng };
+  const want = new Set((Array.isArray(d.interests) ? d.interests : []).filter((k) => NICHE_KEYS.includes(k)).slice(0, 11));
+  const niche = NICHE_KEYS.includes(d.niche) ? d.niche : ""; const text = String(d.q || "").trim().toLowerCase().slice(0, 40);
+  const g4 = ghAround(lat, lng, 4), g3 = ghAround(lat, lng, 3);
+  const [near, stays, postsSnap] = await Promise.all([
+    db.collection("publicStores").where("discover.listed", "==", true).where("discover.g4", "in", g4).limit(300).get().catch((e) => { logger.warn("explore near", e.message); return { docs: [] }; }),
+    db.collection("publicStores").where("discover.listed", "==", true).where("discover.g3", "in", g3).where("mode", "==", "stay").limit(80).get().catch(() => ({ docs: [] })),
+    db.collection("posts").where("g3", "in", g3).orderBy("createdAt", "desc").limit(120).get().catch((e) => { logger.warn("explore posts", e.message); return { docs: [] }; }),
+  ]);
+  const seen = new Set(); let shops = [];
+  for (const doc_ of [...near.docs, ...stays.docs]) {
+    const p = doc_.data(); if (seen.has(p.slug)) continue; seen.add(p.slug);
+    const c = shopCard(p, at, want, niche);
+    if (c.distKm != null && c.distKm > Math.max(p.discover?.reachKm || 12, 3) * (p.mode === "stay" ? 1 : 1.25)) continue; // outside what they cover
+    if (niche && !c.niches.includes(niche)) continue;
+    if (text && !`${c.name} ${c.topService} ${c.tagline}`.toLowerCase().includes(text)) continue;
+    shops.push(c);
+  }
+  shops.sort((a, b) => b.score - a.score); shops = shops.slice(0, 40);
+  let samples = [];
+  if (shops.length < 6) samples = (await sampleShops()).map((p) => ({ ...shopCard(p, null, want, niche), distKm: null, sample: true })).filter((c) => (!niche || c.niches.includes(niche)) && !seen.has(c.slug)).sort((a, b) => b.score - a.score).slice(0, 8);
+  const posts = postsSnap.docs.map((x) => ({ id: x.id, ...x.data() })).filter((x) => x.hidden !== true).map((x) => {
+    const dist = Number.isFinite(x.lat) ? kmBetween(at, { lat: x.lat, lng: x.lng }) : null;
+    const likeHit = (x.niches || []).filter((k) => want.has(k)).length; const ageH = (Date.now() - (x.createdAt?.toMillis?.() || 0)) / 3600e3;
+    return { id: x.id, slug: x.slug, storeName: x.storeName, logoUrl: x.logoUrl || null, kind: x.kind || "update", text: x.text || "", photos: (x.photos || []).slice(0, 4), niches: x.niches || [], verified: !!x.verified, at: x.createdAt?.toMillis?.() || 0,
+      distKm: dist == null ? null : Math.round(dist * 10) / 10, ok: dist == null || dist <= Math.max(x.reachKm || 12, 3) * 1.25, score: (niche && (x.niches || []).includes(niche) ? 30 : 0) + likeHit * 15 + Math.max(0, 30 - ageH / 8) + (dist == null ? 0 : Math.max(0, 15 - dist)) };
+  }).filter((x) => x.ok && (!niche || x.niches.includes(niche))).sort((a, b) => b.score - a.score).slice(0, 30).map(({ ok, ...x }) => x);
+  // shops this person blocked never show up
+  const blockedSlugs = new Set(); if (req.auth?.uid && !req.auth.token?.firebase?.sign_in_provider?.includes("anonymous")) { const u = (await db.doc(`users/${req.auth.uid}`).get().catch(() => null))?.data(); if (u?.blockedShops?.length) { const bs = new Set(u.blockedShops); [...near.docs, ...stays.docs].forEach((x) => { if (bs.has(x.data().storeId)) blockedSlugs.add(x.data().slug); }); } }
+  if (blockedSlugs.size) { shops = shops.filter((x) => !blockedSlugs.has(x.slug)); samples = samples.filter((x) => !blockedSlugs.has(x.slug)); }
+  return { at, shops, samples, posts: blockedSlugs.size ? posts.filter((x) => !blockedSlugs.has(x.slug)) : posts, niches: Object.fromEntries(NICHE_KEYS.map((k) => [k, NICHES[k][1]])) };
+});
+
+/** owner: post to the TapTayo feed (what's new / portfolio / promo). Free & Basic: 4 a month · Pro+: unlimited */
+const FEED_KINDS = ["update", "portfolio", "promo", "new"];
+exports.feedPost = onCall(async (req) => {
+  const t = requireOwner(req); const d = req.data || {};
+  const text = String(d.text || "").trim().slice(0, 500); if (text.length < 8) throw new HttpsError("invalid-argument", "Write a little more (at least a short sentence).");
+  const photos = (Array.isArray(d.photos) ? d.photos : []).map(String).filter((u) => /^https:\/\/(firebasestorage\.googleapis\.com|storage\.googleapis\.com)\//.test(u)).slice(0, 4);
+  const kind = FEED_KINDS.includes(d.kind) ? d.kind : "update";
+  const store = (await db.doc(`stores/${t.storeId}`).get()).data() || {};
+  const pub = (await db.doc(`publicStores/${store.slug}`).get()).data() || {}; const D = pub.discover || {};
+  if (!Number.isFinite(D.lat)) throw new HttpsError("failed-precondition", "NO_PIN:Add your shop's Google Maps pin first (Settings → Contact), so nearby customers can see your posts.");
+  if (D.listed === false && !store.settings?.demo) throw new HttpsError("failed-precondition", "Your page isn't live yet — turn it on first, then post.");
+  const sub = (await db.doc(`stores/${t.storeId}/subscription/current`).get()).data();
+  const mon = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 7);
+  const ref = db.collection("posts").doc();
+  await db.runTransaction(async (tx) => {
+    const st = (await tx.get(db.doc(`stores/${t.storeId}`))).data() || {};
+    const u = st.feedUsage?.month === mon ? st.feedUsage.n || 0 : 0;
+    if (tierOf(sub) < 2 && u >= 4) throw new HttpsError("resource-exhausted", "You've used your 4 feed posts this month. Upgrade to Pro for unlimited posts.");
+    tx.update(db.doc(`stores/${t.storeId}`), { feedUsage: { month: mon, n: u + 1 } });
+    tx.set(ref, { storeId: t.storeId, slug: store.slug, storeName: store.name || "", logoUrl: store.logoUrl || null, businessType: store.businessType || "", kind, text, photos, niches: D.niches || [],
+      lat: D.lat, lng: D.lng, g3: D.g3, g4: D.g4, reachKm: D.reachKm || 12, verified: (pub.trust?.badges || []).includes("verified"), createdAt: FieldValue.serverTimestamp() });
+  });
+  return { id: ref.id, used: (store.feedUsage?.month === mon ? store.feedUsage.n || 0 : 0) + 1, limit: tierOf(sub) < 2 ? 4 : null };
+});
+exports.feedMine = onCall(async (req) => {
+  const t = requireOwner(req);
+  const q = await db.collection("posts").where("storeId", "==", t.storeId).limit(60).get();
+  const store = (await db.doc(`stores/${t.storeId}`).get()).data() || {}; const pub = (await db.doc(`publicStores/${store.slug}`).get()).data() || {};
+  const mon = new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 7); const sub = (await db.doc(`stores/${t.storeId}/subscription/current`).get()).data();
+  return { posts: q.docs.map((x) => ({ id: x.id, ...x.data(), createdAt: x.data().createdAt?.toMillis?.() || 0 })).sort((a, b) => b.createdAt - a.createdAt), discover: pub.discover || null,
+    used: store.feedUsage?.month === mon ? store.feedUsage.n || 0 : 0, limit: tierOf(sub) < 2 ? 4 : null, niches: Object.fromEntries(NICHE_KEYS.map((k) => [k, NICHES[k][1]])) };
+});
+exports.feedDelete = onCall(async (req) => {
+  const t = requireOwner(req); const ref = db.doc(`posts/${String(req.data?.id || "")}`);
+  const p = (await ref.get()).data(); if (!p || p.storeId !== t.storeId) throw new HttpsError("not-found", "Post not found.");
+  await ref.delete(); return { ok: true };
+});
+
+// ---------------------------------------------------------------------------
+// SHARE LINK  taptayo.com/s/<slug> — what Facebook / Messenger / Viber show when a shop shares its page:
+// cover photo, shop name, tagline. People are sent straight on to /m/<slug> (the fast customer page).
+// ---------------------------------------------------------------------------
+const OG_WHAT = { salon: "Book online", stay: "Check dates & book direct", laundry: "Book a pickup", table: "Order online", pickup: "Order online" };
+exports.sharePage = onRequest({ maxInstances: 10, concurrency: 80, memory: "256MiB", cors: false }, async (req, res) => {
+  const slug = String(req.path || "").replace(/^\/s\//, "").split(/[/?#]/)[0].toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 60);
+  const p = slug ? (await db.doc(`publicStores/${slug}`).get().catch(() => null))?.data() : null;
+  const dest = slug ? `/m/${slug}${req.url.includes("?") ? "?" + req.url.split("?")[1] : ""}` : "/";
+  const e = (x) => String(x ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const name = p?.redirectTo ? "" : p?.name || "TapTayo";
+  const fb = p?.feedback || {}, badges = p?.trust?.badges || [];
+  const desc = p ? [p.tagline || "", [fb.count >= 3 ? `★ ${fb.avg} (${fb.count})` : "", badges.includes("verified") ? "✓ Verified on TapTayo" : "", p.contact?.address && !/demo/i.test(p.contact.address) ? `📍 ${p.contact.address}` : ""].filter(Boolean).join(" · "), `${OG_WHAT[p.mode] || "Order & book online"} — no app needed.`].filter(Boolean).join(" ") : "Order and book from local shops — no app needed.";
+  const img = p?.coverUrl || p?.logoUrl || "https://taptayo.com/demo/cafe/bright.jpg";
+  const url = `https://taptayo.com/s/${slug}`;
+  res.set("Cache-Control", "public, max-age=300, s-maxage=1800");
+  res.status(p ? 200 : 404).send(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${e(name)}${p ? " · " + e(OG_WHAT[p.mode] || "TapTayo") : ""}</title><meta name="description" content="${e(desc)}">
+<meta property="og:type" content="website"><meta property="og:site_name" content="TapTayo"><meta property="og:title" content="${e(name)}"><meta property="og:description" content="${e(desc)}">
+<meta property="og:image" content="${e(img)}"><meta property="og:url" content="${e(url)}"><meta name="twitter:card" content="summary_large_image">
+<link rel="canonical" href="https://taptayo.com${e(dest.split("?")[0])}"><meta http-equiv="refresh" content="0;url=${e(dest)}"></head>
+<body style="font-family:system-ui;padding:40px;text-align:center"><p>Opening <a href="${e(dest)}">${e(name)}</a>…</p><script>location.replace(${JSON.stringify(dest)})</script></body></html>`);
+});
+
+// ===========================================================================
+// ON-CALL PROS — freelancers (nails, hair, massage, makeup…) apply to shops; once accepted they're the shop's
+// on-call staff (job offers with a countdown, commission, self-collect & remit). One account, many shops,
+// one "Available" switch for all of them; a missed job turns it off everywhere.
+// ===========================================================================
+const PRO_SKILLS = { hair: "Hair", nails: "Nails", lashes: "Lashes", brows: "Brows", makeup: "Makeup", massage: "Massage", spa: "Spa & body", facial: "Facial", waxing: "Waxing", barber: "Barber", photo: "Photo & video" };
+const CERT_SKILLS = ["massage", "spa"];          // need a checked certificate first (LGU / DOH rules for massage)
+const PRO_LIMIT = [2, 5, 15, 1e9];                // freelancers per shop by plan tier (separate from staff slots)
+const PRO_MAX_PENDING = 10;
+const proRef = (uid) => db.doc(`pros/${uid}`);
+const linkRef = (storeId, uid) => db.doc(`proLinks/${storeId}_${uid}`);
+const needUser = (req) => { if (!realAccount(req)) throw new HttpsError("unauthenticated", "Log in with your TapTayo account first."); return req.auth.uid; };
+const isStorageUrl = (u) => /^https:\/\/(firebasestorage\.googleapis\.com|storage\.googleapis\.com)\//.test(String(u || ""));
+function proBadges(p) {
+  return [p.proof?.id?.status === "approved" ? "id" : null, p.proof?.cert?.status === "approved" ? "cert" : null, (p.jobsDone || 0) >= 10 && (p.ratingCount ? p.ratingSum / p.ratingCount : 5) >= 4.5 && (p.noShows || 0) === 0 ? "trusted" : null].filter(Boolean);
+}
+const PRO_MIN_PICS = 10;
+const proListedOK = (p) => !!(p && p.adult && (p.skills || []).length && (p.portfolio || []).length >= PRO_MIN_PICS && !p.banned && !p.portfolioFlag);
+/** what a shop sees about a pro (no exact location, no documents) */
+function proCard(uid, p, at) {
+  const dist = at && Number.isFinite(p.base?.lat) ? Math.round(kmBetween(at, p.base) * 10) / 10 : null;
+  return { uid, name: p.name || "", photoUrl: p.photoUrl || null, bio: p.bio || "", skills: p.skills || [], city: p.city || "", radiusKm: p.radiusKm || 10, rateNote: p.rateNote || "",
+    portfolio: (p.portfolio || []).slice(0, 24), badges: proBadges(p), jobsDone: p.jobsDone || 0, noShows: p.noShows || 0, rating: p.ratingCount ? Math.round((p.ratingSum / p.ratingCount) * 10) / 10 : null, ratingCount: p.ratingCount || 0,
+    available: (Number(p.available?.until) || 0) > Date.now(), paused: (Number(p.pausedUntil) || 0) > Date.now(), distKm: dist,
+    busy: p.now && Number(p.now.until) > Date.now() ? { state: p.now.state, until: p.now.until } : null, strikes: (p.strikes || []).length };
+}
+/** one switch for all shops: set (or clear) "available until" on the pro and every linked staff record */
+async function proSetAvailable(uid, until) {
+  await proRef(uid).set({ available: until ? { until, at: Date.now() } : null }, { merge: true });
+  const links = await db.collection("proLinks").where("uid", "==", uid).where("status", "==", "accepted").get();
+  await Promise.all(links.docs.map((l) => l.data().staffId ? db.doc(`stores/${l.data().storeId}/staff/${l.data().staffId}`).update({ available: until ? { until, at: Date.now() } : null, ...(until ? { wentHome: null } : {}) }).catch(() => {}) : null));
+}
+/** busy with another shop at that time? (jobs list on the pro, checked against the real booking) */
+async function proBusyElsewhere(uid, storeId, s, e) {
+  const p = (await proRef(uid).get()).data() || {};
+  for (const j of (p.jobs || []).filter((j) => j.e > Date.now() && j.storeId !== storeId && j.s < e && j.e > s)) {
+    const a = (await db.doc(`stores/${j.storeId}/appointments/${j.id}`).get()).data();
+    if (a && APPT_ACTIVE.includes(a.status) && a.providerId) return true;
+  }
+  return false;
+}
+/** realtime "what is the freelancer doing now" — shops see "On the way / With a client until 3:30 PM" (never which shop) */
+const proNow = (uid, now) => proRef(uid).set({ now: now || null }, { merge: true }).catch(() => {});
+const linkStat = (storeId, uid, k, n = 1) => linkRef(storeId, uid).set({ stats: { [k]: FieldValue.increment(n) } }, { merge: true }).catch(() => {});
+async function proPush(uid, data) {
+  try {
+    const snap = await db.collection(`pros/${uid}/pushSubs`).get();
+    await Promise.all(snap.docs.map(async (x) => { const r = await PUSH.sendOne(x.data(), data, { topic: data.tag, ttl: data.ttl || 900 }); if (r === "gone") await x.ref.delete().catch(() => {}); }));
+  } catch (e) { logger.warn("proPush", e.message); }
+}
+
+/** pro: save my profile (skills, area, portfolio, rate). Listed once it has skills + 3 portfolio photos + 18+ */
+exports.proSave = onCall(async (req) => {
+  const uid = needUser(req); const d = req.data || {};
+  const prev = (await proRef(uid).get()).data() || {};
+  const base = pinOf(d.mapUrl) || prev.base || null;
+  const portfolio = (Array.isArray(d.portfolio) ? d.portfolio : prev.portfolio || []).filter((x) => isStorageUrl(x?.url)).slice(0, 24).map((x) => ({ url: String(x.url).slice(0, 600), caption: String(x.caption || "").slice(0, 80), skill: PRO_SKILLS[x.skill] ? x.skill : "" }));
+  const p = {
+    name: String(d.name ?? prev.name ?? "").trim().slice(0, 60), bio: String(d.bio ?? prev.bio ?? "").trim().slice(0, 400), city: String(d.city ?? prev.city ?? "").trim().slice(0, 40),
+    skills: (Array.isArray(d.skills) ? d.skills : prev.skills || []).filter((k) => PRO_SKILLS[k]).slice(0, 8), radiusKm: Math.max(1, Math.min(60, Number(d.radiusKm ?? prev.radiusKm) || 10)),
+    rateNote: String(d.rateNote ?? prev.rateNote ?? "").trim().slice(0, 80), photoUrl: isStorageUrl(d.photoUrl) ? d.photoUrl : prev.photoUrl || null, portfolio,
+    adult: d.adult === true || prev.adult === true, phone: String(d.phone ?? prev.phone ?? "").trim().slice(0, 30),
+    ...(base ? { base: { lat: base.lat, lng: base.lng }, g4: geohash(base.lat, base.lng, 4) } : {}), updatedAt: Date.now(),
+  };
+  if (p.name.length < 2) throw new HttpsError("invalid-argument", "Enter your name.");
+  if (!p.adult) throw new HttpsError("failed-precondition", "Freelancers must be 18 or older.");
+  if (prev.portfolioFlag && Array.isArray(d.portfolio)) p.portfolioFlag = false; // replaced the photos → listed again (shops can report again)
+  p.listed = proListedOK({ ...prev, ...p });
+  await proRef(uid).set({ ...p, createdAt: prev.createdAt || Date.now() }, { merge: true });
+  await db.doc(`users/${uid}`).set({ accountRoles: FieldValue.arrayUnion("pro") }, { merge: true });
+  return { ok: true, listed: p.listed, missing: [!p.skills.length ? "skills" : null, p.portfolio.length < PRO_MIN_PICS ? `${PRO_MIN_PICS} portfolio photos (you have ${p.portfolio.length})` : null, !p.base ? "your area (map pin)" : null].filter(Boolean) };
+});
+/** pro: send my valid ID / certificate for checking (file already uploaded to pros/<uid>/private/) */
+exports.proProof = onCall(async (req) => {
+  const uid = needUser(req); const d = req.data || {}; const kind = d.kind === "cert" ? "cert" : "id";
+  const path = String(d.path || ""); if (!path.startsWith(`pros/${uid}/private/`)) throw new HttpsError("invalid-argument", "Upload the photo first.");
+  await proRef(uid).set({ proof: { [kind]: { status: "pending", path, at: Date.now(), note: String(d.note || "").slice(0, 120) } } }, { merge: true });
+  notifyAdmin(`🧑‍🎨 A freelancer sent their ${kind === "id" ? "valid ID" : "certificate"} — check it in Admin → Pros.`).catch(() => {});
+  return { ok: true };
+});
+/** pro: the one switch — available for jobs for the next N hours (all my shops), or off */
+exports.proAvailable = onCall(async (req) => {
+  const uid = needUser(req); const p = (await proRef(uid).get()).data(); if (!p) throw new HttpsError("failed-precondition", "Set up your freelancer profile first.");
+  if (p.banned) throw new HttpsError("permission-denied", "Your freelancer account is closed. Message TapTayo if you think this is a mistake.");
+  if ((Number(p.pausedUntil) || 0) > Date.now()) throw new HttpsError("failed-precondition", `Paused until ${new Date(p.pausedUntil).toLocaleDateString("en-PH", { month: "short", day: "numeric" })} (no-shows or confirmed shop reports).`);
+  const hours = Number(req.data?.hours) || 0; const until = req.data?.on === false ? null : Date.now() + Math.max(1, Math.min(18, hours || 8)) * 3600e3;
+  await proSetAvailable(uid, until);
+  return { ok: true, until };
+});
+exports.proPushSubscribe = onCall(async (req) => {
+  const uid = needUser(req); const sub = req.data?.sub || {};
+  if (!/^https:\/\/[^\s]+$/.test(String(sub.endpoint || "")) || !sub.keys?.p256dh || !sub.keys?.auth) throw new HttpsError("invalid-argument", "This phone can't receive notifications.");
+  const id = crypto.createHash("sha256").update(sub.endpoint).digest("hex").slice(0, 40);
+  const rec = { endpoint: sub.endpoint, keys: { p256dh: String(sub.keys.p256dh).slice(0, 200), auth: String(sub.keys.auth).slice(0, 60) }, at: Date.now() };
+  await db.doc(`pros/${uid}/pushSubs/${id}`).set(rec);
+  if (req.data?.test) await PUSH.sendOne(rec, { title: "🔔 Job alerts are on", body: "New jobs from your shops show up here.", url: "/pro/", tag: "test" });
+  return { ok: true };
+});
+/** pro: shops hiring near me (or near a place) */
+exports.proShops = onCall(async (req) => {
+  const uid = needUser(req); const p = (await proRef(uid).get()).data() || {};
+  const at = Number.isFinite(Number(req.data?.lat)) ? { lat: Number(req.data.lat), lng: Number(req.data.lng) } : p.base || { lat: 14.5995, lng: 120.9842 };
+  const snap = await db.collection("publicStores").where("hiring.on", "==", true).where("discover.g4", "in", ghAround(at.lat, at.lng, 4)).limit(120).get().catch(() => ({ docs: [] }));
+  const mine = new Map((await db.collection("proLinks").where("uid", "==", uid).get()).docs.map((x) => [x.data().storeId, x.data().status]));
+  return snap.docs.map((x) => x.data()).filter((s) => !s.locked).map((s) => { const D = s.discover || {}; const dist = Number.isFinite(D.lat) ? Math.round(kmBetween(at, { lat: D.lat, lng: D.lng }) * 10) / 10 : null;
+    return { slug: s.slug, storeId: s.storeId, name: s.name, logoUrl: s.logoUrl || null, coverUrl: s.coverUrl || null, businessType: s.businessType, city: D.city || "", distKm: dist, skills: s.hiring.skills || [], note: s.hiring.note || "", verified: (s.trust?.badges || []).includes("verified"), status: mine.get(s.storeId) || null, requireCert: !!s.hiring.requireCert, rating: s.hiring.rating || null, match: (s.hiring.skills || []).length ? (s.hiring.skills || []).some((k) => (p.skills || []).includes(k)) : true };
+  }).filter((s) => s.distKm == null || s.distKm <= Math.max(5, (p.radiusKm || 10) * 1.5)).sort((a, b) => (b.match - a.match) || (a.distKm ?? 99) - (b.distKm ?? 99)).slice(0, 60);
+});
+/** pro: apply to a shop (or accept the shop's invite) */
+exports.proApply = onCall(async (req) => {
+  const uid = needUser(req); await abuseGuard(req, "inquiry"); await requireVerifiedEmail(req.auth.token);
+  const d = req.data || {}; const p = (await proRef(uid).get()).data();
+  if (!proListedOK(p)) throw new HttpsError("failed-precondition", `Finish your freelancer profile first: skills, your area and at least ${PRO_MIN_PICS} photos of your work.`);
+  if ((Number(p.pausedUntil) || 0) > Date.now()) throw new HttpsError("failed-precondition", "Your freelancer account is paused for now.");
+  const pub = (await db.doc(`publicStores/${String(d.slug || "")}`).get()).data(); if (!pub) throw new HttpsError("not-found", "Shop not found.");
+  const ref = linkRef(pub.storeId, uid); const cur = (await ref.get()).data();
+  if (cur?.status === "accepted") return { ok: true, status: "accepted" };
+  if (cur?.status === "removed") throw new HttpsError("permission-denied", "This shop removed you from their freelancers.");
+  if (cur?.status === "invited") return acceptLink(pub.storeId, uid, p, { by: "pro" });
+  if (!pub.hiring?.on) throw new HttpsError("failed-precondition", "This shop isn't taking freelancers right now.");
+  const want = pub.hiring.skills || [];
+  if (want.length && !want.some((k) => (p.skills || []).includes(k))) throw new HttpsError("failed-precondition", `This shop is looking for: ${want.map((k) => PRO_SKILLS[k]).join(", ")}.`);
+  if (pub.hiring.requireCert && p.proof?.cert?.status !== "approved") throw new HttpsError("failed-precondition", "This shop needs a checked certificate or proof of training first (Freelancer profile → Proof).");
+  const pending = (await db.collection("proLinks").where("uid", "==", uid).where("status", "==", "applied").get()).size;
+  if (pending >= PRO_MAX_PENDING) throw new HttpsError("resource-exhausted", `You have ${pending} applications waiting. Wait for answers first.`);
+  await ref.set({ storeId: pub.storeId, slug: pub.slug, storeName: pub.name || "", uid, proName: p.name || "", status: "applied", note: String(d.note || "").trim().slice(0, 300), appliedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+  sendPush(pub.storeId, { roles: ["manager"] }, { title: "🧑‍🎨 New freelancer applied", body: `${p.name} · ${(p.skills || []).map((k) => PRO_SKILLS[k]).join(", ")}`, url: "/app/#pros", tag: "proapply-" + uid });
+  notifyTelegram(pub.storeId, "incident", `🧑‍🎨 ${p.name} applied as a freelancer — see Dashboard → Freelancers.`).catch?.(() => {});
+  return { ok: true, status: "applied" };
+});
+/** accepted → becomes the shop's on-call staff (separate limit per plan) */
+async function acceptLink(storeId, uid, p, { by, commission = null } = {}) {
+  const sub = (await db.doc(`stores/${storeId}/subscription/current`).get()).data();
+  const used = (await db.collection("proLinks").where("storeId", "==", storeId).where("status", "==", "accepted").get()).size;
+  const lim = PRO_LIMIT[Math.max(0, Math.min(3, tierOf(sub)))];
+  if (used >= lim) throw new HttpsError("resource-exhausted", `Your plan has room for ${lim} freelancers. Upgrade for more.`);
+  const ref = linkRef(storeId, uid); const cur = (await ref.get()).data() || {};
+  let staffId = cur.staffId || null;
+  const staff = { name: p.name, roles: ["stylist"], payType: "oncall", linkedUid: uid, active: true, skills: [], photoUrl: p.photoUrl || null, bio: p.bio || "", showToCustomers: true, homeService: true,
+    salary: { basicPerDay: 0, commission: true, ...(commission != null ? { pct: Math.max(0, Math.min(100, Number(commission) || 0)) } : {}) }, available: (Number(p.available?.until) || 0) > Date.now() ? p.available : null, source: "pro", updatedAt: FieldValue.serverTimestamp() };
+  if (staffId) await db.doc(`stores/${storeId}/staff/${staffId}`).set(staff, { merge: true });
+  else { const s = await db.collection(`stores/${storeId}/staff`).add({ ...staff, sortOrder: 900, createdAt: FieldValue.serverTimestamp() }); staffId = s.id; }
+  const store = (await db.doc(`stores/${storeId}`).get()).data() || {};
+  await ref.set({ storeId, slug: store.slug, storeName: store.name || "", uid, proName: p.name || "", status: "accepted", staffId, acceptedAt: Date.now(), by, updatedAt: Date.now() }, { merge: true });
+  proPush(uid, { title: "🎉 You're in!", body: `${store.name} added you as a freelancer. Turn on "Available" to get jobs.`, url: "/pro/", tag: "proacc-" + storeId });
+  return { ok: true, status: "accepted", staffId };
+}
+/** pro: my home — profile, shops, job offers, upcoming jobs */
+exports.proHome = onCall(async (req) => {
+  const uid = needUser(req); const p = (await proRef(uid).get()).data() || null;
+  const links = (await db.collection("proLinks").where("uid", "==", uid).get()).docs.map((x) => x.data());
+  const offers = [], jobs = [];
+  for (const l of links.filter((x) => x.status === "accepted" && x.staffId)) {
+    const col = db.collection(`stores/${l.storeId}/appointments`);
+    const store = (await db.doc(`stores/${l.storeId}`).get()).data() || {}; const shopPin = pinOf(store.contact?.mapUrl);
+    const placeOf = (a) => { if (!a.homeService) return { place: store.contact?.address ? store.contact.address.split(",").slice(-2).join(",").trim() : store.name || "", where: "shop" }; const parts = String(a.homeService.address || "").split(",").map((x) => x.trim()).filter(Boolean); return { place: a.homeService.area || parts.slice(-2).join(", ") || "", where: "home" }; };
+    const distOf = (a) => { const t = (a.homeService && pinOf(a.homeService.mapUrl)) || shopPin; return t && p?.base ? Math.round(kmBetween(p.base, t) * 10) / 10 : null; };
+    const [o, j] = await Promise.all([col.where("offerTo", "array-contains", l.staffId).limit(10).get().catch(() => ({ docs: [] })), col.where("providerId", "==", l.staffId).limit(40).get().catch(() => ({ docs: [] }))]);
+    const card = (x) => { const a = x.data(); const st = a.startAt?.toMillis?.() || 0; const soon = st - Date.now() < 3 * 3600e3; return { storeId: l.storeId, storeName: l.storeName, slug: l.slug, id: x.id, code: a.code, status: a.status, startAt: st, minutes: a.durationConfirmed || a.durationEst || 60,
+      items: (a.items || []).map((i) => i.name), total: a.total || null, client: (a.customer?.name || "").split(" ")[0], home: a.homeService ? { area: a.homeService.area || "", ...(soon ? { address: a.homeService.address || "", landmark: a.homeService.landmark || "", mapUrl: a.homeService.mapUrl || "" } : {}) } : null,
+      offer: a.offer?.status === "open" ? { expiresAt: a.offer.expiresAt, seconds: a.offer.seconds } : null, pro: a.pro || null, paid: !!a.paid, ...placeOf(a), distKm: distOf(a), myShare: freelancerShare(a, store.settings?.hiring),
+      change: a.change ? { status: a.change.status, to: a.change.to, from: a.change.from, items: a.change.items.map((x) => x.name), client: a.change.client, shop: a.change.shop } : null, remit: !!store.settings?.salon?.remit?.enabled }; };
+    o.docs.filter((x) => x.data().offer?.status === "open").forEach((x) => offers.push(card(x)));
+    j.docs.filter((x) => APPT_ACTIVE.includes(x.data().status) || (x.data().status === "done" && (x.data().startAt?.toMillis?.() || 0) > Date.now() - 864e5)).forEach((x) => jobs.push(card(x)));
+  }
+  const pub = p ? { ...proCard(uid, p, null), mapSet: !!p.base, adult: !!p.adult, phone: p.phone || "", proof: { id: p.proof?.id?.status || "none", cert: p.proof?.cert?.status || "none", note: p.proof?.id?.reason || p.proof?.cert?.reason || "" }, availableUntil: Number(p.available?.until) || null, pausedUntil: p.pausedUntil || null, banned: !!p.banned, listed: !!p.listed, portfolioFlag: !!p.portfolioFlag, strikes: (p.strikes || []).length } : null;
+  return { profile: pub, skills: PRO_SKILLS, certSkills: CERT_SKILLS, minPics: PRO_MIN_PICS, links: links.map((l) => ({ storeId: l.storeId, slug: l.slug, storeName: l.storeName, status: l.status, at: l.acceptedAt || l.appliedAt || l.invitedAt || 0, done: l.done || 0, canRate: (l.done || 0) > 0 && !((l.ratedAt || 0) > Date.now() - 30 * 864e5), myRating: l.myRating || null })), offers: offers.sort((a, b) => a.offer.expiresAt - b.offer.expiresAt), jobs: jobs.sort((a, b) => a.startAt - b.startAt) };
+});
+async function myLink(uid, storeId) { const l = (await linkRef(String(storeId || ""), uid).get()).data(); if (!l || l.status !== "accepted" || !l.staffId) throw new HttpsError("permission-denied", "You're not a freelancer of this shop."); return l; }
+/** pro: accept / decline a job offer from my account */
+exports.proOffer = onCall(async (req) => {
+  const uid = needUser(req); const d = req.data || {}; const l = await myLink(uid, d.storeId);
+  const ref = db.doc(`stores/${l.storeId}/appointments/${String(d.id || "")}`); const a = (await ref.get()).data(); if (!a) throw new HttpsError("not-found", "Job not found.");
+  const s = a.waiting ? Date.now() : a.startAt.toMillis(), e = s + (a.durationConfirmed || a.durationEst || 60) * 60000 + (a.homeService ? 60 * 60000 : 0);
+  if (d.action === "accept" && (await proBusyElsewhere(uid, l.storeId, s, e))) throw new HttpsError("failed-precondition", "You already have a job at another shop at that time.");
+  const p = (await proRef(uid).get()).data() || {};
+  const r = await offerRespond(l.storeId, l.staffId, p.name || l.proName, ref, a, d.action === "accept" ? "accept" : "decline");
+  if (d.action === "accept") await proRef(uid).set({ jobs: FieldValue.arrayUnion({ storeId: l.storeId, id: ref.id, s, e }) }, { merge: true });
+  return r;
+});
+/** pro: on the way · arrived (with location) · start · done · collected payment · remittance */
+exports.proJob = onCall(async (req) => {
+  const uid = needUser(req); const d = req.data || {}; const l = await myLink(uid, d.storeId);
+  if (d.step === "remit") {
+    const amount = round2(Math.max(0, Number(d.amount) || 0)); if (!amount) throw new HttpsError("invalid-argument", "Enter the amount you sent.");
+    const method = ["gcash", "maya", "bank", "cash"].includes(d.method) ? d.method : "gcash"; const refNo = String(d.refNo || "").trim().slice(0, 60);
+    if (method !== "cash" && refNo.length < 4) throw new HttpsError("invalid-argument", "Enter the reference number.");
+    const id = `remit_${Date.now()}_${l.staffId}`;
+    await ledgerAdd(l.storeId, id, { staffId: l.staffId, staffName: l.proName || "", type: "remit", status: "pending", amount, method, refNo, proofUrl: null, note: "Freelancer", label: `Remittance · ${method.toUpperCase()}${refNo ? " " + refNo : ""}` });
+    sendPush(l.storeId, { roles: ["manager"] }, { title: "💸 Remittance to confirm", body: `${l.proName} · ₱${amount} · ${method.toUpperCase()}`, url: "/app/#reports", tag: "remit-" + id });
+    return { ok: true };
+  }
+  const ref = db.doc(`stores/${l.storeId}/appointments/${String(d.id || "")}`); const a = (await ref.get()).data();
+  if (!a || a.providerId !== l.staffId) throw new HttpsError("permission-denied", "This isn't your job.");
+  const loc = Number.isFinite(Number(d.lat)) ? { lat: Math.round(Number(d.lat) * 1e5) / 1e5, lng: Math.round(Number(d.lng) * 1e5) / 1e5 } : null;
+  const now = Date.now(); const mins = a.durationConfirmed || a.durationEst || 60;
+  const myPhoto = (v) => typeof v === "string" && v.startsWith(`priv:stores/${l.storeId}/private/${uid}/`) ? v.slice(0, 300) : null;
+  if (d.step === "change") return proChange(l, uid, ref, a, d, myPhoto);
+  if (d.step === "menu") { const ctx = await salonContext(l.storeId); return { items: [...ctx.items.values()].filter((it) => !it.retail && it.available !== false).slice(0, 200).map((it) => ({ id: it.id, name: it.name, price: Number(it.price) || 0, variants: (it.variants || []).map((v, i) => ({ i, label: v.label, price: Number(v.price) || 0 })) })), current: (a.items || []).filter((x) => !x.retail && !x.package).map((x) => (x.variantIdx != null ? `${x.itemId}~${x.variantIdx}` : x.itemId)) }; }
+  if (d.step === "onway" || d.step === "arrived") {
+    await ref.update({ [`pro.${d.step}`]: now, ...(loc ? { [`pro.${d.step}Loc`]: loc } : {}), updatedAt: FieldValue.serverTimestamp() });
+    await proNow(uid, { state: d.step === "onway" ? "onway" : "working", until: Math.max(now, a.startAt?.toMillis?.() || now) + mins * 60000 + (d.step === "onway" ? 45 * 60000 : 0), at: now });
+    sendPush(l.storeId, { roles: ["crew"] }, { title: d.step === "onway" ? `🛵 ${l.proName} is on the way` : `📍 ${l.proName} arrived`, body: `${a.customer?.name || "Client"} · ${a.code}`, url: "/counter/", tag: `pro-${d.step}-${ref.id}` });
+    return { ok: true };
+  }
+  if (d.step === "start") { if (!["pending", "confirmed"].includes(a.status)) throw new HttpsError("failed-precondition", "This job can't be started now."); await ref.update({ status: "in_progress", startedAt: FieldValue.serverTimestamp(), "pro.startedMs": now, ...(a.durationConfirmed ? {} : { durationConfirmed: a.durationEst || 60, durationBy: l.proName }), updatedAt: FieldValue.serverTimestamp() }); await proNow(uid, { state: "working", until: now + mins * 60000, at: now }); return { ok: true }; }
+  if (d.step === "done") {
+    if (a.status !== "in_progress") throw new HttpsError("failed-precondition", "Start the job first.");
+    if (a.change?.status === "pending") throw new HttpsError("failed-precondition", "Wait for the shop to answer the service change first.");
+    const photo = myPhoto(d.photo), noPhoto = String(d.noPhoto || "").trim().slice(0, 120);
+    if (!photo && noPhoto.length < 4) throw new HttpsError("invalid-argument", "Take an after photo of your work (or say why there's none, e.g. \"client said no photo\").");
+    const startMs = a.pro?.startedMs || a.startedAt?.toMillis?.() || now; const actual = Math.round((now - startMs) / 60000); const short = mins >= 30 && actual < mins * 0.5;
+    await ref.update({ status: "done", doneAt: FieldValue.serverTimestamp(), "pro.afterPhoto": photo, "pro.noPhoto": photo ? null : noPhoto, "pro.actualMin": actual, "pro.short": short, updatedAt: FieldValue.serverTimestamp() });
+    await proNow(uid, null);
+    if (!photo) linkStat(l.storeId, uid, "noPhoto"); if (short) linkStat(l.storeId, uid, "short");
+    sendPush(l.storeId, { roles: ["crew"] }, { title: `✓ ${l.proName} finished${short ? " (much faster than booked)" : ""}`, body: `${a.customer?.name || "Client"} · ${actual} of ${mins} min · collect payment`, url: "/counter/", tag: "prodone-" + ref.id });
+    return { ok: true, short };
+  }
+  if (d.step === "collect") { // the client paid the pro (cash / GCash to the pro) → the shop's share becomes a balance to remit
+    const store = (await db.doc(`stores/${l.storeId}`).get()).data() || {};
+    if (!store.settings?.salon?.remit?.enabled) throw new HttpsError("failed-precondition", "This shop takes payments at the counter / online — don't collect from the client.");
+    if (a.paid) throw new HttpsError("failed-precondition", "Already paid.");
+    const method = ["cash", "gcash", "maya", "bank"].includes(d.method) ? d.method : "cash";
+    if (a.status === "in_progress") throw new HttpsError("failed-precondition", "Tap Done first (with your after photo).");
+    await ref.update({ paid: true, paymentMethod: method, paymentMethodId: method, paidAt: FieldValue.serverTimestamp(), cashCollectedBy: l.proName, collectedById: l.staffId, updatedAt: FieldValue.serverTimestamp() });
+    return { ok: true };
+  }
+  throw new HttpsError("invalid-argument", "Unknown step.");
+});
+/** Freelancer asks to change the services (client wants something else). Prices always come from the shop's menu.
+ *  Upgrade → the client confirms on their phone + the shop approves. Downgrade (cheaper) → reason + photo, the SHOP approves
+ *  (the client can't approve a cheaper bill — that's how a freelancer and client could cheat the shop). */
+async function proChange(l, uid, ref, a, d, myPhoto) {
+  if (!["pending", "confirmed", "in_progress"].includes(a.status)) throw new HttpsError("failed-precondition", "This job can't be changed now.");
+  if (a.change?.status === "pending") throw new HttpsError("failed-precondition", "A change is already waiting for approval.");
+  const keys = (Array.isArray(d.items) ? d.items : []).map(String).slice(0, 12); if (!keys.length) throw new HttpsError("invalid-argument", "Pick the services the client wants.");
+  const ctx = await salonContext(l.storeId); const lines = apptLines(keys, ctx.items).lines;
+  const svc = (a.items || []).filter((x) => !x.retail && !x.package); const from = round2(svc.reduce((x, y) => x + (Number(y.price) || 0) * (y.qty || 1), 0)), to = round2(lines.reduce((x, y) => x + y.price, 0));
+  const same = svc.length === lines.length && svc.every((x, i) => x.itemId === lines[i].itemId && x.price === lines[i].price); if (same) throw new HttpsError("invalid-argument", "That's the same as the booking.");
+  const downgrade = to < from; const reason = String(d.reason || "").trim().slice(0, 200); const photo = myPhoto(d.photo);
+  if (reason.length < 4) throw new HttpsError("invalid-argument", "Say why (e.g. \"client changed to gel polish\").");
+  if (downgrade && !photo) throw new HttpsError("invalid-argument", "A cheaper service needs a photo (e.g. the client's nails / hair now).");
+  const change = { status: "pending", items: lines, from, to, downgrade, reason, photo, by: l.proName || "", byStaffId: l.staffId, at: Date.now(), client: downgrade || !a.customerUid ? "n/a" : null, shop: null };
+  await ref.update({ change, updatedAt: FieldValue.serverTimestamp() });
+  await linkStat(l.storeId, uid, downgrade ? "downgrades" : "changes");
+  sendPush(l.storeId, { roles: ["crew"] }, { title: `${downgrade ? "⚠️ Cheaper service asked" : "🔁 Service change"} · ${a.code}`, body: `${l.proName}: ${lines.map((x) => x.name).join(", ")} · ₱${from} → ₱${to}. Approve on the counter.`, url: "/counter/", tag: "chg-" + ref.id });
+  return { ok: true, downgrade, from, to };
+}
+async function applyChange(ref, a, extra = {}) {
+  const c = a.change; const keep = (a.items || []).filter((x) => x.retail || x.package);
+  const minutes = c.items.reduce((x, y) => x + (Number(y.duration) || 0), 0);
+  await ref.update({ items: [...c.items, ...keep], total: round2(Math.max(0, (Number(a.total) || 0) - c.from + c.to)), durationEst: minutes || a.durationEst || 60, ...(a.durationConfirmed ? { durationConfirmed: minutes || a.durationConfirmed } : {}), bookPromo: null,
+    "change.status": "applied", "change.appliedAt": Date.now(), ...extra, updatedAt: FieldValue.serverTimestamp() });
+}
+/** client: confirm a service change · after the job "Is this what you got?" ‖ shop staff: approve / reject a change */
+exports.apptChange = onCall(async (req) => {
+  const d = req.data || {}; const act = String(d.action || "");
+  if (act === "client" || act === "verify") {
+    const { uid } = requireAuth(req); const storeId = String(d.storeId || "");
+    const ref = db.doc(`stores/${storeId}/appointments/${String(d.id || "")}`); const a = (await ref.get()).data();
+    if (!a || a.customerUid !== uid) throw new HttpsError("permission-denied", "Not your booking.");
+    const pro = a.providerId ? (await db.doc(`stores/${storeId}/staff/${a.providerId}`).get()).data() : null;
+    if (act === "verify") {
+      if (a.status !== "done") throw new HttpsError("failed-precondition", "Not finished yet."); if (a.verify) return { ok: true };
+      await ref.update({ verify: { ok: !!d.ok, note: String(d.note || "").slice(0, 200), at: Date.now() } });
+      if (!d.ok) { if (pro?.linkedUid) await linkStat(storeId, pro.linkedUid, "flags"); sendPush(storeId, { roles: ["manager"] }, { title: `🚩 Client says the service didn't match · ${a.code}`, body: `${a.customer?.name || "Client"}${d.note ? ": " + String(d.note).slice(0, 80) : ""} · billed: ${(a.items || []).map((x) => x.name).join(", ")}`, url: "/counter/", tag: "vfy-" + ref.id }); }
+      return { ok: true };
+    }
+    if (a.change?.status !== "pending" || a.change.client !== null) throw new HttpsError("failed-precondition", "Nothing to confirm.");
+    if (!d.ok) { await ref.update({ "change.client": "no", "change.status": "declined", updatedAt: FieldValue.serverTimestamp() }); sendPush(storeId, { roles: ["crew"] }, { title: `Client said no to the change · ${a.code}`, body: "Keep the booked services.", url: "/counter/", tag: "chg-" + ref.id }); if (pro?.linkedUid) proPush(pro.linkedUid, { title: "Client said no to the change", body: `${a.code} · keep the booked services`, url: "/pro/" }); return { ok: true }; }
+    if (a.change.shop === "yes") { await applyChange(ref, a, { "change.client": "yes" }); if (pro?.linkedUid) proPush(pro.linkedUid, { title: "✅ Change approved", body: a.code, url: "/pro/" }); return { ok: true, applied: true }; }
+    await ref.update({ "change.client": "yes", updatedAt: FieldValue.serverTimestamp() }); return { ok: true };
+  }
+  if (act !== "shop") throw new HttpsError("invalid-argument", "Unknown action.");
+  const who = await staffFrom(req); const ref = db.doc(`stores/${who.storeId}/appointments/${String(d.id || "")}`); const a = (await ref.get()).data();
+  if (!a || a.change?.status !== "pending") throw new HttpsError("failed-precondition", "Nothing to approve.");
+  if (!who.owner && (who.staffId === a.providerId || who.staffId === a.change.byStaffId)) throw new HttpsError("permission-denied", "Someone else at the shop has to approve your own change.");
+  const pro = a.providerId ? (await db.doc(`stores/${who.storeId}/staff/${a.providerId}`).get()).data() : null;
+  const tell = (t) => pro?.linkedUid && proPush(pro.linkedUid, { title: t, body: a.code, url: "/pro/" });
+  if (!d.ok) { await ref.update({ "change.shop": "no", "change.status": "rejected", "change.shopBy": who.name || "Owner", "change.note": String(d.note || "").slice(0, 160), updatedAt: FieldValue.serverTimestamp() }); tell("❌ The shop didn't approve the change"); return { ok: true }; }
+  const clientOk = a.change.client === "yes" || a.change.client === "n/a" || d.inPerson === true;
+  if (!clientOk) { await ref.update({ "change.shop": "yes", "change.shopBy": who.name || "Owner", updatedAt: FieldValue.serverTimestamp() }); return { ok: true, waitingClient: true }; }
+  await applyChange(ref, a, { "change.shop": "yes", "change.shopBy": who.name || "Owner", ...(d.inPerson && a.change.client === null ? { "change.client": "in person" } : {}) }); tell("✅ Change approved");
+  return { ok: true, applied: true };
+});
+/** freelancer → shop rating (★ + "pays on time"), after at least one finished job, once a month per shop */
+exports.proRateShop = onCall(async (req) => {
+  const uid = needUser(req); const d = req.data || {}; const ref = linkRef(String(d.storeId || ""), uid); const l = (await ref.get()).data();
+  if (!l || !(l.done > 0)) throw new HttpsError("failed-precondition", "Rate a shop after you've finished a job there.");
+  if ((l.ratedAt || 0) > Date.now() - 30 * 864e5) throw new HttpsError("already-exists", "You can rate this shop again next month.");
+  const stars = Math.max(1, Math.min(5, Math.round(Number(d.stars) || 0))); const pays = d.paysOnTime === true ? 1 : d.paysOnTime === false ? 0 : null;
+  await db.doc(`stores/${l.storeId}`).set({ proRating: { sum: FieldValue.increment(stars), count: FieldValue.increment(1), ...(pays != null ? { paysAsked: FieldValue.increment(1), paysYes: FieldValue.increment(pays) } : {}) } }, { merge: true });
+  await ref.set({ ratedAt: Date.now(), myRating: { stars, paysOnTime: pays } }, { merge: true });
+  return { ok: true };
+});
+/** freelancer: my earnings across all my shops (for the CSV download) */
+exports.proEarnings = onCall(async (req) => {
+  const uid = needUser(req); const d = req.data || {};
+  const from = Number(d.from) || Date.now() - 31 * 864e5, to = Number(d.to) || Date.now();
+  const links = (await db.collection("proLinks").where("uid", "==", uid).get()).docs.map((x) => x.data()).filter((l) => l.staffId);
+  const rows = [];
+  for (const l of links) {
+    const snap = await db.collection(`stores/${l.storeId}/staffLedger`).where("staffId", "==", l.staffId).limit(1000).get().catch(() => ({ docs: [] }));
+    snap.docs.map((x) => x.data()).filter((e) => e.at >= from && e.at <= to).forEach((e) => rows.push({ at: e.at, shop: l.storeName || "", type: e.type, label: e.label || "", amount: round2(e.amount), status: e.status || "", method: e.method || "" }));
+  }
+  rows.sort((a, b) => a.at - b.at);
+  const sum = (t) => round2(rows.filter((r) => r.type === t && (t !== "remit" || r.status === "confirmed")).reduce((x, r) => x + r.amount, 0));
+  return { rows, totals: { earned: sum("earn"), collected: sum("collect"), remitted: sum("remit"), paidOut: sum("payout") }, from, to };
+});
+/** pro: leave a shop — future jobs go back to the shop to reassign */
+exports.proLeave = onCall(async (req) => {
+  const uid = needUser(req); const d = req.data || {}; const ref = linkRef(String(d.storeId || ""), uid); const l = (await ref.get()).data(); if (!l) throw new HttpsError("not-found", "Not found.");
+  await unlinkPro(l, "left"); return { ok: true };
+});
+async function unlinkPro(l, status) {
+  await linkRef(l.storeId, l.uid).set({ status, endedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+  if (!l.staffId) return;
+  await db.doc(`stores/${l.storeId}/staff/${l.staffId}`).update({ active: false, available: null }).catch(() => {});
+  const fut = await db.collection(`stores/${l.storeId}/appointments`).where("providerId", "==", l.staffId).get();
+  const b = db.batch(); let n = 0;
+  fut.docs.filter((x) => ["pending", "confirmed", "unconfirmed"].includes(x.data().status) && (x.data().startAt?.toMillis?.() || 0) > Date.now()).forEach((x) => { b.update(x.ref, { providerId: null, providerName: null, acceptedAt: null, updatedAt: FieldValue.serverTimestamp() }); n++; });
+  if (n) { await b.commit(); sendPush(l.storeId, { roles: ["crew"] }, { title: "🧑‍🎨 Freelancer left — reassign", body: `${l.proName} had ${n} upcoming job${n > 1 ? "s" : ""}. Please assign someone else.`, url: "/counter/", tag: "proleft-" + l.uid }); }
+}
+/** shop (owner): hiring switch, applicants, accept / reject / remove, no-show strike, rating, find & invite pros */
+exports.shopPros = onCall(async (req) => {
+  const t = requireOwner(req); const d = req.data || {}; const storeId = t.storeId;
+  const store = (await db.doc(`stores/${storeId}`).get()).data() || {};
+  const pub = (await db.doc(`publicStores/${store.slug}`).get()).data() || {}; const at = Number.isFinite(pub.discover?.lat) ? { lat: pub.discover.lat, lng: pub.discover.lng } : null;
+  const getPro = async (uid) => { const p = (await proRef(String(uid || "")).get()).data(); if (!p) throw new HttpsError("not-found", "Freelancer not found."); return p; };
+  if (d.action === "hiring") {
+    const skills = (Array.isArray(d.skills) ? d.skills : []).filter((k) => PRO_SKILLS[k]).slice(0, 8);
+    const cut = (x) => (x && Number(x.value) >= 0 ? { type: x.type === "fixed" ? "fixed" : "percent", value: Math.max(0, Math.min(x.type === "fixed" ? 100000 : 100, Number(x.value) || 0)) } : null);
+    const cuts = Object.fromEntries(Object.entries(d.cuts && typeof d.cuts === "object" ? d.cuts : store.settings?.hiring?.cuts || {}).slice(0, 60).map(([k, v]) => [String(k).slice(0, 40), cut(v)]).filter(([, v]) => v));
+    const hiring = { on: !!d.on, skills, note: String(d.note || "").trim().slice(0, 200), requireCert: d.requireCert === undefined ? skills.some((k) => CERT_SKILLS.includes(k)) : !!d.requireCert, cuts, cutDefault: cut(d.cutDefault) || store.settings?.hiring?.cutDefault || { type: "percent", value: 30 } };
+    if (hiring.on && !at) throw new HttpsError("failed-precondition", "Add your shop's Google Maps pin first (Settings → Contact) so pros near you can find you.");
+    await db.doc(`stores/${storeId}`).update({ "settings.hiring": hiring, updatedAt: FieldValue.serverTimestamp() });
+    return { ok: true, hiring };
+  }
+  if (d.action === "accept") { const p = await getPro(d.uid); const l = (await linkRef(storeId, d.uid).get()).data(); if (!l || !["applied"].includes(l.status)) throw new HttpsError("failed-precondition", "No application from this freelancer."); return acceptLink(storeId, d.uid, p, { by: "shop", commission: d.commission }); }
+  if (d.action === "reject") { const l = (await linkRef(storeId, d.uid).get()).data(); if (!l) throw new HttpsError("not-found", "Not found."); await linkRef(storeId, d.uid).set({ status: "rejected", reason: String(d.reason || "").slice(0, 200), updatedAt: Date.now() }, { merge: true }); proPush(d.uid, { title: "Application update", body: `${store.name} isn't taking you on right now.`, url: "/pro/" }); return { ok: true }; }
+  if (d.action === "remove") { const l = (await linkRef(storeId, d.uid).get()).data(); if (!l) throw new HttpsError("not-found", "Not found."); await unlinkPro(l, "removed"); return { ok: true }; }
+  if (d.action === "invite") {
+    const p = await getPro(d.uid); if (!p.listed) throw new HttpsError("failed-precondition", "This freelancer isn't taking invites.");
+    const cur = (await linkRef(storeId, d.uid).get()).data(); if (cur && ["accepted", "applied", "invited"].includes(cur.status)) return { ok: true, status: cur.status };
+    await linkRef(storeId, d.uid).set({ storeId, slug: store.slug, storeName: store.name || "", uid: d.uid, proName: p.name || "", status: "invited", invitedAt: Date.now(), updatedAt: Date.now() }, { merge: true });
+    proPush(d.uid, { title: "📩 A shop invited you", body: `${store.name} wants you as a freelancer.`, url: "/pro/", tag: "proinv-" + storeId });
+    return { ok: true, status: "invited" };
+  }
+  if (d.action === "noshow") { // the pro accepted but didn't come: strike 2 → paused 7 days · strike 3 → closed
+    const l = (await linkRef(storeId, d.uid).get()).data(); if (!l || l.status !== "accepted") throw new HttpsError("not-found", "Not your freelancer.");
+    const key = `${storeId}_${String(d.apptId || "x")}`; const p = await getPro(d.uid);
+    if ((p.noShowKeys || []).includes(key)) return { ok: true, already: true };
+    const n = (p.noShows || 0) + 1; const patch = { noShows: n, noShowKeys: FieldValue.arrayUnion(key), ...(n >= 3 ? { banned: true, listed: false } : n >= 2 ? { pausedUntil: Date.now() + 7 * 864e5 } : {}) };
+    await proRef(d.uid).set(patch, { merge: true }); if (n >= 2) await proSetAvailable(d.uid, null);
+    proPush(d.uid, { title: "⚠️ No-show reported", body: n >= 3 ? "Your freelancer account is closed after 3 no-shows." : n >= 2 ? "Paused for 7 days after 2 no-shows." : `${store.name} reported you didn't come. 2 no-shows = 7-day pause.`, url: "/pro/" });
+    return { ok: true, noShows: n };
+  }
+  if (d.action === "rate") {
+    const l = (await linkRef(storeId, d.uid).get()).data(); if (!l || l.status !== "accepted") throw new HttpsError("not-found", "Not your freelancer.");
+    const stars = Math.max(1, Math.min(5, Math.round(Number(d.stars) || 0))); const day = phToday(); const key = `${storeId}_${day}`; const p = await getPro(d.uid);
+    if ((p.rateKeys || []).includes(key)) throw new HttpsError("already-exists", "You already rated this freelancer today.");
+    await proRef(d.uid).set({ ratingSum: FieldValue.increment(stars), ratingCount: FieldValue.increment(1), rateKeys: FieldValue.arrayUnion(key) }, { merge: true });
+    return { ok: true };
+  }
+  if (d.action === "report") { // fake / stolen portfolio, took a client outside the app, rude or unsafe… → TapTayo checks it
+    if (!PRO_REPORT_REASONS[d.reason]) throw new HttpsError("invalid-argument", "Pick a reason.");
+    const l = (await linkRef(storeId, String(d.uid || "")).get()).data(); if (!l) throw new HttpsError("not-found", "This freelancer never applied to or worked with your shop.");
+    const details = String(d.details || "").trim().slice(0, 600); if (details.length < 10) throw new HttpsError("invalid-argument", "Tell us what happened (at least a sentence).");
+    const recent = (await db.collection("proReports").where("storeId", "==", storeId).where("at", ">", Date.now() - 30 * 864e5).get()).docs.map((x) => x.data());
+    if (recent.some((r) => r.uid === d.uid)) throw new HttpsError("already-exists", "You already reported this freelancer this month.");
+    if (recent.length >= SHOP_REPORTS_PER_MONTH) throw new HttpsError("resource-exhausted", `You can send up to ${SHOP_REPORTS_PER_MONTH} freelancer reports a month.`);
+    const evidence = (Array.isArray(d.evidence) ? d.evidence : []).filter((x) => typeof x === "string" && x.startsWith(`priv:stores/${storeId}/private/`)).slice(0, 4);
+    const p = await getPro(d.uid);
+    await db.collection("proReports").add({ storeId, storeName: store.name || "", uid: String(d.uid), proName: p.name || "", reason: d.reason, details, evidence, status: "pending", at: Date.now() });
+    notifyAdmin(`🚩 ${store.name} reported freelancer ${p.name} (${PRO_REPORT_REASONS[d.reason]}) — Admin → Freelancer reports.`).catch(() => {});
+    return { ok: true };
+  }
+  if (d.action === "directory") {
+    if (!at) return { pros: [], needPin: true };
+    const snap = await db.collection("pros").where("listed", "==", true).where("g4", "in", ghAround(at.lat, at.lng, 4)).limit(200).get().catch(() => ({ docs: [] }));
+    const mine = new Map((await db.collection("proLinks").where("storeId", "==", storeId).get()).docs.map((x) => [x.data().uid, x.data().status]));
+    const want = String(d.skill || "");
+    return { pros: snap.docs.map((x) => ({ ...proCard(x.id, x.data(), at), status: mine.get(x.id) || null })).filter((c) => !c.paused && (!want || c.skills.includes(want)) && (c.distKm == null || c.distKm <= Math.max(c.radiusKm, 3) * 1.2)).sort((a, b) => b.available - a.available || (a.distKm ?? 99) - (b.distKm ?? 99)).slice(0, 60) };
+  }
+  // list
+  const links = (await db.collection("proLinks").where("storeId", "==", storeId).get()).docs.map((x) => x.data()).filter((l) => ["applied", "invited", "accepted"].includes(l.status));
+  const pros = await Promise.all(links.map(async (l) => { const p = (await proRef(l.uid).get()).data(); return p ? { ...proCard(l.uid, p, at), status: l.status, note: l.note || "", staffId: l.staffId || null, at: l.acceptedAt || l.appliedAt || l.invitedAt || 0, stats: l.stats || {}, doneHere: l.done || 0, proof: { cert: p.proof?.cert?.status === "approved" } } : null; }));
+  const sub = (await db.doc(`stores/${storeId}/subscription/current`).get()).data();
+  const cats = (await db.collection(`stores/${storeId}/categories`).get()).docs.map((x) => ({ id: x.id, name: x.data().name || "", retail: !!x.data().retail })).filter((c) => !c.retail);
+  return { storeId, hiring: store.settings?.hiring || { on: false, skills: [], note: "" }, pros: pros.filter(Boolean), limit: PRO_LIMIT[Math.max(0, Math.min(3, tierOf(sub)))], skills: PRO_SKILLS, certSkills: CERT_SKILLS, needPin: !at, cats, offers: offerCfg(store.settings?.salon || {}), rating: store.proRating?.count ? { avg: Math.round((store.proRating.sum / store.proRating.count) * 10) / 10, count: store.proRating.count, paysOnTime: store.proRating.paysAsked ? Math.round((store.proRating.paysYes / store.proRating.paysAsked) * 100) : null } : null };
+});
+const PRO_REPORT_REASONS = { fake: "Fake or stolen portfolio photos", bypass: "Took a client outside the app", unsafe: "Rude or unsafe with a client", work: "Poor work / didn't finish the job", other: "Other" };
+/** admin: freelancer reports from shops → confirm = strike (one per shop per 30 days). 2 strikes = paused 14 days · 3 = closed */
+exports.adminProReports = onCall(async (req) => {
+  requireAdmin(req); const d = req.data || {};
+  if (d.decide) {
+    const ref = db.doc(`proReports/${String(d.id || "")}`); const r = (await ref.get()).data(); if (!r || r.status !== "pending") throw new HttpsError("failed-precondition", "Already decided.");
+    if (!d.confirm) { await ref.update({ status: "rejected", note: String(d.note || "").slice(0, 200), decidedAt: Date.now() }); return { ok: true }; }
+    const pref = proRef(r.uid); const p = (await pref.get()).data() || {};
+    const list = (p.strikes || []).some((x) => x.storeId === r.storeId && x.at > Date.now() - 30 * 864e5) ? p.strikes || [] : [...(p.strikes || []), { storeId: r.storeId, reason: r.reason, at: Date.now() }];
+    const n = list.length; const patch = { strikes: list, ...(n >= 3 ? { banned: true, listed: false } : n >= 2 ? { pausedUntil: Date.now() + 14 * 864e5 } : {}), ...(r.reason === "fake" ? { listed: false, portfolioFlag: true } : {}) };
+    await pref.set(patch, { merge: true }); if (n >= 2) await proSetAvailable(r.uid, null);
+    proPush(r.uid, { title: "⚠️ A shop's report was confirmed", body: n >= 3 ? "Your freelancer account is closed." : n >= 2 ? "Paused for 14 days." : r.reason === "fake" ? "Replace the photos that aren't your own work to be listed again." : `${PRO_REPORT_REASONS[r.reason]}. 2 confirmed reports = 14-day pause.`, url: "/pro/" });
+    await ref.update({ status: "confirmed", strikes: n, decidedAt: Date.now() });
+    return { ok: true, strikes: n };
+  }
+  const q = await db.collection("proReports").where("status", "==", "pending").limit(50).get();
+  return q.docs.map((x) => ({ id: x.id, ...x.data(), label: PRO_REPORT_REASONS[x.data().reason] || x.data().reason }));
+});
+/** admin: check pro IDs / certificates — the file is deleted once decided (only the badge stays) */
+exports.adminPros = onCall(async (req) => {
+  requireAdmin(req); const d = req.data || {};
+  if (d.decide) {
+    const ref = proRef(String(d.uid || "")); const p = (await ref.get()).data(); const kind = d.kind === "cert" ? "cert" : "id"; const pr = p?.proof?.[kind]; if (!pr) throw new HttpsError("not-found", "Nothing to check.");
+    await ref.set({ proof: { [kind]: { status: d.approve ? "approved" : "rejected", reason: d.approve ? null : String(d.reason || "Please send a clearer photo").slice(0, 120), at: Date.now(), path: null } } }, { merge: true });
+    if (pr.path) await admin.storage().bucket().file(pr.path).delete().catch(() => {});
+    proPush(String(d.uid), { title: d.approve ? `✅ ${kind === "id" ? "ID" : "Certificate"} checked` : `❌ ${kind === "id" ? "ID" : "Certificate"} not accepted`, body: d.approve ? "Your badge is now on your freelancer profile." : String(d.reason || "Please send a clearer photo"), url: "/pro/" });
+    return { ok: true };
+  }
+  const q = await db.collection("pros").limit(400).get();
+  const out = [];
+  for (const x of q.docs) for (const kind of ["id", "cert"]) { const pr = x.data().proof?.[kind]; if (pr?.status === "pending" && pr.path) { let url = null; try { [url] = await admin.storage().bucket().file(pr.path).getSignedUrl({ action: "read", expires: Date.now() + 3600e3 }); } catch {} out.push({ uid: x.id, name: x.data().name, skills: x.data().skills || [], kind, url, at: pr.at, note: pr.note || "" }); } }
+  return out.sort((a, b) => a.at - b.at).slice(0, 50);
+});
+/** a done job by a linked pro → counts toward their "Trusted pro" badge */
+exports.proJobDone = onDocumentWritten({ document: "stores/{storeId}/appointments/{id}", maxInstances: 10 }, async (ev) => {
+  const b = ev.data?.before?.data(), a = ev.data?.after?.data(); if (!a || a.test || a.proCounted || a.status !== "done" || b?.status === "done" || !a.providerId) return;
+  const st = (await db.doc(`stores/${ev.params.storeId}/staff/${a.providerId}`).get()).data(); if (!st?.linkedUid) return;
+  await ev.data.after.ref.update({ proCounted: true }).catch(() => {});
+  await proRef(st.linkedUid).set({ jobsDone: FieldValue.increment(1) }, { merge: true });
+  await linkRef(ev.params.storeId, st.linkedUid).set({ done: FieldValue.increment(1) }, { merge: true });
 });

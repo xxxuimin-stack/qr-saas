@@ -140,6 +140,7 @@ const DEMOS = [
     staff: [["Migs", "Photographer & content creator · 7 yrs", "studio/dslr.jpg", "male"]],
     cats: [
       ["Shoots & sessions", null, [
+        ["Golden-hour couple shoot in Tagaytay (3 hours)", 8500, "studio/wedding.jpg", "Pre-nup or anniversary · Taal view spots · 40 edited photos + all proofs", 180],
         ["Portrait / product shoot (2 hours)", 3500, "studio/shooting.jpg", "Includes 20 edited photos", 120],
         ["Makeup + photo session", 4500, "studio/makeup.jpg", "Makeup, styling and 15 edited photos", 150],
       ]],
@@ -234,7 +235,7 @@ const DEMOS = [
   },
   {
     slug: "taptayo-laundry", name: "TapTayo Laundry", businessType: "laundry", mode: "laundry",
-    cover: PHOTO("laundry/laundromat.jpg"), theme: { preset: "sky", primary: "#1E8BFF" }, hours: OPEN("07:00", "21:00"),
+    cover: PHOTO("laundry/folded-shirts.jpg"), theme: { preset: "sky", primary: "#1E8BFF" }, hours: OPEN("07:00", "21:00"),
     address: "Demo address · Metro Manila", tagline: "Wash · dry · fold — book a rider pickup or drop off",
     settings: {
       service: { pickup: true, delivery: true, deliveryFee: 50, deliveryFeeMode: "fixed" },
@@ -286,6 +287,22 @@ module.exports = function demoKit({ db, FieldValue, Timestamp, dayKey, rebuildPu
     }
   }
 
+  // where each demo "is" (public landmarks, labelled demo) — gives the page a map pin, Directions and an Explore listing
+  const PLACE = {
+    "taptayo-cafe": ["Legazpi Village, Makati (demo)", 14.5547, 121.0175], "taptayo-salon": ["Uptown Mall, BGC, Taguig (demo)", 14.5565, 121.0545],
+    "taptayo-spa": ["Kapitolyo, Pasig (demo)", 14.5701, 121.0603], "taptayo-studio": ["Quezon City · shoots on location (demo)", 14.6507, 121.0494],
+    "taptayo-creator": ["Makati · shoots at your café (demo)", 14.5547, 121.0244], "taptayo-ugc": ["Pasig · works from home (demo)", 14.5764, 121.0851],
+    "taptayo-laundry": ["San Roque, Antipolo (demo)", 14.5861, 121.176], "taptayo-airbnb": ["Laiya, San Juan, Batangas (demo)", 13.6708, 121.4049],
+  };
+  const NEWS = {
+    "taptayo-cafe": ["☕ New: Ube Spanish Latte", "Our November special — order it from your table today."], "taptayo-salon": ["💅 Chrome nails are here", "Book a gel manicure this week and add chrome for ₱150."],
+    "taptayo-spa": ["🌿 Rainy-day promo", "20% off foot spa Monday to Thursday, 1–5 PM."], "taptayo-studio": ["📸 November dates filling up", "2 weekend slots left for pre-nup shoots in Tagaytay."],
+    "taptayo-creator": ["🎥 Booking December collabs", "Holiday menu launches — send your brief early."], "taptayo-ugc": ["✨ New: 3-hook UGC pack", "Three different openings for one product, one price."],
+    "taptayo-laundry": ["🌧 Maulan? We pick up!", "Free pickup this week for 6 kg and up."], "taptayo-airbnb": ["🏖 Weekday Escape", "20% off Monday to Thursday nights — check the calendar."],
+  };
+  // 2 more photos per service for salons, spas and creators (swipe on the Pinterest tiles)
+  const POOL = { salon: ['blowout.jpg', 'hair-care.jpg', 'interior-dark.jpg', 'interior-long.jpg', 'interior-pink.jpg', 'nail-art.jpg', 'nails-love.jpg', 'nails-tortoise.jpg', 'nails-white.jpg', 'polish-wall.jpg', 'press-on.jpg', 'scalp-treatment.jpg', 'styling.jpg', 'waves.jpg'], spa: ['back-massage.jpg', 'candles.jpg', 'facial.jpg', 'foot-massage.jpg', 'hammam.jpg', 'hand-massage.jpg', 'hot-stone-flowers.jpg', 'hot-stone.jpg', 'leg-massage.jpg', 'oil.jpg'], studio: ['camera.jpg', 'cover.jpg', 'creator.jpg', 'dslr.jpg', 'event.jpg', 'makeup.jpg', 'phone-rig.jpg', 'setup.jpg', 'shooting.jpg', 'wedding.jpg'], creator: ['avatar.jpg', 'cover.jpg', 'food-phone.jpg', 'vlogger.jpg'], asia: ['cafe-selfie.jpg', 'coffee-shot.jpg', 'creator-avatar.jpg', 'creator-studio.jpg', 'phone-selfie.jpg', 'rooftop.jpg', 'ugc-avatar.jpg'], laundry: ['basket-woman.jpg', 'basket.jpg', 'folded-jeans.jpg', 'folded-shirts.jpg', 'laundromat-carts.jpg', 'laundromat.jpg', 'machines.jpg', 'shirts-hanging.jpg'], drink: ['caramel-macchiato.jpg', 'iced-americano.jpg', 'iced-latte.jpg', 'iced-mocha.jpg', 'iced-spanish-latte.jpg', 'latte-pour.jpg'], food: ['adobo.jpg', 'boodle-fight.jpg', 'bulalo.jpg', 'crispy-liempo.jpg', 'escabeche.jpg', 'grilled-eggplant.jpg', 'inihaw-meal.jpg', 'inihaw-pusit.jpg', 'kare-kare.jpg', 'kwek-kwek.jpg', 'lechon-kawali.jpg', 'lechon-manok.jpg', 'longsilog.jpg', 'nilaga.jpg', 'pancit.jpg', 'party-tray.jpg', 'pork-bbq.jpg', 'seafood-boodle.jpg', 'sinigang.jpg', 'sisig.jpg'] };
+  const morePhotos = (D, main, i) => { if (D.mode !== "salon") return []; const dir = String(main).split("/")[0], list = (POOL[dir] || []).map((f) => dir + "/" + f).filter((f) => f !== main); if (list.length < 2) return []; return [list[(i * 3) % list.length], list[(i * 3 + 1) % list.length]].filter((x, k, a) => a.indexOf(x) === k).map(PHOTO); };
   async function seedOne(D, adminUid) {
     const pub = await db.doc(`publicStores/${D.slug}`).get();
     let storeId = pub.exists ? pub.data().storeId : null;
@@ -301,15 +318,18 @@ module.exports = function demoKit({ db, FieldValue, Timestamp, dayKey, rebuildPu
     await storeRef.set({
       name: D.name, slug: D.slug, businessType: D.businessType, mode: D.mode, ownerUid: adminUid, orgId, demo: true,
       logoUrl: D.logo || "https://taptayo.com/icons/icon-512.png", coverUrl: D.cover, theme: D.theme, tagline: D.tagline,
-      contact: { phone: "", address: D.address, ...(D.city ? { city: D.city } : {}) }, hours: D.hours,
+      contact: { phone: "", address: (PLACE[D.slug] || [D.address])[0], ...(PLACE[D.slug] ? { mapUrl: `https://maps.google.com/?q=${PLACE[D.slug][1]},${PLACE[D.slug][2]}` } : {}), ...(D.city ? { city: D.city } : {}) }, hours: D.hours,
       settings: { currency: "PHP", labels: preset.labels, ...base, ...D.settings, tagline: D.tagline, demo: true, live: true, acceptOrders: true,
-        payments: { methods: CASH }, feedback: { enabled: true, display: "all" }, onboarding: { done: {}, later: {}, tourDone: true, startedAt: now },
+        payments: { methods: [...CASH, { id: "gcash", type: "gcash", name: "GCash", enabled: true, askRef: true, number: "0900 000 0000", accountName: "TapTayo Demo" }] }, feedback: { enabled: true, display: "all" }, onboarding: { done: {}, later: {}, tourDone: true, startedAt: now },
         ...(D.mode === "salon" ? { salon: { ...(base.salon || {}), ...(D.settings.salon || {}) } } : {}), ...(D.mode === "laundry" ? { laundry: { ...(base.laundry || {}), ...(D.settings.laundry || {}) } } : {}), ...(D.mode === "stay" ? { stay: { ...(base.stay || {}), ...(D.settings.stay || {}) } } : {}) },
-      stats: { ratingSum: D.rating[1], ratingCount: D.rating[0], ...(D.stats || {}) }, ...(D.storeExtra || {}),
-      createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+      stats: { ratingSum: D.rating[1], ratingCount: D.rating[0], txDone: 1240, txCustomers: 610, ...(D.stats || {}) }, ...(D.storeExtra || {}),
+      // sample badges (style D: gold seal + D/B/P) so the demo looks like a fully verified shop — the badge card says it's a demo
+      verif: { dti: { status: "approved", name: D.name }, bir: { status: "approved", name: D.name }, permit: { status: "approved", name: D.name, expires: new Date(now + 300 * 864e5).toISOString().slice(0, 10) }, ownerId: { status: "approved" } }, kycAt: T(now - 380 * 864e5),
+      createdAt: T(now - 400 * 864e5), updatedAt: FieldValue.serverTimestamp(),
     }, { merge: false });
     await db.doc(`stores/${storeId}/subscription/current`).set({ plan: "business", status: "active", comp: true, compNote: "TapTayo demo store", paidUntil: T(now + 3650 * 86400000), addons: {}, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
 
+    if (NEWS[D.slug]) await storeRef.collection("announcements").add({ title: NEWS[D.slug][0], body: NEWS[D.slug][1], active: true, pinned: true, audience: { customers: true, staff: false }, type: "news", createdAt: T(now - 2 * 864e5) });
     const b = db.batch();
     const items = []; const catByName = {};
     (D.cats || []).forEach(([cname, station, rows], ci) => {
@@ -317,7 +337,7 @@ module.exports = function demoKit({ db, FieldValue, Timestamp, dayKey, rebuildPu
       b.set(cref, { name: cname, sortOrder: ci + 1, active: true, ...(station ? { station } : {}), createdAt: T(now) });
       rows.forEach((r, i) => {
         const iref = storeRef.collection("items").doc();
-        const it = { categoryId: cref.id, name: r[0], price: r[1], imageUrl: PHOTO(r[2]), description: r[3] || "", available: true, options: [], sortOrder: i + 1, createdAt: T(now - 30 * 86400000) };
+        const it = { categoryId: cref.id, name: r[0], price: r[1], imageUrl: PHOTO(r[2]), photos: morePhotos(D, r[2], i), description: r[3] || "", available: true, options: [], sortOrder: i + 1, createdAt: T(now - 30 * 86400000) };
         if (D.mode === "table" && r[4]) it.options = [{ name: "Size", required: true, multi: false, choices: [{ label: "Regular", add: 0 }, { label: "Large", add: 25 }] }, { name: "Sugar", required: false, multi: false, choices: [{ label: "Regular", add: 0 }, { label: "Less sweet", add: 0 }] }];
         if (D.mode === "salon") Object.assign(it, { durationMinutes: r[4], staffPay: { type: "percent", value: 30 }, ...(r[4] >= 480 ? { wholeDay: true } : {}) });
         if (D.mode === "laundry") it.unit = r[4];

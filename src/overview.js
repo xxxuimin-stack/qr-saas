@@ -77,7 +77,9 @@ export function renderOverview(root, ctx) {
       <section class="ov-sec" aria-labelledby="stT"><header><h2 id="stT">Staff tally</h2><a href="#staff">Staff</a></header><div id="ovStaff"><div class="skel" style="height:120px"></div></div></section>
       <section aria-labelledby="ccT" id="ovCashWrap"></section>
     </div>
-    <div id="ovBranches"></div>`;
+    <div id="ovBranches"></div>
+    <div id="ovRoadmap"></div>`;
+  import("./roadmap.js").then((m) => m.roadmapCard(root.querySelector("#ovRoadmap"), { store, mode, canVote: ctx.role === "owner" })).catch(() => {});
 
   // bell, branch switcher, onboarding
   mountBell(root.querySelector("#ovBell"), ctx);

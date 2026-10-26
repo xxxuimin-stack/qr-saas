@@ -165,6 +165,7 @@ function card(s) {
   if (s.payment?.status === "to_verify" && !["cancelled", "declined"].includes(s.status)) btn(`✓ Downpayment received (${money(s.downpayment)})`, "ready", () => { if (confirm(`Seen the ${s.payment.methodName} payment ref ${s.payment.refNo || ""}?`)) act("verifyPayment", { id: s.id, amount: s.downpayment, method: s.payment.method }); });
   if (["confirmed", "pending"].includes(s.status)) btn("🔑 Check in", "prep", () => act("checkin", { id: s.id }));
   if (s.status === "checked_in") btn("🚪 Check out", "ready", () => { if (confirm("Mark the guest as checked out? The caretaker gets notified.")) act("checkout", { id: s.id }); });
+  btn("🚩", "sm", () => import("./clientreport.js").then((m) => m.openClientActions({ kind: "stay", id: s.id, storeId: X.storeId, name: s.customer?.name || "" })));
   if (bal > 0 && ["confirmed", "checked_in", "checked_out"].includes(s.status)) btn(`💵 Add payment`, "", () => { const v = prompt(`Amount received (balance ${money(bal)}):`, String(bal)); if (v) act("addPayment", { id: s.id, amount: Number(v), method: (prompt("Method (cash / gcash / maya / card):", "cash") || "cash").toLowerCase() }); });
   if (["confirmed"].includes(s.status)) btn("Cancel", "danger", () => { const r = prompt("Cancel this booking? Reason (no refund policy applies):", "Guest no-show"); if (r !== null) act("cancel", { id: s.id, reason: r }); });
   hydratePrivate(el);

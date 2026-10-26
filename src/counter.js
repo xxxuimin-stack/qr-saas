@@ -1,4 +1,5 @@
 // Counter / POS screen: /counter/ — crew at manager. Walk-in orders, mark paid, bills per table, requests, shift.
+import { pinLinks } from "./addrpin.js";
 import { msgrBtn } from "./msgr.js";
 import { applyWording } from "./wording.js";
 import { orderOp, payMethods } from "./orderops.js";
@@ -266,7 +267,7 @@ function orderCard(o, compact = false) {
       <div class="where">${o.tableLabel ? esc(o.tableLabel) + " · " : ""}${SVC[o.serviceType] || ""}${o.customer?.name ? " · " + esc(o.customer.name) : ""}${o.customer?.messenger ? " " + msgrBtn(o.customer.messenger, "k-tag", "💬") : ""}</div></div>
       <div class="time">${t ? t.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" }) : ""}<span class="eta">${o.status === "out_for_delivery" ? "🛵 " + esc(o.riderName || "Out") : esc(flow[idx]?.[1] || o.status)}</span>${o.scheduledAt ? `<span class="eta">⏰ ${o.scheduledAt.toDate().toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}</span>` : ""}</div></div>
     ${orderTagsHTML(o, CUR)}
-    ${o.customer?.address ? `<div class="small muted">📍 ${esc(o.customer.address)}</div>` : ""}
+    ${o.customer?.address ? `<div class="small muted">📍 ${esc(o.customer.address)}${o.customer.landmark ? ` · ${esc(o.customer.landmark)}` : ""} ${pinLinks(o.customer, "k-tag")}</div>` : ""}
     <ul>${o.items.map((l) => `<li><span class="q">${l.qty}×</span><span>${esc(l.name)}${l.choices?.length ? `<span class="opt">${l.choices.map((c) => esc(c.label)).join(", ")}</span>` : ""}</span></li>`).join("")}</ul>
     <div class="top"><b style="font-size:1.2rem">${money(o.total)}</b></div>
     <div class="acts"></div></article>`);
@@ -392,8 +393,33 @@ function askMethod(list, after) {
     if (printCfg(store).enabled && printCfg(store).autoPaid) printReceipt(store, list.map((o) => ({ ...o, paid: true, paymentMethod: b.dataset.m, paidAt: null })), { cur: CUR, cashTendered: tend > 0 ? tend : null, staffName: me?.name });
     closeDrawer(); after?.();
   }));
+  if (store.mode === "table" || store.mode === "pickup") {
+    const sd = list.reduce((a, o) => a + (o.discounts?.senior || 0), 0);
+    const sb = html(`<button class="k-btn" style="margin-top:12px;width:100%">👴 Senior / PWD discount${sd ? ` · −${money(sd)} ✎` : ""}</button>`);
+    sb.onclick = () => seniorForm(list, () => { closeDrawer(); after?.(); });
+    el.appendChild(sb);
+  }
   if (printCfg(store).enabled) { const pr = html(`<button class="k-btn" style="margin-top:12px;width:100%">🖨 Print bill (unpaid)</button>`); pr.onclick = () => printReceipt(store, list, { cur: CUR, staffName: me?.name }); el.appendChild(pr); }
   openDrawer("Mark as paid", el);
+}
+
+/** Senior citizen / PWD: people at the table + name & ID of each senior/PWD → 20% off their share (VAT removed if the shop is VAT-registered) */
+function seniorForm(list, after) {
+  const prev = list.find((o) => o.senior)?.senior;
+  const el = html(`<div><p class="small muted" style="margin-top:0">Check each senior / PWD ID. The discount is for <b>their share</b> of the bill (bill ÷ people eating).</p>
+    <label class="muted small">People eating (incl. seniors / PWD)</label><input class="k-input" type="number" min="1" data-ppl value="${prev?.people || 1}"/>
+    <div data-rows style="margin-top:10px"></div><button class="k-btn sm" type="button" data-add>+ Add senior / PWD</button>
+    <div data-est class="small" style="margin-top:10px"></div>
+    <div style="display:flex;gap:8px;margin-top:12px"><button class="k-btn primary" style="flex:1" data-ok>Apply discount</button>${prev ? `<button class="k-btn danger" data-clear>Remove</button>` : ""}</div></div>`);
+  const rows = el.querySelector("[data-rows]");
+  const addRow = (v = {}) => { const r = html(`<div style="display:grid;grid-template-columns:90px 1fr 1fr auto;gap:6px;margin-bottom:6px"><select class="k-input" data-k><option value="senior" ${v.kind !== "pwd" ? "selected" : ""}>Senior</option><option value="pwd" ${v.kind === "pwd" ? "selected" : ""}>PWD</option></select><input class="k-input" data-n placeholder="Full name" value="${esc(v.name || "")}"/><input class="k-input" data-i placeholder="ID no." value="${esc(v.id || "")}"/><button class="k-btn sm" type="button" data-x>✕</button></div>`); r.querySelector("[data-x]").onclick = () => { r.remove(); est(); }; r.oninput = est; rows.appendChild(r); est(); };
+  const read = () => [...rows.children].map((r) => ({ kind: r.querySelector("[data-k]").value, name: r.querySelector("[data-n]").value.trim(), id: r.querySelector("[data-i]").value.trim() }));
+  const est = () => { const ppl = Math.max(1, Number(el.querySelector("[data-ppl]").value) || 1), n = rows.children.length, base = list.reduce((a, o) => a + Math.max(0, (o.subtotal || 0) - (o.discounts?.voucher || 0)), 0), share = base / ppl; const per = store.settings?.vatRegistered ? share - (share / 1.12) * 0.8 : share * 0.2; el.querySelector("[data-est]").innerHTML = n ? `About <b>−${money(per * n)}</b> (${n} × ${money(per)})${store.settings?.vatRegistered ? " · VAT removed on their share" : ""}` : ""; };
+  el.querySelector("[data-ppl]").oninput = est; el.querySelector("[data-add]").onclick = () => addRow();
+  (prev?.ids || [{}]).forEach(addRow);
+  el.querySelector("[data-ok]").onclick = async (e) => { const ids = read(); if (ids.some((x) => !x.name || !x.id)) return alert("Enter the name and ID number of each senior / PWD."); e.target.disabled = true; try { const r = await orderOp(storeId, "senior", { orderIds: list.map((o) => o.id), people: Number(el.querySelector("[data-ppl]").value) || 1, ids }); closeDrawer(); alert(`Senior / PWD discount: −${money(r.discount)}`); after?.(); } catch (x) { e.target.disabled = false; alert(x.message); } };
+  el.querySelector("[data-clear]")?.addEventListener("click", async () => { try { await orderOp(storeId, "senior", { orderIds: list.map((o) => o.id), people: 1, ids: [] }); closeDrawer(); after?.(); } catch (x) { alert(x.message); } });
+  openDrawer("👴 Senior / PWD discount", el);
 }
 
 // ---------------- TABLES (bills) ----------------

@@ -1,4 +1,9 @@
 // Staff pay per appointment: sum of each service's staffPay (fixed ₱ or % of price).
+/** freelancer (linked staff): price minus the shop's cut per category (Dashboard → Freelancers) — same rule as the server ledger */
+export function freelancerShareFor(a, hiring) {
+  const cutOf = (l) => { const c = (hiring?.cuts || {})[l.categoryId] || hiring?.cutDefault || { type: "percent", value: 30 }; const q = Number(l.qty) || 1, price = (Number(l.price) || 0) * q; return Math.min(price, c.type === "fixed" ? (Number(c.value) || 0) * q : (price * (Number(c.value) || 0)) / 100); };
+  return Math.round((a.items || []).filter((l) => !l.retail).reduce((sum, l) => sum + Math.max(0, (Number(l.price) || 0) * (Number(l.qty) || 1) - cutOf(l)), 0) * 100) / 100;
+}
 export function commissionFor(a) {
   return Math.round((a.items || []).reduce((sum, l) => {
     const p = l.staffPay; if (!p) return sum;

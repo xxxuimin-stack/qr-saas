@@ -1,4 +1,5 @@
 // Rider app: /rider/ — for the rider's phone. Ready deliveries → pick up → maps/call → delivered + cash.
+import { pinLinks } from "./addrpin.js";
 import { msgrBtn } from "./msgr.js";
 import { applyWording } from "./wording.js";
 import { orderOp } from "./orderops.js";
@@ -117,13 +118,13 @@ function card(o) {
   const el = html(`<article class="k-card" style="border-top-color:${o.status === "ready" ? "var(--ready)" : o.status === "out_for_delivery" ? "var(--prep)" : "var(--line)"}">
     <div class="top"><div><div class="no">${o.type === "laundry" ? `🧺 ${o.laundry?.ticketNo ? "#" + esc(o.laundry.ticketNo) : "J" + o.orderNo}${isPickupJob(o) || o.status === "picking_up" ? ` <span class="k-tag" style="color:var(--new)">PICKUP</span>` : ` <span class="k-tag paid">DELIVER</span>`}` : `#${o.orderNo}`}</div><div class="where">${esc(o.customer?.name || "")}${o.paid ? ` <span class="k-tag paid">Paid · ${esc(o.paymentMethod || "")}</span>` : ` <span class="k-tag" style="color:var(--new)">COLLECT ${money(o.total)}</span>`}</div></div>
       <div class="time">${o.scheduledAt ? "⏰ " + o.scheduledAt.toDate().toLocaleString("en-PH", { weekday: "short", hour: "numeric", minute: "2-digit" }) : ""}</div></div>
-    <div class="r-addr">📍 ${esc(addr)}</div>
+    <div class="r-addr">📍 ${esc(addr)}${o.customer?.landmark ? `<div class="small muted">🏷 ${esc(o.customer.landmark)}</div>` : ""}</div>
     ${o.risk?.walkouts || o.risk?.noShows || o.risk?.failed ? `<div class="r-risk">⚠️ ${[o.risk.walkouts ? `Didn't pay before ${o.risk.walkouts}×` : "", o.risk.noShows ? `No-show before ${o.risk.noShows}×` : "", o.risk.failed ? `Failed delivery before ${o.risk.failed}×` : ""].filter(Boolean).join(" · ")}</div>` : ""}
     ${o.payment ? `<div class="r-pay ${o.paid ? "ok" : ""}">${o.payment.method === "cash" ? `💵 COD · Collect <b>${money(o.total)}</b>${o.deliveryFee ? ` (incl. delivery ${money(o.deliveryFee)})` : ""}${o.payment.changeFor && o.payment.changeFor > o.total ? ` · Customer pays <b>${money(o.payment.changeFor)}</b> → change <b>${money(o.payment.changeFor - o.total)}</b>` : " · exact"}` : `📱 ${esc(o.payment.methodName)} · ${o.paid ? "verified ✓ — nothing to collect" : "⚠️ not yet verified — check with counter"}`}</div>` : ""}
     <ul>${o.items.map((l) => `<li><span class="q">${esc(l.label || l.qty + "×")}</span><span>${esc(l.name)}</span></li>`).join("")}</ul>
     ${o.type === "laundry" && (isPickupJob(o) || o.status === "picking_up") ? `<div class="small muted">Collect the laundry, note the container, bring it to the shop for weighing.${o.laundry?.handWash ? ` · 🧼 Hand wash: ${esc(o.laundry.handWash)}` : ""}</div>` : ""}
     ${o.note ? `<div class="onote">“${esc(o.note)}”</div>` : ""}
-    <div class="r-links"><a class="k-btn sm" target="_blank" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}">🗺 Maps</a>${o.customer?.phone ? `<a class="k-btn sm" href="tel:${esc(o.customer.phone)}">📞 ${esc(o.customer.phone)}</a>` : ""}${msgrBtn(o.customer?.messenger, "k-btn sm")}</div>
+    <div class="r-links">${pinLinks(o.customer)}${o.customer?.phone ? `<a class="k-btn sm" href="tel:${esc(o.customer.phone)}">📞 ${esc(o.customer.phone)}</a>` : ""}${msgrBtn(o.customer?.messenger, "k-btn sm")}</div>
     <div class="acts"></div></article>`);
   const acts = el.querySelector(".acts");
   if (isPickupJob(o)) { const b = html(`<button class="k-btn primary">🛵 I'll pick it up</button>`); b.onclick = () => set({ status: "picking_up", riderId: me.staffId, riderName: me.name, outAt: serverTimestamp() }); acts.appendChild(b); }
