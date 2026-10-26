@@ -1,6 +1,6 @@
 // Single Firebase init for all pages (login, dashboard, customer menu, kitchen)
 import { initializeApp } from "firebase/app";
-import { getAuth, initializeAuth, inMemoryPersistence, browserPopupRedirectResolver, GoogleAuthProvider, connectAuthEmulator } from "firebase/auth";
+import { getAuth, initializeAuth, inMemoryPersistence, browserPopupRedirectResolver, GoogleAuthProvider, FacebookAuthProvider, connectAuthEmulator } from "firebase/auth";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator } from "firebase/firestore";
 import { getFunctions, httpsCallable, connectFunctionsEmulator } from "firebase/functions";
 
@@ -36,6 +36,8 @@ function makeDb() {
 export const db = makeDb();
 export const functions = getFunctions(app, env.VITE_FUNCTIONS_REGION || "asia-southeast1");
 export const googleProvider = new GoogleAuthProvider();
+export const facebookProvider = new FacebookAuthProvider();
+facebookProvider.addScope("email");
 
 // EMULATOR MODE: when VITE_USE_EMULATOR=true in .env, connect to the local emulators
 // (firebase emulators:start) instead of real Firebase. Free, no Blaze plan needed.
