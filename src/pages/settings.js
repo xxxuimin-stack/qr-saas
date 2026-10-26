@@ -249,9 +249,9 @@ export function renderSettingsPage(root, ctx, opts = {}) {
           <label>City</label><input name="flCity" value="${esc(sl.freelance?.city || "")}" placeholder="Makati"/>
           <label>Why book me</label><textarea name="flPitch" rows="3" maxlength="600" placeholder="Honest food reviews, 120K Manila foodies, most videos hit 50K+ views in a week.">${esc(sl.freelance?.pitch || "")}</textarea>
           <label>Brands you've worked with (comma-separated)</label><input name="flBrands" value="${esc((sl.freelance?.brands || []).join(", "))}"/>
-          <label class="check"><input type="checkbox" name="flUgc" ${sl.freelance?.ugc ? "checked" : ""}/> 📱 I make UGC (videos the brand posts on its own page / ads — followers don't matter)</label>
+          <input type="checkbox" name="flUgc" hidden/>
           <label class="check"><input type="checkbox" name="flAdult" ${sl.freelance?.adult ? "checked" : ""}/> I'm 18 or older <span class="muted small">(required to be listed)</span></label>
-          <label class="check"><input type="checkbox" name="flDir" ${sl.freelance?.directory ? "checked" : ""}/> 🎥 List me on TapTayo Collab (businesses can find and invite me — needs 3 portfolio samples)</label>
+          <input type="checkbox" name="flDir" hidden/>
           <h4 style="margin:16px 0 6px">🕒 Side-job availability</h4>
           <p class="small muted" style="margin:0 0 6px">Have a day job? Take bookings only when you're free.</p>
           <div class="row wrap" style="gap:6px">${[["weekends", "Weekends only"], ["evenings", "Weeknight evenings"], ["evenings & weekends", "Evenings & weekends"], ["", "Any day"]].map(([k, t]) => `<button type="button" class="btn sm ${(sl.freelance?.availability?.sideJob || "") === k ? "" : "ghost"}" data-sidejob="${k}">${t}</button>`).join("")}</div>
@@ -594,10 +594,10 @@ export function renderSettingsPage(root, ctx, opts = {}) {
           <p class="small muted span2" style="margin:0">Each room can have its own hour prices in Rooms. A short stay is blocked automatically if it would overlap an overnight booking (plus cleaning time).</p>
           <div class="span2" style="border-top:1px solid var(--line);padding-top:10px"><b>🏊 Use of amenities</b><p class="small muted" style="margin:2px 0 6px">Pool, gym, videoke, grill… free or paid (per head, per hour or per stay). Guests pick them when booking.</p><div id="stAmen"></div></div>
           <div class="span2" style="border-top:1px solid var(--line);padding-top:10px"><b>📍 Nearby places</b><p class="small muted" style="margin:2px 0 6px">e.g. hospital, SM / mall, Jollibee, church, beach — with minutes away. Shown on your page.</p><div id="stNear"></div></div>
-          <div class="span2" style="border-top:1px solid var(--line);padding-top:10px"><b>👨‍👩‍👧 Guests &amp; IDs</b></div>
+          <div class="span2" style="border-top:1px solid var(--line);padding-top:10px"><b>👨‍👩‍👧 Guests</b></div>
           <div><label>Kids below this age are free</label><input name="stKidAge" type="number" min="0" max="17" value="${st.kids?.freeUnder ?? 7}"/></div>
           <div><label class="check" style="margin-top:28px"><input type="checkbox" name="stKidPax" ${st.kids?.countInPax ? "checked" : ""}/> Kids count toward the room's max guests</label></div>
-          <div class="span2"><label class="check"><input type="checkbox" name="stNoId" ${st.noIdOk !== false ? "checked" : ""}/> Guests without a valid ID can still book — you decide (the booking waits for your OK)</label></div>
+          <input type="checkbox" name="stNoId" hidden checked/>
           <div class="span2" style="border-top:1px solid var(--line);padding-top:10px"><b>↩️ Cancellation refund</b><p class="small muted" style="margin:2px 0 6px">Leave at 0 for no refund. Example: full refund 7+ days before, 50% refund 3+ days before.</p></div>
           <div><label>Full refund if cancelled … days before (0 = never)</label><input name="stCxFull" type="number" min="0" value="${st.cancel?.fullDays ?? 0}"/></div>
           <div><label>Partial refund … days before</label><input name="stCxPart" type="number" min="0" value="${st.cancel?.partialDays ?? 0}"/></div>
@@ -994,7 +994,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
         cleaning: { minutes: Math.max(0, Math.min(480, Number(v("stClean").value) || 0)), showGuests: v("stCleanShow").checked },
         promos: (stRows.promos?.() || []).filter((p) => p.name && p.percent > 0),
         amenities: (stRows.amen?.() || []).filter((a) => a.name).map((a) => ({ ...a, price: a.unit === "free" ? 0 : a.price || 0 })), nearby: (stRows.near?.() || []).filter((x) => x.name),
-        kids: { freeUnder: Number(v("stKidAge").value) || 0, countInPax: v("stKidPax").checked }, noIdOk: v("stNoId").checked,
+        kids: { freeUnder: Number(v("stKidAge").value) || 0, countInPax: v("stKidPax").checked }, noIdOk: true,
         cancel: { fullDays: Number(v("stCxFull").value) || 0, partialDays: Number(v("stCxPart").value) || 0, partialPct: Number(v("stCxPct").value) || 0 },
         lastMinute: { enabled: v("stLast").checked, percent: Number(v("stLastP").value) || 20, after: v("stLastT").value || "18:00" },
         houseRules: v("stRules").value.trim(), visitorLog: v("stVisit").checked, ical: { exportShort: v("stIcalShort").checked },
