@@ -33,13 +33,15 @@ const db = admin.firestore();
 const bucket = admin.storage().bucket(bucketName);
 
 const ID_FIELDS = new Set([
-  "idUrl", "idPhotoUrl", "homeIdUrl", "guestIds", "validIdUrl",
-  "identityDocumentUrl", "idDocumentUrl", "governmentIdUrl",
-  "idFrontUrl", "idBackUrl", "passportPhotoUrl", "permitUrl",
-  "businessPermitUrl", "mayorsPermitUrl", "permitPhotoUrl", "permitDocumentUrl",
+  "idUrl", "idPhotoUrl", "idPhoto", "idImageUrl", "homeIdUrl", "guestIds",
+  "validIdUrl", "validIdPhotoUrl", "validIdImageUrl",
+  "identityDocumentUrl", "identityDocument", "idDocumentUrl", "governmentIdUrl",
+  "governmentIdPhotoUrl", "idFrontUrl", "idBackUrl", "passportPhotoUrl", "passportUrl",
+  "permitUrl", "permitPhoto", "permitImageUrl", "permitFileUrl", "businessPermit",
+  "businessPermitUrl", "mayorsPermit", "mayorsPermitUrl", "permitPhotoUrl", "permitDocumentUrl",
   "idNumber", "idType", "idExpiry", "idExpiration", "passportNumber", "permitNumber",
 ]);
-const ID_META_FIELDS = new Set(["homeIdAt", "needsIdOk", "noId", "kycAt"]);
+const ID_META_FIELDS = new Set(["homeIdAt", "needsIdOk", "noId", "kycAt", "idUploadedAt", "idVerifiedAt", "idDocumentAt"]);
 const objectPaths = new Set();
 const patchesByPath = new Map();
 const kycDocsToDelete = new Set();
@@ -93,6 +95,30 @@ function addPatch(path, fieldSegments, value = FieldValue.delete()) {
   patchesByPath.get(path).set(JSON.stringify(fieldSegments), { fieldSegments, value });
 }
 
+function stripIdFieldsFromArrayValue(value) {
+  if (!isPlainObject(value)) return { value, changed: false };
+  const out = {};
+  let changed = false;
+  for (const [key, child] of Object.entries(value)) {
+    if (ID_FIELDS.has(key)) {
+      collectPrivatePaths(child);
+      changed = true;
+    } else if (ID_META_FIELDS.has(key)) {
+      changed = true;
+    } else if (Array.isArray(child)) {
+      const items = child.map(stripIdFieldsFromArrayValue);
+      if (items.some((x) => x.changed)) {
+        out[key] = items.map((x) => x.value);
+        changed = true;
+      } else out[key] = child;
+    } else if (isPlainObject(child)) {
+      const nested = stripIdFieldsFromArrayValue(child);
+      out[key] = nested.value;
+      changed = changed || nested.changed;
+    } else out[key] = child;
+  }
+  return { value: out, changed };
+}
 function inspectMap(value, path, segments = []) {
   if (!isPlainObject(value)) return;
   for (const [key, child] of Object.entries(value)) {
@@ -106,7 +132,10 @@ function inspectMap(value, path, segments = []) {
       addPatch(path, next);
       continue;
     }
-    if (isPlainObject(child)) inspectMap(child, path, next);
+    if (Array.isArray(child)) {
+      const items = child.map(stripIdFieldsFromArrayValue);
+      if (items.some((x) => x.changed)) addPatch(path, next, items.map((x) => x.value));
+    } else if (isPlainObject(child)) inspectMap(child, path, next);
   }
 }
 
@@ -152,7 +181,8 @@ async function scanCollection(collectionRef) {
 function matchesKnownIdentityFilename(objectName) {
   if (!objectName.includes("/private/")) return false;
   const name = objectName.split("/").pop() || "";
-  return /^(?:kyc_id|home-id|inqid_[^/]*|id-[^/]*|(?:business-)?permit[^/]*)\.(?:jpg|jpeg|png|webp|pdf)$/i.test(name);
+  return /(?:kyc|home-id|inqid_|(?:^|[-_])id(?:[-_]|\.|$)|permit)/i.test(name) &&
+    /\.(?:jpg|jpeg|png|webp|pdf)$/i.test(name);
 }
 
 async function main() {
