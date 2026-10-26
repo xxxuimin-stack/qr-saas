@@ -85,7 +85,7 @@ async function switchUser() {
 }
 
 function boot() {
-  app.innerHTML = `<div><div id="head"></div><div class="k-remind">📱 Keep this app open and don't lock the screen so you can hear new orders.</div><div id="paused" class="k-paused hidden">⏸ PAUSED — not accepting new orders</div><div id="board" class="k-board"></div></div>`;
+  app.innerHTML = `<div><div id="head"></div><div class="k-remind">Keep this screen open so you can hear new orders.</div><div id="paused" class="k-paused hidden">Paused — not accepting new orders</div><div id="board" class="k-board"></div></div>`;
   drawHead();
   let recentOrders = [], openOrders = [];
   const applyOrders = (freshList) => {

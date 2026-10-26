@@ -28,22 +28,23 @@ label { display: block; font-size: .85rem; font-weight: 500; color: #374151; mar
 .c-spinner { width: 26px; height: 26px; border: 2px solid var(--mist); border-top-color: var(--ink); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.c-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 13px 18px; min-height: 48px; border-radius: 12px; border: 1px solid var(--primary); font-weight: 600; background: var(--primary); color: #fff; }
+.c-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 18px; min-height: 48px; border-radius: 14px; border: 1px solid var(--primary); font-weight: 700; background: var(--primary); color: #fff; }
+.c-btn:active { transform: scale(.98); }
 .c-btn:disabled { opacity: .45; cursor: not-allowed; }
 .c-btn.brand { background: var(--primary); border-color: var(--primary); }
-.c-btn.ghost { background: transparent; color: var(--ink); border-color: var(--mist); }
+.c-btn.ghost { background: #fff; color: var(--ink); border-color: #E7E5E4; }
 .c-btn.block { width: 100%; }
-.c-btn.sm { padding: 8px 12px; font-size: .85rem; }
+.c-btn.sm { min-height: 40px; padding: 0 14px; font-size: .85rem; border-radius: 12px; }
 
 /* ---------- header: brand color block ---------- */
-.c-head { background: var(--primary); color: #fff; padding: 22px 20px 20px; }
+.c-head { background: #fff; color: var(--ink); padding: 18px 16px; border-bottom: 1px solid #E7E5E4; }
 .c-head .top { display: flex; align-items: flex-start; gap: 14px; }
-.c-head .logo { width: 48px; height: 48px; border-radius: 10px; background: rgba(255,255,255,.18); display: grid; place-items: center; font-size: 22px; font-weight: 700; overflow: hidden; flex: none; }
+.c-head .logo { width: 48px; height: 48px; border-radius: 14px; background: #FDECEC; color: var(--primary); display: grid; place-items: center; font-size: 22px; font-weight: 700; overflow: hidden; flex: none; }
 .c-head .logo img { width: 100%; height: 100%; object-fit: cover; }
 .c-head h1 { margin: 0; font-family: var(--serif); font-weight: 700; font-size: 1.55rem; line-height: 1.05; letter-spacing: -.01em; }
 .c-head .sub { font-size: .85rem; opacity: .85; margin-top: 5px; }
-.c-head .badge { margin-left: auto; flex: none; font-size: .78rem; font-weight: 600; padding: 5px 10px; border-radius: 6px; background: rgba(255,255,255,.18); }
-.c-head .badge.closed { background: #fff; color: var(--soldout); }
+.c-head .badge { margin-left: auto; flex: none; font-size: .78rem; font-weight: 600; padding: 5px 10px; border-radius: 999px; background: #F5F5F4; color: var(--ink); }
+.c-head .badge.closed { background: #FEE2E2; color: var(--soldout); }
 .c-welcome { font-family: var(--serif); font-style: normal; font-size: .95rem; font-weight: 500; opacity: .95; margin-top: 14px; max-width: 34ch; }
 
 /* table stamp */
@@ -700,11 +701,12 @@ body { background: #fff; }
 .c-catbody, .c-cat.open .c-catbody { display: block; padding: 0; border: 0; }
 .c-catbody.lay-grid, .c-cat.open .c-catbody.lay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 12px; padding: 6px 0 4px; }
 /* list rows: photo left (Grab), + bottom right */
-.lay-list .c-item { display: flex; gap: 14px; padding: 14px 0; border-bottom: 1px solid #F0F1F3; min-height: 110px; align-items: flex-start; }
+.lay-list { display: grid; gap: 10px; }
+.lay-list .c-item { display: flex; gap: 14px; padding: 12px; border: 1px solid #E7E5E4; border-radius: 16px; background: #fff; min-height: 0; align-items: center; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
 .lay-list .c-item > div:first-of-type:not(.img):not(.noimg) { order: 2; flex: 1; min-width: 0; padding-right: 40px; }
-.lay-list .c-item .img { order: 1; width: 104px; height: 104px; border-radius: 14px; position: static; }
+.lay-list .c-item .img { order: 1; width: 88px; height: 88px; border-radius: 14px; position: static; }
 .lay-list .c-item .noimg { order: 3; width: 0; height: 0; position: static; }
-.lay-list .c-item .c-add { position: absolute; right: 0; bottom: 14px; }
+.lay-list .c-item .c-add { position: absolute; right: 12px; bottom: 12px; }
 .lay-list .c-item .n { font-weight: 500; font-size: .98rem; }
 .lay-list .c-item .p { font-weight: 700; font-size: 1rem; margin-top: 6px; }
 /* grid tiles */

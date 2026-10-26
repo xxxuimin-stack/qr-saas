@@ -33,9 +33,13 @@ body.dash .nav a svg { width: 20px; height: 20px; flex: none; }
 body.dash .nav .nav-ic { width: 20px; display: inline-grid; place-items: center; }
 body.dash .nav-pill { margin-left: auto; background: var(--brand); color: #fff; border: 1px solid var(--edge); border-radius: 999px; font-size: .75rem; font-weight: 700; padding: 1px 8px; }
 body.dash .nav a.active .nav-pill { border-color: transparent; }
-body.dash .side .screens { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: auto; }
-body.dash .side .screens a { font-size: .78rem; font-weight: 700; text-decoration: none; border: 1px solid var(--edge); border-radius: 999px; padding: 6px 8px; text-align: center; background: var(--surface); min-height: 36px; display: grid; place-items: center; }
-body.dash .side .screens a:hover { background: var(--peach); }
+body.dash .side .screens { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; }
+body.dash .side .screens a { display: flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--edge); background: #fff; color: var(--ink); font-size: 14px; font-weight: 600; text-decoration: none; text-align: left; }
+body.dash .side .screens a:hover { background: #F5F5F4; }
+body.dash .side .screens a.locked { color: #78716C; }
+body.dash .side .screens a small { margin-left: auto; font-size: 11px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: #A8A29E; }
+.collab-soon { background: #fff; }
+.collab-soon .btn { margin-top: 12px; }
 body.dash .plan-sticker { display: none !important; }
 body.dash .plan-sticker b { display: block; font-size: 1rem; }
 body.dash .plan-sticker .btn { margin-top: 8px; background: var(--surface); color: var(--ink); width: 100%; }
@@ -76,6 +80,8 @@ body.dash .btn.brand:active { transform: translate(2px, 2px); box-shadow: var(--
 body.dash .btn.danger { background: #FFE8E4; color: #B42318; box-shadow: none; }
 body.dash .btn:focus-visible, body.dash button:focus-visible, body.dash input:focus-visible, body.dash select:focus-visible { outline: 3px solid var(--brand); outline-offset: 2px; }
 body.dash input, body.dash select, body.dash textarea { border: 1px solid var(--edge-strong); border-radius: 12px; background: var(--surface); min-height: 46px; }
+body.dash input[type=file] { width: auto; border: 0; padding: 0; background: transparent; min-height: 0; box-shadow: none; }
+body.dash input[type=file]::file-selector-button { min-height: 44px; margin-right: 8px; padding: 0 14px; border-radius: 12px; border: 1px solid var(--edge-strong); background: #fff; color: var(--ink); font: 700 14px var(--tt-font), system-ui, sans-serif; cursor: pointer; }
 body.dash input[type=checkbox], body.dash input[type=radio] { min-height: 0; accent-color: var(--brand); width: auto; }
 body.dash input:focus, body.dash select:focus, body.dash textarea:focus { outline: none; box-shadow: 0 0 0 3px var(--brand-soft); border-color: var(--brand); }
 body.dash label { font-weight: 500; color: #374151; }

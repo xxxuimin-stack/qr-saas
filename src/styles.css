@@ -169,7 +169,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb
 label.check { display: inline-flex; align-items: center; gap: 8px; font-weight: 500; margin: 10px 14px 0 0; cursor: pointer; }
 label.check input { width: auto; }
 .opts { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
-.optgroup { border: 1px dashed var(--line); border-radius: 10px; padding: 10px; background: var(--bg); }
+.optgroup { border: 1px solid var(--line); border-radius: 14px; padding: 12px; background: #fff; }
 .optgroup .choice { margin-top: 6px; }
 .optgroup input { padding: 7px 9px; }
 .optgroup label.check { margin: 0; }
@@ -263,7 +263,7 @@ label.check input { width: auto; }
 }
 
 /* ---------- uploads ---------- */
-.imgprev { width: 96px; height: 96px; border-radius: 12px; background: var(--bg); border: 1px dashed var(--line); display: grid; place-items: center; overflow: hidden; flex: none; }
+.imgprev { width: 96px; height: 96px; border-radius: 16px; background: #F5F5F4; border: 1px solid var(--line); display: grid; place-items: center; overflow: hidden; flex: none; }
 .imgprev.wide { width: 180px; height: 80px; }
 .imgprev.round { border-radius: 50%; }
 .imgprev img { width: 100%; height: 100%; object-fit: cover; }

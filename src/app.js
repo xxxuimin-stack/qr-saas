@@ -528,7 +528,7 @@ async function loadDashboard() {
     { const pn = $("planName"), ps = $("planSub"), pb = $("planBtn");
       if (pn) { pn.textContent = label; ps.textContent = eff === "trial" ? `${days ?? 0} days left` : eff === "free" ? "Small use · upgrade anytime" : prov ? "Active while we check (up to 3 days)" : until ? `until ${until.toLocaleDateString("en-PH", { month: "short", day: "numeric" })}` : ""; pb.textContent = eff === "free" || eff === "trial" ? "⚡ Upgrade plan" : "Manage plan"; pb.hidden = claims.role !== "owner"; } }
     ctx.planEff = eff; ctx.planDays = days; drawUpgrade();
-    for (const [id, k, t] of [["kitchenLink", "stations", "🍳 Kitchen"], ["dispatchLink", "dispatch", "📋 Dispatch"], ["riderLink", "delivery", "🛵 Rider"]]) { const a = $(id); if (!a) continue; const ok = entitled(sub, k); if (!a.dataset.t) a.dataset.t = a.textContent; a.textContent = ok ? a.dataset.t : a.dataset.t.replace(/^\S+/, "🔒"); a.title = ok ? "" : `${PRO_FEATURES[k]} — upgrade in Billing`; }
+    for (const [id, k, t] of [["kitchenLink", "stations", "Kitchen"], ["dispatchLink", "dispatch", "Dispatch"], ["riderLink", "delivery", "Rider"]]) { const a = $(id); if (!a) continue; const ok = entitled(sub, k); a.classList.toggle("locked", !ok); a.innerHTML = ok ? t : `${t}<small>Locked</small>`; a.title = ok ? "" : `${PRO_FEATURES[k]} — upgrade in Billing`; }
     ctx.subLabel = label; setTimeout(drawUsageBanner, 0);
     ctx.subUntil = until;
     // banner when locked / past due

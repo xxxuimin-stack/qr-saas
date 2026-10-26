@@ -73,8 +73,7 @@ if (matchMedia("(max-width: 640px)").matches) { const v = $("vid"); v.style.aspe
 // coming soon → progress to the first N creators + waitlist
 call("collabStatus", {}).then((c) => {
   if (c.live) return; const b = $("soon"); b.hidden = false;
-  b.querySelector("[data-city]").textContent = c.city; b.querySelector("[data-target]").textContent = c.target; b.querySelector("[data-count]").textContent = c.creators; b.querySelector("[data-bar]").style.width = Math.min(100, Math.round((c.creators / c.target) * 100)) + "%";
-  b.querySelector("[data-wl]").onclick = async (e) => { try { await call("collabWaitlist", { role: "business" }); e.target.textContent = "✓ You're on the list"; e.target.disabled = true; } catch (x) { if (/Log in/.test(x.message)) location.href = "/login/?signup=1&role=business&next=/collab/"; else alert(x.message); } };
+  b.querySelector("[data-wl]").onclick = async (e) => { try { await call("collabWaitlist", { role: "business" }); e.target.textContent = "You're on the list"; e.target.disabled = true; } catch (x) { if (/Log in/.test(x.message)) location.href = "/login/?signup=1&role=business&next=/collab/"; else alert(x.message); } };
   document.querySelectorAll('#collabList .btn').forEach((a) => (a.textContent = "Soon"));
 }).catch(() => {});
 
