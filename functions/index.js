@@ -2116,7 +2116,7 @@ exports.bookAppointment = onCall(HOT, withIndex("appt", async (req) => {
     const pres = ctx.store.salonLive?.presence;
     if (pres?.state && pres.state !== "in" && (!pres.until || pres.until > Date.now()) && ctx.cfg.walkInWhenAway === "off" && !ctx.stylists.some((x) => !x.isOwner)) throw new HttpsError("failed-precondition", "Walk-ins are paused right now — please book a time.");
     const pool = providerId ? ctx.stylists.filter((x) => x.id === providerId) : ctx.stylists.filter((x) => canDo(x, priced.cats));
-    const freeNow = pool.filter((st) => !awayNow(ctx, st) && stylistFree(st, now, now + priced.minutes * 60000) && !appts.some((a) => a.providerId === st.id && overlaps(a, now, now + priced.minutes * 60000)));
+    if (ctx.stylists.length <= 1 && appts.some((a) => a.homeService && overlaps(a, now, now + priced.minutes * 60000))) throw new HttpsError("failed-precondition", "Walk-ins are closed while we are on home service — please book a time."); const shopPool = pool.filter((st) => !inHomeWindow(ctx, st, now, now + priced.minutes * 60000)); if (pool.length && !shopPool.length) throw new HttpsError("failed-precondition", "Walk-ins are closed while we are on home service — please book a time."); const freeNow = shopPool.filter((st) => !awayNow(ctx, st) && stylistFree(st, now, now + priced.minutes * 60000) && !appts.some((a) => a.providerId === st.id && overlaps(a, now, now + priced.minutes * 60000)));
     waiting = !freeNow.length || pax === 2; // 2 people → two tickets in the line, served together when two staff are free
     if (!waiting) { room = pickRoom(ctx, appts, now, priced.minutes, 1); if (room === null) waiting = true; }
     // joining the line: limits (paused, full, closing soon, shop-only)
