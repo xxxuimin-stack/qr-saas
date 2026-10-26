@@ -1,6 +1,6 @@
 // Single Firebase init for all pages (login, dashboard, customer menu, kitchen)
 import { initializeApp } from "firebase/app";
-import { getAuth, initializeAuth, inMemoryPersistence, browserPopupRedirectResolver, GoogleAuthProvider, connectAuthEmulator } from "firebase/auth";
+import { getAuth, initializeAuth, inMemoryPersistence, browserPopupRedirectResolver, browserLocalPersistence, setPersistence, GoogleAuthProvider, connectAuthEmulator } from "firebase/auth";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator } from "firebase/firestore";
 import { getFunctions, httpsCallable, connectFunctionsEmulator } from "firebase/functions";
 import { getStorage, connectStorageEmulator } from "firebase/storage";
@@ -28,6 +28,7 @@ export const DEMO_VIEW = (() => { try { const q = new URLSearchParams(location.s
 export const DEMO_MSG = "This is a read-only demo — start your free trial to try it on your own shop.";
 export const app = initializeApp(firebaseConfig, DEMO_VIEW ? "demo-viewer" : undefined);
 export const auth = DEMO_VIEW ? initializeAuth(app, { persistence: inMemoryPersistence, popupRedirectResolver: browserPopupRedirectResolver }) : getAuth(app);
+if (!DEMO_VIEW) setPersistence(auth, browserLocalPersistence).catch((e) => console.warn("Could not enable persistent login", e.code));
 // Offline cache (IndexedDB): reopening the app shows the last data instantly, then updates live.
 function makeDb() {
   if (env.VITE_USE_EMULATOR === "true" || DEMO_VIEW) return getFirestore(app);
