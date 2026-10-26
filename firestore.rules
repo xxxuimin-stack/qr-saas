@@ -175,6 +175,11 @@ service cloud.firestore {
         allow update: if isOwner(storeId) || (memberOf(storeId) && onlyStatusChanged());
       }
 
+      // One checkout attempt. Cloud Functions only — clients must not mint or read these.
+      match /orderKeys/{id} {
+        allow read, write: if false;
+      }
+
       match /reservations/{id} {
         allow read: if inStore(storeId)
                     || (signedIn() && (resource.data.customerUid == request.auth.uid || request.auth.uid in resource.data.get('extraUids', [])));

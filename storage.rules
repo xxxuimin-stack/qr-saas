@@ -12,17 +12,17 @@ service firebase.storage {
       allow write: if request.auth != null && request.auth.uid == uid && request.resource.size < 6 * 1024 * 1024 && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');
     }
     match /stores/{storeId}/{allPaths=**} {
-      // public images (logo, cover, menu) — single files only (no folder listing), and NEVER the private/ folder
-      allow get: if !string(allPaths).matches('/?private/.*');
+      // public images (logo, cover, menu) — single files only (no folder listing), and NEVER private or customer proof
+      allow get: if !string(allPaths).matches('/?private/.*') && !string(allPaths).matches('customer/.*');
       allow write: if request.auth != null
                    && request.auth.token.storeId == storeId
                    && request.auth.token.role == 'owner'
                    && request.resource.size < 3 * 1024 * 1024
                    && request.resource.contentType.matches('image/.*');
     }
-    // Customer uploads (feedback photo, incident proof): sariling folder lang, images lang, < 3MB
+    // Customer uploads (feedback photo, incident proof): the customer and that store only, not the public
     match /stores/{storeId}/customer/{uid}/{file} {
-      allow get: if true;
+      allow get: if request.auth != null && (request.auth.uid == uid || request.auth.token.storeId == storeId);
       allow write: if request.auth != null && request.auth.uid == uid
                    && request.resource.size < 5 * 1024 * 1024
                    && (request.resource.contentType.matches('image/.*') || request.resource.contentType == 'application/pdf');

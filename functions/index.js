@@ -4051,7 +4051,7 @@ exports.placeOrder = onCall(HOT, withIndex("order", async (req) => {
   const needsConfirm = !resv && !parent && needPay && cf.mode && cf.mode !== "off" && !(cf.skipReturning !== false && returning);
   const initialStatus = needsConfirm ? "unconfirmed" : pub.mode === "pickup" ? "received" : "pending";
 
-  const { orderId } = await commitOrder(storeId, {
+  const { orderId, duplicate, total: lockedTotal } = await commitOrder(storeId, {
     type: pub.mode,
     serviceType,
     status: initialStatus,
@@ -4077,7 +4077,8 @@ exports.placeOrder = onCall(HOT, withIndex("order", async (req) => {
     paid: false, paymentMethod: payment?.method || null, payment, etaMinutes: null,
     riderId: null, riderName: null, deliveryFeePending: feeByCounter,
     needsConfirm, confirmDeadline: needsConfirm ? Timestamp.fromMillis(Date.now() + (Number(cf.minutes) || 15) * 60000) : null,
-  });
+  }, { idemKey: orderKeyId(d.checkoutId) });
+  if (duplicate) return { orderId, storeId, total: lockedTotal, duplicate: true };
   if (parent) {
     // the parent shows a blinking "➕ New add-on" until staff tap OK; a packed order that was already Ready waits for the add-on (+10 min)
     const pRef = db.doc(`stores/${storeId}/orders/${parent.id}`);
@@ -4182,8 +4183,8 @@ exports.checkVoucher = onCall(async (req) => {
   return { code: v.code, discount: r.discount, type: v.type, value: v.value, label: v.label || "" };
 });
 
-/** Write the order with a daily order number (#1, #2, ...) */
-async function commitOrder(storeId, data, { skipLimit = false } = {}) {
+/** Write the order with a daily order number (#1, #2, ...). The same idemKey never creates a second order. */
+async function commitOrder(storeId, data, { skipLimit = false, idemKey = null } = {}) {
   const storeDoc = (await db.doc(`stores/${storeId}`).get()).data() || {};
   const storeCfg = storeDoc.settings || {};
   const today = dayKey(new Date(), storeCfg.businessDayCutoff);
@@ -4193,8 +4194,14 @@ async function commitOrder(storeId, data, { skipLimit = false } = {}) {
   if (storeDoc.mode === "laundry" && data.source !== "counter") skipLimit = true; // laundry Free: walk-in jobs only
   if (!skipLimit && !test) { const { lim, plan } = await storeLimits(storeId, storeDoc.mode); maxPerDay = storeDoc.mode === "laundry" ? lim.jobsPerDay ?? UNLIMITED : lim.ordersPerDay ?? UNLIMITED; planName = plan; }
   const counterRef = db.doc(`stores/${storeId}/meta/${test ? "testCounters" : "counters"}`);
+  const keyRef = idemKey ? db.doc(`stores/${storeId}/orderKeys/${idemKey}`) : null;
   const orderRef = db.collection(`stores/${storeId}/orders`).doc();
+  let existing = null;
   await db.runTransaction(async (tx) => {
+    if (keyRef) {
+      const k = await tx.get(keyRef);
+      if (k.exists && k.data()?.orderId) { existing = k.data(); return; }
+    }
     const c = await tx.get(counterRef);
     const cur = c.exists && c.data().dayKey === today ? c.data().seq : 0;
     let used = cur;
@@ -4204,7 +4211,9 @@ async function commitOrder(storeId, data, { skipLimit = false } = {}) {
     tx.set(counterRef, { dayKey: today, seq }, { merge: true });
     if (!test) tx.set(db.doc(`stores/${storeId}/stats/usage`), { day: today, orders: seq, dayMs: Date.now() }, { merge: true });
     tx.set(orderRef, { orderNo: test ? `T${seq}` : seq, dayKey: today, ...data, ...(test ? { test: true } : {}), createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    if (keyRef) tx.set(keyRef, { orderId: orderRef.id, total: data.total ?? null, at: Date.now() });
   });
+  if (existing) return { orderId: existing.orderId, total: existing.total ?? null, duplicate: true };
   return { orderId: orderRef.id };
 }
 
@@ -4235,12 +4244,10 @@ exports.staffPlaceOrder = onCall(async (req) => {
   const deliveryFee = serviceType === "delivery" ? Number(svc.deliveryFee) || 0 : 0;
   const total = Math.round((subtotal + deliveryFee) * 100) / 100;
   const paid = !!d.paid;
-  // offline queue: the counter retries with the same clientRef → never create the order twice
-  const clientRef = d.clientRef ? String(d.clientRef).slice(0, 40) : null;
-  if (clientRef) { const dup = await db.collection(`stores/${storeId}/orders`).where("clientRef", "==", clientRef).limit(1).get(); if (!dup.empty) return { orderId: dup.docs[0].id, total: dup.docs[0].data().total || 0, duplicate: true }; }
+  const idemKey = orderKeyId(d.clientRef);
   const storeCfgFor = (await db.doc(`stores/${storeId}`).get()).data() || {};
-  const { orderId } = await commitOrder(storeId, {
-    clientRef, offlineAt: d.offlineAt ? Number(d.offlineAt) || null : null,
+  const { orderId, duplicate, total: lockedTotal } = await commitOrder(storeId, {
+    clientRef: idemKey, offlineAt: d.offlineAt ? Number(d.offlineAt) || null : null,
     type: store.mode, serviceType,
     status: store.mode === "pickup" ? "received" : "pending",
     tableId: table?.id || null, tableLabel: table?.label || null,
@@ -4253,7 +4260,8 @@ exports.staffPlaceOrder = onCall(async (req) => {
     staffId: d.staffId ? String(d.staffId) : null, staffName: d.staffName ? String(d.staffName).slice(0, 40) : null,
     paid, ...(paid ? payFields(storeCfgFor, String(d.paymentMethod || "cash")) : { paymentMethod: null }), paidAt: paid ? FieldValue.serverTimestamp() : null,
     etaMinutes: null,
-  });
+  }, { idemKey });
+  if (duplicate) return { orderId, total: lockedTotal, duplicate: true };
   return { orderId, total };
 });
 
@@ -4317,6 +4325,7 @@ function requireOwner(req) {
 // Flow: owner taps "Set up this device" (or shows a 6-digit code) → the tablet redeems it →
 // gets a custom token + a device secret saved on the tablet so it can sign back in by itself.
 // ---------------------------------------------------------------------------
+const { orderKeyId } = require("./orderkey");
 const crypto = require("crypto");
 const DEVICE_CODE_MS = 10 * 60000;
 const deviceCode = () => String(Math.floor(100000 + Math.random() * 900000));

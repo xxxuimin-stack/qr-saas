@@ -994,6 +994,7 @@ function openCart() {
   body.querySelector("[data-vremove]").onclick = (e) => { e.preventDefault(); voucher = null; draw(); };
   draw();
 
+  let checkoutId = null;
   foot.querySelector("[data-place]").onclick = async () => {
     const btn = foot.querySelector("[data-place]");
     const err = body.querySelector("[data-err]");
@@ -1014,9 +1015,11 @@ function openCart() {
     if (pm && !["cash", "card"].includes(pm.type) && isRemote() && sendsNow() && pm.askRef === true && refNo.length < 4) return (err.innerHTML = `<div class="c-alert error">Enter your ${esc(pm.name)} reference number.</div>`);
     if (serviceType === "delivery" && !customer.address) return (err.innerHTML = `<div class="c-alert error">Delivery address is required.</div>`);
     btn.disabled = true; btn.textContent = "Placing order…";
+    if (!checkoutId) checkoutId = (globalThis.crypto?.randomUUID?.() || ("c" + Date.now().toString(36) + Math.random().toString(36).slice(2, 12))).replace(/-/g, "");
     try {
       const res = await call("placeOrder", {
         slug, serviceType, tableToken: tableToken || null, tableId: !tableToken && table ? table.id : null,
+        checkoutId,
         items: cart.map((l) => ({ itemId: l.itemId, qty: l.qty, choices: l.choices.map((c) => ({ group: c.group, label: c.label })), note: l.note })),
         customer, note: body.querySelector("[data-onote]").value.trim(),
         scheduledAt: slotsEl && whenMode === "later" ? body.querySelector("[data-stime]").value || null : null,
@@ -1028,6 +1031,7 @@ function openCart() {
         pack: !!body.querySelector("[data-pack]")?.checked,
       });
       setAddTo(null);
+      checkoutId = null;
       voucher = null;
       if (preorderFor) { preorderFor = null; sessionStorage.removeItem("orderqr:preorder:" + slug); }
       if (customer.name || customer.phone) saveLocal({ customer: { ...(loadLocal().customer || {}), ...Object.fromEntries(Object.entries(customer).filter(([, v]) => v)) } });
