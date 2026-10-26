@@ -5208,8 +5208,9 @@ const inquirySendFn = async (req) => {
   if (brief.details.length < 10) throw new HttpsError("invalid-argument", "Tell us a bit more about the project.");
   const fcfg = (await db.doc(`stores/${pub.storeId}`).get()).data()?.settings?.salon || {}; const FL = fcfg.freelance || {};
   // on-site work: inside the creator's travel radius, and a valid ID for the creator's protection
-  if (brief.location || B.pin) { radiusGuard(fcfg.homeService, String(B.pin || "")); if (FL.requireIdOnSite && !String(B.idUrl || "").startsWith(`priv:stores/${pub.storeId}/private/`)) throw new HttpsError("invalid-argument", "On-site bookings need a valid ID (for the creator's safety)."); }
-  if (String(B.idUrl || "").startsWith(`priv:stores/${pub.storeId}/private/`)) brief.idUrl = String(B.idUrl).slice(0, 300); if (B.pin) brief.pin = String(B.pin).slice(0, 120);
+  if (brief.location || B.pin) radiusGuard(fcfg.homeService, String(B.pin || ""));
+  // Identity-document collection is disabled for inquiries.
+  if (B.pin) brief.pin = String(B.pin).slice(0, 120);
   { const why = await sideJobBlock(pub.storeId, { settings: { salon: fcfg } }, brief.date || null); if (why) throw new HttpsError("failed-precondition", why); }
   const offer = d.offer ? cleanOffer(d.offer, "client") : null;
   if (offer) { if (FL.offers === false) throw new HttpsError("failed-precondition", "This creator only works with fixed rates — pick a service or request a quote."); if (FL.minFee && offer.fee + offer.transpo < FL.minFee) throw new HttpsError("failed-precondition", `This creator's minimum is ₱${FL.minFee.toLocaleString("en-PH")} (talent fee + transport).`); }
@@ -5552,13 +5553,8 @@ exports.xdealTick = onSchedule({ schedule: "every 60 minutes", timeZone: "Asia/M
 });
 
 /** creator ID on file (private) — required for X-Deals because businesses send real items */
-exports.creatorKyc = onCall(async (req) => {
-  const who = await staffFrom(req); if (!hasRole(who, "manager")) throw new HttpsError("permission-denied", "Owner only.");
-  const idUrl = String(req.data?.idUrl || ""); if (!idUrl.startsWith(`priv:stores/${who.storeId}/private/`)) throw new HttpsError("invalid-argument", "Upload a photo of your valid ID.");
-  const sel = String(req.data?.selfie || ""); 
-  await db.doc(`stores/${who.storeId}/private/kyc`).set({ idUrl, selfie: sel.startsWith(`priv:stores/${who.storeId}/private/`) ? sel : null, at: Date.now(), by: req.auth.uid });
-  await db.doc(`stores/${who.storeId}`).set({ kycAt: Date.now() }, { merge: true });
-  return { ok: true };
+exports.creatorKyc = onCall(async () => {
+  throw new HttpsError("failed-precondition", "Identity-document collection is disabled. The Verified badge is handled separately.");
 });
 
 /** TapTayo Protect: the creator ghosted → the declared item value comes back as TapTayo credits (reviewed by TapTayo) */
@@ -6443,7 +6439,7 @@ exports.attachWaiver = onCall(async (req) => {
   const isStaff = token.storeId === storeId;
   if (!ownsResv(r, uid) && !isStaff) throw new HttpsError("permission-denied", "This is not your reservation.");
   if (!d.pdfUrl || !d.signatureUrl) throw new HttpsError("invalid-argument", "Missing files.");
-  await ref.update({ waiver: { pdfUrl: String(d.pdfUrl), signatureUrl: String(d.signatureUrl), idPhotoUrl: d.idPhotoUrl ? String(d.idPhotoUrl) : null, signerName: String(d.signerName || "").slice(0, 60), signedAt: FieldValue.serverTimestamp(), signedOnDevice: isStaff ? "store" : "customer" }, updatedAt: FieldValue.serverTimestamp() });
+  await ref.update({ waiver: { pdfUrl: String(d.pdfUrl), signatureUrl: String(d.signatureUrl), idPhotoUrl: null, signerName: String(d.signerName || "").slice(0, 60), signedAt: FieldValue.serverTimestamp(), signedOnDevice: isStaff ? "store" : "customer" }, updatedAt: FieldValue.serverTimestamp() });
   return { ok: true };
 });
 
