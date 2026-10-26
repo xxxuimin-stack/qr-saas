@@ -204,11 +204,12 @@ async function buildStore({ uid, token, data, orgId, copyFrom = null }) {
   // the owner works too (salon solo / owner works with staff / home-based café) → a staff profile with a PIN for the counter & screens
   if (!src && ownerProfileNeeded(preset.mode, setup)) {
     const pin = String(data.ownerPin || "");
-    if (!/^\d{4,6}$/.test(pin)) throw new HttpsError("invalid-argument", "Set a 4–6 digit PIN for yourself.");
+    const pinOk = /^\d{4,6}$/.test(pin);
+    if (!pinOk && ownerPinRequired(preset.mode, setup)) throw new HttpsError("invalid-argument", "Set a 4–6 digit PIN for yourself. Owner-only shops can skip it and turn a PIN on later in Settings → Staff.");
     const roles = preset.mode === "salon" ? ["manager", "crew", "stylist"] : ["manager", "crew", "kitchen", "barista", "dispatch", "rider"];
     const sref = storeRef.collection("staff").doc();
     await sref.set({ name: String(data.ownerName || token.name || "Owner").trim().slice(0, 40) || "Owner", roles, active: true, isOwner: true, skills: [], photoUrl: null, bio: "", showToCustomers: true, salary: { basicPerDay: 0, commission: false }, sortOrder: 0, createdAt: now, updatedAt: now, lastAssignedAt: null, jobsTotal: 0 });
-    await db.doc(`stores/${storeId}/private/staffPins`).set({ [sref.id]: pinHash(storeId, pin) }, { merge: true });
+    if (pinOk) await db.doc(`stores/${storeId}/private/staffPins`).set({ [sref.id]: pinHash(storeId, pin) }, { merge: true });
   }
   return { storeId, slug, mode: preset.mode, preset };
 }
@@ -258,13 +259,11 @@ async function recheckOnRename(storeRef, store) {
 }
 function trustOf(store, now = Date.now()) {
   const ms = (t) => (t?.toMillis ? t.toMillis() : Number(t) || 0);
-  const age = (now - (ms(store.createdAt) || now)) / 864e5, st = store.stats || {}, v = store.verif || {};
+  const age = (now - (ms(store.createdAt) || now)) / 864e5, st = store.stats || {};
   const tx = st.txDone || 0, cust = st.txCustomers || 0;
-  const today = new Date(now + 8 * 3600e3).toISOString().slice(0, 10);
-  const ok = (k) => v[k]?.status === "approved" && (!v[k].name || normName(v[k].name) === normName(store.name)) && (k !== "permit" || !v[k].expires || v[k].expires >= today);
-  const verified = age >= 30 && tx >= 50 && cust >= 20 && (ok("ownerId") || !!store.kycAt);
-  const badges = [...(verified ? ["verified"] : age >= 14 && tx >= 20 ? ["active"] : age < 30 ? ["new"] : []), ...(ok("dti") ? ["dti"] : []), ...(ok("bir") ? ["bir"] : []), ...(ok("permit") ? ["permit"] : []), ...(store.businessType === "freelance" && (store.kycAt || ok("ownerId")) ? ["creator"] : [])];
-  return { badges, tx, verified, newShop: age < 30 && !verified, since: ms(store.createdAt) || null };
+  const gold = age >= 7 && tx >= 50 && cust >= 10;
+  const badges = gold ? ["verified"] : (age < 30 ? ["new"] : []);
+  return { badges, tx, verified: gold, newShop: age < 30 && !gold, since: ms(store.createdAt) || null };
 }
 /** one more completed transaction (+ a new customer) → trust counters; a referred shop that reaches 20 rewards the shop that invited it */
 async function countTx(storeId, before, after, doneList, docRef = null) {
@@ -291,6 +290,8 @@ async function rewardReferral(storeId, st) {
   return true;
 }
 const ownerProfileNeeded = (mode, setup) => (mode === "salon" && (setup.kind === "solo" || setup.ownerWorks)) || (mode === "table" && (setup.kind === "home" || setup.team === "solo"));
+/** PIN at setup only when the owner works alongside staff. Owner-only can add a PIN later in Settings → Staff. */
+const ownerPinRequired = (mode, setup) => (mode === "salon" && setup.kind !== "solo" && !!setup.ownerWorks) || (mode === "table" && setup.kind === "home" && setup.team !== "solo");
 /** Owner: change the business setup later (Tools → Business setup) */
 exports.changeSetup = onCall(async (req) => {
   const t = requireOwner(req);
@@ -306,12 +307,16 @@ exports.changeSetup = onCall(async (req) => {
   if (ownerProfileNeeded(store.mode, setup)) {
     const has = (await db.collection(`stores/${t.storeId}/staff`).where("isOwner", "==", true).limit(1).get()).docs[0];
     if (!has) {
-      const pin = String(req.data?.ownerPin || ""); if (!/^\d{4,6}$/.test(pin)) throw new HttpsError("invalid-argument", "Set a 4–6 digit PIN for yourself.");
-      const pins = (await db.doc(`stores/${t.storeId}/private/staffPins`).get()).data() || {};
-      if (Object.values(pins).includes(pinHash(t.storeId, pin))) throw new HttpsError("already-exists", "That PIN is already used by a staff member.");
+      const pin = String(req.data?.ownerPin || "");
+      const pinOk = /^\d{4,6}$/.test(pin);
+      if (!pinOk && ownerPinRequired(store.mode, setup)) throw new HttpsError("invalid-argument", "Set a 4–6 digit PIN for yourself. Owner-only shops can skip it and turn a PIN on later in Settings → Staff.");
+      if (pinOk) {
+        const pins = (await db.doc(`stores/${t.storeId}/private/staffPins`).get()).data() || {};
+        if (Object.values(pins).includes(pinHash(t.storeId, pin))) throw new HttpsError("already-exists", "That PIN is already used by a staff member.");
+      }
       const sref = db.collection(`stores/${t.storeId}/staff`).doc();
       await sref.set({ name: String(req.data?.ownerName || "Owner").slice(0, 40), roles: store.mode === "salon" ? ["manager", "crew", "stylist"] : ["manager", "crew", "kitchen", "barista", "dispatch", "rider"], active: true, isOwner: true, skills: [], showToCustomers: true, salary: { basicPerDay: 0, commission: false }, sortOrder: 0, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-      await db.doc(`stores/${t.storeId}/private/staffPins`).set({ [sref.id]: pinHash(t.storeId, pin) }, { merge: true });
+      if (pinOk) await db.doc(`stores/${t.storeId}/private/staffPins`).set({ [sref.id]: pinHash(t.storeId, pin) }, { merge: true });
     }
   }
   return { ok: true, setup };
@@ -416,41 +421,11 @@ exports.listBusinesses = onCall(async (req) => {
   const { list } = await myBusinesses(uid);
   return { businesses: list, current: token.orgId || null };
 });
-exports.addBusiness = onCall(async (req) => {
-  const { uid, token } = requireAuth(req);
-  if (token.role !== "owner") throw new HttpsError("permission-denied", "Owner only.");
-  const data = req.data || {};
-  const { u, list } = await myBusinesses(uid);
-  if (list.length >= 5) throw new HttpsError("resource-exhausted", "You can have up to 5 businesses. Message us if you need more.");
-  const orgRef = db.collection("orgs").doc();
-  const { storeId, slug, mode } = await buildStore({ uid, token, data, orgId: orgRef.id });
-  const now = FieldValue.serverTimestamp();
-  // anti-abuse: one free trial per business type per owner — another one of the same type starts on the Free plan
-  const sameType = list.some((b) => b.businessType === data.businessType) || (await trialUsed(mode, data.phone, data.bid));
-  const trialEnds = Timestamp.fromMillis(Date.now() + TRIAL_DAYS * 86400000);
-  const batch = db.batch();
-  batch.set(db.doc(`stores/${storeId}/subscription/current`), sameType ? freeSub(now) : { plan: "trial", status: "trial", trialEndsAt: trialEnds, paidUntil: null, paymentMethod: null, paymongoSubscriptionId: null, limits: TRIAL_LIMITS, createdAt: now, updatedAt: now });
-  if (!sameType) markTrial(batch, mode, data.phone, data.bid, storeId);
-  batch.set(orgRef, { name: String(data.name || "").trim(), ownerUid: uid, ownerEmail: token.email || null, mainStoreId: storeId, branches: [{ storeId, name: String(data.name || "").trim(), slug, createdAt: Date.now() }], createdAt: now, updatedAt: now });
-  const entry = { storeId, orgId: orgRef.id, name: String(data.name || "").trim(), businessType: String(data.businessType || "") };
-  batch.set(db.doc(`users/${uid}`), { businesses: [...list, entry], storeIds: FieldValue.arrayUnion(storeId), storeId, orgId: orgRef.id }, { merge: true });
-  await batch.commit();
-  await admin.auth().setCustomUserClaims(uid, { storeId, role: "owner", orgId: orgRef.id });
-  logger.info("business added", { uid, storeId, type: data.businessType, shortTrial: sameType });
-  return { storeId, slug, mode, trialDays: sameType ? 3 : TRIAL_DAYS };
+exports.addBusiness = onCall(async () => {
+  throw new HttpsError("failed-precondition", "One email is one business. Use another email to open a second business.");
 });
-exports.switchBusiness = onCall(async (req) => {
-  const { uid, token } = requireAuth(req);
-  if (token.role !== "owner") throw new HttpsError("permission-denied", "Owner only.");
-  const { list } = await myBusinesses(uid);
-  const b = list.find((x) => x.orgId === String(req.data?.orgId || ""));
-  if (!b) throw new HttpsError("not-found", "Business not found.");
-  const org = (await db.doc(`orgs/${b.orgId}`).get()).data();
-  if (!org || org.ownerUid !== uid) throw new HttpsError("permission-denied", "Not your business.");
-  const storeId = org.mainStoreId;
-  await admin.auth().setCustomUserClaims(uid, { storeId, role: "owner", orgId: b.orgId });
-  await db.doc(`users/${uid}`).set({ storeId, orgId: b.orgId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-  return { ok: true, storeId };
+exports.switchBusiness = onCall(async () => {
+  throw new HttpsError("failed-precondition", "One email is one business. Log in with the other email.");
 });
 
 // ===========================================================================
@@ -7310,7 +7285,7 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
   const poolFee = round2(poolGuests * (Number(cfg.pool.price) || 0));
   const total = stayTotal({ subtotal, poolFee, addons, discount, noticeDiscount });
   const trust = trustOf((await db.doc(`stores/${storeId}`).get()).data() || {});
-  const downpayment = Math.min(round2(total * (Number(cfg.downPct) || 0) / 100), trust.newShop ? NEW_SHOP_DP_CAP : Infinity); // new shops: max ₱1,500 upfront until Verified (anti-scam)
+  const downpayment = Math.min(round2(total * (Number(cfg.downPct) || 0) / 100), trust.newShop ? NEW_SHOP_DP_CAP : Infinity); // shops under 30 days without the gold badge: max ₱1,500 upfront
   const pm = (pub.payments || []).find((m) => m.id === d.payment?.methodId) || null;
   const refNo = String(d.payment?.refNo || "").trim().slice(0, 60);
   if (downpayment > 0 && pm && pm.type !== "cash" && pm.askRefBookings !== false && refNo.length < 4 && !d.payment?.proofUrl) throw new HttpsError("invalid-argument", `Enter the ${pm.name} reference number for the downpayment.`);

@@ -170,8 +170,8 @@ function draw() {
   // trust + rating in one small card
   const fb = store.feedback || {}, tb = trustBadge(store);
   if ((tb && store.trust) || fb.avg) {
-    const b = new Set(store.trust?.badges || []); const docs = ["dti", "bir", "permit"].filter((k) => b.has(k));
-    const title = b.has("verified") ? (docs.length === 3 ? "Fully verified" : "Verified business") : b.has("active") ? "Active on TapTayo" : docs.length ? "Documents checked" : tb ? "New on TapTayo" : "Reviews";
+    const b = new Set(store.trust?.badges || []);
+    const title = b.has("verified") ? "Gold badge" : "New on TapTayo";
     const r0 = (fb.reviews || [])[0];
     right.push(`<section class="d-box"><h4>${tb} ${title}</h4><div class="d-mut">${[fb.avg ? `★ ${fb.avg} (${fb.count})` : "", store.trust?.tx >= 10 ? `${Number(store.trust.tx).toLocaleString("en-PH")} ${mode === "salon" || mode === "stay" ? "bookings" : "orders"}` : ""].filter(Boolean).join(" · ")}</div>${r0 ? `<div class="d-rev" style="margin:6px 0 0">“${esc(String(r0.comment || "").slice(0, 90))}”${r0.name ? ` — ${esc(r0.name)}` : ""}</div>` : ""}</section>`);
   }

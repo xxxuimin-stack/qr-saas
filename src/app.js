@@ -90,9 +90,10 @@ onAuthStateChanged(auth, async (user) => {
   }
   if (claims.storeId && claims.role === "owner" && !claims.orgId) { try { const r = await call("ensureOrg"); if (r.refresh) { await user.getIdToken(true); claims = (await user.getIdTokenResult(true)).claims; } } catch {} }
   hide("loading");
-  if (claims.storeId && location.hash === "#addbusiness" && claims.role === "owner") { addingBusiness = true; initWizard(); show("wizard"); if ($("wizSwitch")) { $("wizSwitch").textContent = "← Back to my business"; $("wizSwitch").onclick = (e) => { e.preventDefault(); location.hash = "#overview"; location.reload(); }; } }
-  else if (claims.storeId) await loadDashboard();
-  else { initWizard(); show("wizard"); }
+  if (claims.storeId) {
+    if (location.hash === "#addbusiness") location.hash = "#overview";
+    await loadDashboard();
+  } else { initWizard(); show("wizard"); }
 });
 
 // version + "Check for updates" at the bottom of the menu
@@ -314,7 +315,7 @@ if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wi
     catch (err) { wizMsg(err.message); btn.disabled = false; btn.textContent = "Create my store"; if (/mobile number/i.test(err.message)) goStep(3); return; }
     btn.textContent = "Creating…";
     try {
-      await call(addingBusiness ? "addBusiness" : "createStore", { bid: (() => { try { let b = localStorage.getItem("taptayo:bid"); if (!b) { b = Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => x.toString(16).padStart(2, "0")).join(""); localStorage.setItem("taptayo:bid", b); } return b; } catch { return null; } })(), ref: (() => { try { return localStorage.getItem("taptayo:ref"); } catch { return null; } })(), name: wiz.name, businessType: wiz.businessType, phone: wiz.phone, address: wiz.address, setup: wiz.setup ? { kind: wiz.setup, ownerWorks: wiz.ownerWorks, place: wiz.place || undefined, ...(isFood() && wiz.channels?.size ? { channels: [...wiz.channels], team: wiz.team, pay: wiz.pay } : {}) } : null, ownerName: wiz.ownerName || null, ownerPin: wiz.ownerPin || null });
+      await call("createStore", { bid: (() => { try { let b = localStorage.getItem("taptayo:bid"); if (!b) { b = Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => x.toString(16).padStart(2, "0")).join(""); localStorage.setItem("taptayo:bid", b); } return b; } catch { return null; } })(), ref: (() => { try { return localStorage.getItem("taptayo:ref"); } catch { return null; } })(), name: wiz.name, businessType: wiz.businessType, phone: wiz.phone, address: wiz.address, setup: wiz.setup ? { kind: wiz.setup, ownerWorks: wiz.ownerWorks, place: wiz.place || undefined, ...(isFood() && wiz.channels?.size ? { channels: [...wiz.channels], team: wiz.team, pay: wiz.pay } : {}) } : null, ownerName: wiz.ownerName || null, ownerPin: wiz.ownerPin || null });
       claims = (await currentUser.getIdTokenResult(true)).claims;
       hide("wizard");
       if (addingBusiness) { addingBusiness = false; location.hash = "#overview"; location.reload(); return; }
@@ -447,15 +448,6 @@ async function loadDashboard() {
   logoBox.querySelector(".slogo")?.remove();
   if (store.logoUrl) logoBox.prepend(Object.assign(document.createElement("img"), { src: store.logoUrl, className: "slogo", alt: "" }));
   $("storeType").textContent = `${preset.icon} ${preset.title} · ${claims.role}`;
-  if (claims.role === "owner") call("listBusinesses").then((r) => {
-    document.getElementById("bizSwitch")?.remove();
-    const box = document.createElement("div"); box.id = "bizSwitch"; box.className = "biz-switch";
-    const list = r.businesses || [];
-    box.innerHTML = `${list.length > 1 ? `<select aria-label="Switch business">${list.map((b) => `<option value="${esc(b.orgId)}" ${b.orgId === r.current ? "selected" : ""}>${esc((PRESETS[b.businessType]?.icon || "🏪") + " " + (b.name || "Business"))}</option>`).join("")}</select>` : ""}<a href="#addbusiness" data-addbiz>＋ Add another business</a>`;
-    box.querySelector("select")?.addEventListener("change", async (e) => { e.target.disabled = true; try { await call("switchBusiness", { orgId: e.target.value }); await currentUser.getIdToken(true); location.hash = "#overview"; location.reload(); } catch (x) { alert(x.message); e.target.disabled = false; } });
-    box.querySelector("[data-addbiz]").onclick = (e) => { e.preventDefault(); location.hash = "#addbusiness"; location.reload(); };
-    document.querySelector(".side .store")?.appendChild(box);
-  }).catch(() => {});
   $("welcome").textContent = `Welcome back, ${currentUser.displayName || currentUser.email}`;
   $("openMenuLink").href = `/m/${store.slug}`;
   drawSideR(store);
@@ -666,12 +658,12 @@ async function drawSideR(store) {
   const el = document.getElementById("sideR"); if (!el) return;
   const link = `https://taptayo.com/m/${store.slug}`;
   let qr = ""; try { const { qrGroup } = await import("./brandqr.js"); qr = `<svg viewBox="0 0 120 120" width="104" height="104" aria-label="QR of your page">${qrGroup(link, { size: 120, color: "#141414" })}</svg>`; } catch {}
-  const v = store.verif || {}; const KL = [["ownerId", "Owner ID"], ["dti", "DTI"], ["bir", "BIR"], ["permit", "Permit"]];
-  const st = (k) => (k === "ownerId" && store.kycAt) || v[k]?.status === "approved" ? "✅" : v[k]?.status === "pending" ? "⏳" : v[k]?.status === "more" ? "📎" : v[k]?.status === "expired" ? "⚠️" : "➕";
+  const done = Number(store.stats?.txDone) || 0, people = Number(store.stats?.txCustomers) || 0;
+  const gold = done >= 50 && people >= 10;
   const tips = ["Put your QR at the counter and on every table — most orders come from the QR.", "Reply to reviews: shops that reply get more repeat customers.", "Turn on reminders to cut no-shows.", "Post an announcement for holidays and new items — customers see it on your page.", "Share your page link on your Facebook page's button (Book now / Order)."];
   const esc2 = (x) => String(x ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   el.innerHTML = `<section class="tile sr-box"><h3>🔗 Your page</h3><div class="sr-share">${qr}<div><div class="small muted" style="word-break:break-all">${esc2(link.replace("https://", ""))}</div><div class="row" style="gap:6px;margin-top:8px;flex-wrap:wrap"><button class="btn sm" type="button" data-copy>Copy link</button><a class="btn ghost sm" target="_blank" rel="noopener" href="https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(`https://taptayo.com/s/${store.slug}`)}">📤 Share on Facebook</a><a class="btn ghost sm" href="/m/${esc2(store.slug)}" target="_blank" rel="noopener">Open</a></div></div></div></section>
-    <section class="tile sr-box"><h3>✔ Badges</h3>${KL.map(([k, l]) => `<div class="row between small" style="padding:3px 0"><span>${l}</span><span>${st(k)}</span></div>`).join("")}<a class="btn ghost sm" href="#settings" style="margin-top:8px">Get verified</a></section>
+    <section class="tile sr-box"><h3>Gold badge</h3><p class="small" style="margin:0">${gold ? "On. Customers see the gold badge." : `${done} of 50 finished orders or bookings · ${people} of 10 different customers. The shop also needs to be 7 days old.`}</p><p class="small muted" style="margin:6px 0 0">No ID, DTI, BIR, or permit is required.</p></section>
     <section class="tile sr-box"><h3>💡 Tip</h3><p class="small" style="margin:0">${esc2(tips[new Date().getDate() % tips.length])}</p></section>
     <section class="tile sr-box"><h3>💬 Need help?</h3><p class="small muted" style="margin:0 0 8px">We reply within 24 hours — no calls needed.</p><button class="btn ghost sm" type="button" data-help>Message TapTayo</button></section>`;
   el.querySelector("[data-copy]")?.addEventListener("click", async (e) => { try { await navigator.clipboard.writeText(`https://taptayo.com/s/${store.slug}`); /* share link: shows the cover photo + name on Facebook / Messenger */ e.target.textContent = "✓ Copied"; } catch {} });

@@ -1,4 +1,4 @@
-import { auth, googleProvider } from "./firebase.js";
+import { auth, googleProvider, facebookProvider } from "./firebase.js";
 import {
   onAuthStateChanged,
   signOut,
@@ -12,19 +12,16 @@ import { call } from "./firebase.js";
 
 const $ = (id) => document.getElementById(id);
 let mode = "login"; // login | signup
-// every new sign-up is a personal account first (→ My TapTayo). A business or freelancer / creator account is added from there.
-// What they came for (homepage "Start free", ?type=salon, ?role=creator) is remembered so My TapTayo can offer it first.
+// New sign-up is a business account and opens the shop wizard. An existing shop opens Overview.
+// What they came for (homepage "Start free", ?type=salon) is remembered so the wizard can preselect it.
 { try { const q = new URLSearchParams(location.search); const t = q.get("type") || "", r = q.get("role") || ""; const intent = r === "creator" || t === "freelance" ? "creator" : r === "business" || (t && /^[a-z]+$/.test(t)) ? `business:${/^[a-z]+$/.test(t) && t !== "freelance" ? t : ""}` : ""; if (intent) localStorage.setItem("taptayo:intent", intent); } catch {} }
 const ROLE_TXT = { client: ["Your name", "Juan dela Cruz", "Create your free account", "Book shops, hire creators and see all your bookings in one place."], creator: ["Your creator / page name", "Kain Tayo with Bea", "Let's set up your creator page", "Your rate card, offers and bookings — free to start."], business: ["Shop name", "Kapehan sa Kanto", "Let's set up your shop", "Free account. Takes about 10 minutes."] };
-let role = "client";
+let role = "business";
 function drawRole() {
   $("roles")?.closest(".f")?.classList.add("hidden"); $("adultField")?.classList.add("hidden");
   if ($("shopLabel")) { $("shopLabel").textContent = "Your name"; $("a-shop").placeholder = "Juan dela Cruz"; $("a-shop").autocomplete = "name"; }
-  if (mode === "signup") { $("authTitle").textContent = "Create your free account"; $("authSub").textContent = "One account to book, run a business or work as a freelancer — add those after."; $("ctaText").textContent = "Create free account"; }
-  try { localStorage.setItem("taptayo:role", role); if (role === "creator") localStorage.setItem("taptayo:edition", "freelance"); } catch {}
-  return;
-  $("roles")?.closest(".f")?.classList.add("hidden"); // no role picker — add a business / freelancer account after sign-up
-  if (mode === "signup") { $("shopLabel").textContent = "Your name"; $("a-shop").placeholder = "Juan dela Cruz"; $("adultField").classList.add("hidden"); $("authTitle").textContent = "Create your TapTayo account"; $("authSub").textContent = "Free. Next you can add your business or freelancer page."; $("ctaText").textContent = "Create free account"; }
+  if (mode === "signup") { $("authTitle").textContent = "Create your business account"; $("authSub").textContent = "One email, one business. Next you'll set up your shop."; $("ctaText").textContent = "Create free account"; }
+  try { localStorage.setItem("taptayo:role", "business"); localStorage.removeItem("taptayo:edition"); } catch {}
 }
 let showPw = false;
 
@@ -63,23 +60,16 @@ onAuthStateChanged(auth, async (user) => {
   }
   location.replace(await roleNext(user));
 });
-/** where to go after login: a shop → dashboard; a client → My TapTayo; a new creator / business → setup */
+/** where to go after login: existing shop → Overview. New sign-up with no shop → business wizard. A returning customer with no shop stays on My TapTayo. */
 async function roleNext(user) {
-  if (nextUrl && nextUrl.startsWith("/")) return safeNext;
+  if (nextUrl && nextUrl.startsWith("/") && !(mode === "signup" && nextUrl.startsWith("/me"))) return safeNext;
   try {
-    if (mode === "signup" || localStorage.getItem("taptayo:newRole")) {
-      // every new sign-up starts as a personal account and lands on My TapTayo; there they add a business or a freelancer account.
-      // What they came for (homepage button / link type) is remembered so My TapTayo puts that option first.
-      try { if (role !== "client") localStorage.setItem("taptayo:want", role); } catch {}
-      await call("accountSetup", { role: "client", name: $("a-shop")?.value.trim() || user.displayName || "" });
-      localStorage.removeItem("taptayo:newRole");
-      return "/me/";
-    }
     const a = await call("myAccount", {});
-    if (a.hasStore) return "/app/";
+    if (a.hasStore) return "/app/#overview";
+    if (mode === "signup") return "/app/";
     return "/me/";
   } catch (e) { console.warn("role", e); }
-  return "/me/";
+  return mode === "signup" ? "/app/" : "/me/";
 }
 // Opened the 2-step link but not logged in on this browser → ask to log in here to finish
 if (linkCode()) setTimeout(() => { if (!auth.currentUser) showMsg("Log in on this browser to finish confirming your login.", "warn"); }, 1500);
@@ -92,8 +82,8 @@ function setMode(next) {
   $("nameField").classList.toggle("hidden", !signup);
   $("signupNote").classList.toggle("hidden", !signup);
   $("forgot").classList.toggle("hidden", signup);
-  $("authTitle").textContent = signup ? "Create your TapTayo account" : "Welcome back!";
-  $("authSub").textContent = signup ? "Free. Next you can add your business or freelancer page." : "Good to see you again.";
+  $("authTitle").textContent = signup ? "Create your business account" : "Welcome back!";
+  $("authSub").textContent = signup ? "One email, one business. Next you'll set up your shop." : "Good to see you again.";
   $("ctaText").textContent = signup ? "Create free account" : "Log in";
   $("password").placeholder = signup ? "At least 8 characters" : "Your password";
   $("password").autocomplete = signup ? "new-password" : "current-password";
@@ -168,11 +158,7 @@ $("googleBtn").onclick = async () => {
   acted = true;
   showMsg("");
   try {
-    await signInWithPopup(auth, googleProvider);
-  } catch (err) {
-    showMsg(friendly(err));
-  }
-};
+    await signInWithPopup(auth, googleProvider); } catch (err) { showMsg(friendly(err)); } }; if ($("facebookBtn")) $("facebookBtn").onclick = async () => { acted = true; showMsg(""); try { await signInWithPopup(auth, facebookProvider); } catch (err) { showMsg(err.code === "auth/operation-not-allowed" ? "Facebook sign-in is not turned on yet. Enable it in Firebase, Authentication, Sign-in method." : friendly(err)); } };
 
 $("resetLink").onclick = async (e) => {
   e.preventDefault();

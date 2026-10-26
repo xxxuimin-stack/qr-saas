@@ -49,10 +49,10 @@ onAuthStateChanged(auth, async (u) => {
     try { await call("accountSetup", { role: r, adult: r === "creator" ? true : undefined }); } catch (x) { b.disabled = false; return alert(x.message); }
     try {
       localStorage.removeItem("taptayo:want");
-      if (r === "creator") { localStorage.setItem("taptayo:edition", "freelance"); if (P.name) localStorage.setItem("taptayo:shopName", P.name); } // creator page = your name
-      else { localStorage.removeItem("taptayo:edition"); localStorage.removeItem("taptayo:shopName"); }                                         // business: you pick the type and name it
+      if (r === "creator") { localStorage.removeItem("taptayo:edition"); }
+      else { localStorage.removeItem("taptayo:edition"); localStorage.removeItem("taptayo:shopName"); }
     } catch {}
-    location.href = a.hasStore ? "/app/#addbusiness" : "/app/";
+    location.href = a.hasStore ? "/app/#overview" : "/app/";
   }));
   document.getElementById("ref").onclick = loadBookings; loadBookings();
   // tabs (remembered on this phone)
@@ -78,10 +78,8 @@ async function loadBookings() {
 function addCard(a, roles) {
   let want = ""; try { want = localStorage.getItem("taptayo:want") || ""; } catch {}
   const opts = [
-    { k: "business", ic: "🏪", t: a.hasStore ? "Add another business" : "Business account", d: "Café, restaurant, salon, spa, laundry or stay — QR orders, bookings, staff and sales.", btn: `<button class="btn" data-new="business">${a.hasStore ? "Add a business" : "Set up my business"}</button>` },
-    { k: "creator", ic: "🎨", t: "Creator / photographer page", d: "Your own booking page: rate card, packages, downpayment, collabs with shops.", btn: roles.includes("creator") ? `<a class="btn ghost" href="/app/">Open my page</a>` : `<button class="btn" data-new="creator">Create my page</button>` },
-    { k: "pro", ic: "🧑‍🎨", t: "Freelancer for shops", d: "Nails, lashes, hair, massage, makeup — get jobs from shops near you when you're free.", btn: `<a class="btn ${roles.includes("pro") ? "ghost" : ""}" href="/pro/">${roles.includes("pro") ? "My freelancer page" : "Start as a freelancer"}</a>` },
-  ].sort((x, y) => (y.k === want || (want === "creator" && y.k === "creator")) - (x.k === want));
+    { k: "business", ic: "🏪", t: a.hasStore ? "Your business" : "Business account", d: "One email, one business. Another shop needs another email.", btn: a.hasStore ? `<a class="btn" href="/app/#overview">Open Overview</a>` : `<button class="btn" data-new="business">Set up my business</button>` },
+  ];
   return `<div class="card" style="${want ? "border:2px solid #C62828" : ""}"><h2>➕ ${roles.some((r) => r !== "client") || a.hasStore ? "Your accounts" : "What do you want to do on TapTayo?"}</h2>
     ${a.hasStore ? `<div class="row" style="margin-bottom:8px"><a class="btn" href="/app/">Open my dashboard</a></div>` : ""}
     <div style="display:grid;gap:10px">${opts.map((o) => `<div class="row" style="justify-content:space-between;align-items:center;gap:12px;padding:12px;border:1px solid #E5E7EB;border-radius:14px${o.k === want ? ";background:#FEF2F2" : ""}"><div style="display:flex;gap:12px;align-items:center;min-width:0"><span style="font-size:28px">${o.ic}</span><div><b>${o.t}</b><div class="muted" style="font-size:13.5px">${o.d}</div></div></div>${o.btn}</div>`).join("")}</div>
@@ -92,7 +90,7 @@ function addCard(a, roles) {
 function wantBanner(a, roles) {
   let want = ""; try { want = localStorage.getItem("taptayo:want") || ""; } catch {}
   if (!want || a.hasStore || roles.includes(want)) return "";
-  return `<div class="card" style="display:flex;gap:12px;align-items:center;justify-content:space-between;border-color:#F4A9A9;background:#FEF2F2"><span>${want === "creator" ? "🎨 Ready to make your creator page?" : "🏪 Ready to set up your business?"}</span><span class="row"><button class="btn" data-new="${want === "creator" ? "creator" : "business"}">Set up now</button><button class="btn ghost" onclick="try{localStorage.removeItem('taptayo:want')}catch(e){};this.closest('.card').remove()">Later</button></span></div>`;
+  return `<div class="card" style="display:flex;gap:12px;align-items:center;justify-content:space-between;border-color:#F4A9A9;background:#FEF2F2"><span>🏪 Ready to set up your business?</span><span class="row"><button class="btn" data-new="business">Set up now</button><button class="btn ghost" onclick="try{localStorage.removeItem('taptayo:want')}catch(e){};this.closest('.card').remove()">Later</button></span></div>`;
 }
 
 // ---- 📰 home feed (marketplace style): categories · popular near you · updates from shops
