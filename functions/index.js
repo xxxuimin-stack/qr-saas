@@ -26,6 +26,10 @@ if (typeof db.settings === "function") db.settings({ ignoreUndefinedProperties: 
 // stay small (2). The busy customer / counter functions get more room (HOT below).
 setGlobalOptions({ region: "asia-southeast1", maxInstances: 2 });
 const HOT = { maxInstances: 8 };
+const CREATOR_MARKETPLACE_ENABLED = false; // Temporarily business-only SaaS mode.
+function creatorMarketplaceGuard() {
+  if (!CREATOR_MARKETPLACE_ENABLED) throw new HttpsError("failed-precondition", "Creator marketplace and business-collab features are temporarily paused.");
+}
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -5166,6 +5170,7 @@ function offerQuote(o, FL, extra = {}) {
   return { lines, total, dpPercent: total ? Number(FL.dpPercent ?? 50) : 0, revisions: Number(FL.revisions ?? 2), terms: FL.terms || "", note: o.notes || "", date: extra.date || "", validUntil: Date.now() + 7 * 86400000, fromOffer: true, at: Date.now(), ...extra };
 }
 const inquirySendFn = async (req) => {
+  creatorMarketplaceGuard();
   await maintGuard(req);
   const { uid } = requireAuth(req); const d = req.data || {};
   const pub = await inqStore(d.slug);
@@ -5259,6 +5264,7 @@ exports.inquiryAction = onCall(async (req) => { // the client: accept quote (ter
 });
 /** a business (café, salon…) invites a creator: offer = talent fee + transport + freebies */
 exports.creatorOffer = onCall(async (req) => {
+  creatorMarketplaceGuard();
   await maintGuard(req);
   const who = await staffFrom(req); if (!hasRole(who, "manager")) throw new HttpsError("permission-denied", "Only the owner or a manager can send offers.");
   const st = (await db.doc(`stores/${who.storeId}`).get()).data() || {}; const d = req.data || {};
@@ -5281,6 +5287,7 @@ exports.myCreatorOffers = onCall(async (req) => {
 });
 /** public creator directory (opt-in) */
 exports.creatorDirectory = onCall(async (req) => {
+  if (!CREATOR_MARKETPLACE_ENABLED) return [];
   const d = req.data || {}; const snap = await db.collection("publicStores").where("creatorListed", "==", true).limit(300).get();
   const niche = String(d.niche || "").toLowerCase(), city = String(d.city || "").toLowerCase(), qq = String(d.q || "").toLowerCase();
   return snap.docs.map((x) => x.data()).filter((p) => p.creator && (!niche || (p.creator.niches || []).some((n) => n.toLowerCase() === niche)) && (!city || `${p.creator.city} ${(p.salon?.homeService?.areas || []).map((a) => a.name).join(" ")}`.toLowerCase().includes(city)) && (!qq || `${p.name} ${p.tagline} ${p.creator.pitch} ${(p.creator.niches || []).join(" ")}`.toLowerCase().includes(qq)))
@@ -5329,6 +5336,7 @@ const COLLAB_NICHES = ["Food", "Lifestyle", "Beauty", "Travel", "Family", "Fitne
 const pubCollab = (id, c) => ({ id, title: c.title, details: c.details, niche: c.niche, city: c.city, budgetEach: c.budgetEach, freebies: c.freebies, deliverables: c.deliverables, deadline: c.deadline, slots: c.slots, filled: c.filled || 0, ugc: !!c.ugc, onSite: !!c.onSite, storeName: c.storeName, storeSlug: c.storeSlug, logoUrl: c.logoUrl || null, businessType: c.businessType || "", apps: c.apps || 0, status: c.status, createdAtMs: c.createdAtMs });
 /** Open Collab board: a business posts "need 3 food UGC videos, ₱1,500 each" → creators apply → the business picks */
 exports.collabPost = onCall(async (req) => {
+  creatorMarketplaceGuard();
   await maintGuard(req);
   const who = await staffFrom(req); if (!hasRole(who, "manager")) throw new HttpsError("permission-denied", "Owner or manager only.");
   const st = (await db.doc(`stores/${who.storeId}`).get()).data() || {}; if (st.businessType === "freelance") throw new HttpsError("failed-precondition", "Post collabs from a business account.");
@@ -5343,11 +5351,13 @@ exports.collabPost = onCall(async (req) => {
   return { id: ref.id };
 });
 exports.collabList = onCall(async (req) => { // public — no account needed to look
+  if (!CREATOR_MARKETPLACE_ENABLED) return [];
   const d = req.data || {}; const snap = await db.collection("collabs").where("status", "==", "open").limit(200).get();
   const niche = String(d.niche || ""), city = String(d.city || "").toLowerCase(), q = String(d.q || "").toLowerCase();
   return snap.docs.map((x) => pubCollab(x.id, x.data())).filter((c) => (!c.deadline || c.deadline >= phYmd(Date.now())) && (!niche || c.niche === niche || (niche === "UGC" && c.ugc)) && (!city || String(c.city).toLowerCase().includes(city)) && (!q || `${c.title} ${c.details} ${c.niche} ${c.storeName}`.toLowerCase().includes(q))).sort((a, b) => b.createdAtMs - a.createdAtMs).slice(0, 60);
 });
 exports.collabApply = onCall(async (req) => {
+  creatorMarketplaceGuard();
   await maintGuard(req);
   const who = await staffFrom(req); if (!hasRole(who, "manager")) throw new HttpsError("permission-denied", "Owner only.");
   const st = (await db.doc(`stores/${who.storeId}`).get()).data() || {}; if (st.businessType !== "freelance") throw new HttpsError("failed-precondition", "Apply from your creator account.");
@@ -5443,6 +5453,7 @@ const cleanItem = (it) => { const type = XDEAL_TYPES.includes(it?.type) ? it.typ
 
 /** business → creator: an X-Deal request (item + optional tip + instructions) */
 exports.xdealSend = onCall(async (req) => {
+  creatorMarketplaceGuard();
   await maintGuard(req);
   const who = await staffFrom(req); if (!hasRole(who, "manager")) throw new HttpsError("permission-denied", "Owner or manager only.");
   const st = (await db.doc(`stores/${who.storeId}`).get()).data() || {};
