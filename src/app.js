@@ -290,7 +290,7 @@ if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wi
     });
   };
   // email + password sign-ups confirm their email first (free; Google accounts are already verified)
-  const emailStep = () => {
+  const emailStep = () => { return Promise.resolve(true);
     const u = currentUser; if (addingBusiness || !u || u.emailVerified || !(u.providerData || []).some((x) => x.providerId === "password")) return Promise.resolve(true);
     const send = () => sendEmailVerification(u, { url: `${location.origin}/app/` }).catch((e) => { if (!/too-many/.test(e.code || "")) throw e; });
     return new Promise((resolve) => {
@@ -308,7 +308,7 @@ if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wi
   $("createBtn").onclick = async () => {
     const btn = $("createBtn");
     btn.disabled = true;
-    btn.textContent = "Confirm your email…";
+    btn.textContent = "Creating…";
     try { await emailStep(); } catch (err) { wizMsg(err.message); btn.disabled = false; btn.textContent = "Create my store"; return; }
     btn.textContent = "Checking your number…";
     try { if (!(await otpStep())) { btn.disabled = false; btn.textContent = "Create my store"; return; } }
