@@ -219,15 +219,11 @@ function initWizard() {
     $("review").innerHTML = `<dl class="review-list">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`;
     goStep(4);
   };
-  // Signup verification is temporarily disabled so a delivery failure cannot block business creation.
-  const otpStep = async () => true;
-$("createBtn").onclick = async () => {
+  // No SMS/email code is required to create a business account while signup verification is being repaired.
+  $("createBtn").onclick = async () => {
     const btn = $("createBtn");
     btn.disabled = true;
-    btn.textContent = "Checking your number…";
-    try { if (!(await otpStep())) { btn.disabled = false; btn.textContent = "Create my store"; return; } }
-    catch (err) { wizMsg(err.message); btn.disabled = false; btn.textContent = "Create my store"; if (/mobile number/i.test(err.message)) goStep(3); return; }
-    btn.textContent = "Creating…";
+    btn.textContent = "Creating business…";
     try {
       await call("createStore", { bid: (() => { try { let b = localStorage.getItem("taptayo:bid"); if (!b) { b = Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => x.toString(16).padStart(2, "0")).join(""); localStorage.setItem("taptayo:bid", b); } return b; } catch { return null; } })(), ref: (() => { try { return localStorage.getItem("taptayo:ref"); } catch { return null; } })(), name: wiz.name, businessType: wiz.businessType, phone: wiz.phone, address: wiz.address, setup: wiz.setup ? { kind: wiz.setup, ownerWorks: wiz.ownerWorks, place: wiz.place || undefined } : null, ownerName: wiz.ownerName || null, ownerPin: wiz.ownerPin || null });
       claims = (await currentUser.getIdTokenResult(true)).claims;
@@ -235,7 +231,6 @@ $("createBtn").onclick = async () => {
       await loadDashboard();
     } catch (err) {
       console.error(err);
-      if (/OTP_REQUIRED/.test(err.message || "")) otpOk = false;
       wizMsg(String(err.message || "Could not create the store. Please try again.").replace("OTP_REQUIRED:", ""));
       btn.disabled = false;
       btn.textContent = "Create my store";
