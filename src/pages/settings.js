@@ -271,11 +271,8 @@ export function renderSettingsPage(root, ctx, opts = {}) {
           <p class="small muted">Filled in automatically on quotes for shoots and events — the client sees a countdown.</p>
           <h4 style="margin:16px 0 6px">🛡 Safety</h4>
           <input type="checkbox" name="flId" hidden/>
-          <h4 style="margin:16px 0 6px">🎁 X-Deals (barter: free food, product or staycation for a video)</h4>
-          <label class="check"><input type="checkbox" name="xOn" ${sl.freelance?.xdeal?.on ? "checked" : ""}/> I accept X-Deals</label>
-          <div class="form2"><div><label>Minimum tip with an X-Deal (₱, 0 = none)</label><input name="xTip" type="number" min="0" value="${sl.freelance?.xdeal?.minTip || 0}"/></div><div><label>Video ready (days after I receive the item)</label><input name="xDays" type="number" min="1" max="30" value="${sl.freelance?.xdeal?.releaseDays || 5}"/></div></div>
-          <div class="row wrap" style="gap:12px">${[["food", "🍽 Food"], ["product", "📦 Products"], ["staycation", "🏡 Staycations"]].map(([k, t]) => `<label class="check" style="margin:0"><input type="checkbox" name="xType" value="${k}" ${!sl.freelance?.xdeal?.types || sl.freelance.xdeal.types.includes(k) ? "checked" : ""}/> ${t}</label>`).join("")}</div>
-          <div style="margin-top:8px"><p class="small muted" style="margin:4px 0 0">ID and permit document uploads are disabled. The Verified badge remains subject to TapTayo review.</p></div>` : ""}
+          <input type="checkbox" name="xOn" hidden/><input type="number" name="xTip" value="0" hidden/><input type="number" name="xDays" value="5" hidden/><input type="checkbox" name="xType" value="food" hidden/>
+           <div style="margin-top:8px"><p class="small muted" style="margin:4px 0 0">ID and permit document uploads are disabled. The Verified badge remains subject to TapTayo review.</p></div>` : ""}
           <h4 style="margin:16px 0 6px">💸 Staff collect &amp; remit</h4>
           <label class="check"><input type="checkbox" name="slRemit" ${sl.remit?.enabled ? "checked" : ""}/> On-call staff take the client's payment themselves (cash or their GCash) and remit to you online</label>
           <p class="small muted" style="margin:2px 0 0">Each staff sees their balance: collected − commission / basic / allowance. They send a remittance (GCash, bank or cash) with the reference no., you confirm it in Reports. Great when you're away from the shop.</p>
