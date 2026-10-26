@@ -88,8 +88,7 @@ onAuthStateChanged(auth, async (user) => {
   }
   if (claims.storeId && claims.role === "owner" && !claims.orgId) { try { const r = await call("ensureOrg"); if (r.refresh) { await user.getIdToken(true); claims = (await user.getIdTokenResult(true)).claims; } } catch {} }
   hide("loading");
-  if (claims.storeId && location.hash === "#addbusiness" && claims.role === "owner") { addingBusiness = true; initWizard(); show("wizard"); if ($("wizSwitch")) { $("wizSwitch").textContent = "← Back to my business"; $("wizSwitch").onclick = (e) => { e.preventDefault(); location.hash = "#overview"; location.reload(); }; } }
-  else if (claims.storeId) await loadDashboard();
+  if (claims.storeId) { location.hash = "#overview"; await loadDashboard(); }
   else { initWizard(); show("wizard"); }
 });
 
