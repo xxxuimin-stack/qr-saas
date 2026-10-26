@@ -16,8 +16,8 @@ function walk(node) {
 }
 /** call once the store is known; no-op for other business types */
 export function applyWording(store) {
-  if (on || !MAPS[store?.businessType]) return;
-  on = true; CUR = MAPS[store.businessType]; walk(document.body);
+  const custom = String(store?.labels?.staff || "").trim().slice(0, 24); if (custom) { const W = custom.charAt(0).toUpperCase() + custom.slice(1); const plural = /s$/i.test(custom) ? custom : custom + "s"; const Plural = plural.charAt(0).toUpperCase() + plural.slice(1); CUR = [[/\bStylists\b/g, Plural], [/\bstylists\b/g, plural], [/\bStylist\b/g, W], [/\bstylist\b/g, custom], [/\bTherapists\b/g, Plural], [/\btherapists\b/g, plural], [/\bTherapist\b/g, W], [/\btherapist\b/g, custom]]; } else if (!MAPS[store?.businessType]) return; if (on) return;
+  on = true; if (!custom) CUR = MAPS[store.businessType]; walk(document.body);
   const t0 = document.title; if (/salon/i.test(t0)) document.title = fix(t0);
   obs = new MutationObserver((ms) => { for (const m of ms) { if (m.type === "characterData") walk(m.target); else m.addedNodes.forEach(walk); } });
   obs.observe(document.body, { childList: true, subtree: true, characterData: true });
