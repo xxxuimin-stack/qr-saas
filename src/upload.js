@@ -107,26 +107,35 @@ export function imageField({ label, current, onUpload, hint = "JPG or PNG, up to
   const el = document.createElement("div");
   el.className = "imgfield";
   el.innerHTML = `<label>${label}</label>
-    <div class="row" style="align-items:flex-start">
-      <div class="imgprev ${shape}">${current ? `<img src="${current}" alt=""/>` : `<span class="muted small">No image</span>`}</div>
-      <div class="stack" style="flex:1">
-        <input type="file" accept="image/*" />
+    <div class="ph-edit">
+      <div class="ph-stage ${shape}">${current ? `<img src="${current}" alt=""/>` : `<span class="ph-empty">No photo yet</span>`}</div>
+      <div class="ph-side">
+        <button type="button" class="btn" data-pick>${current ? "Replace photo" : "Add photo"}</button>
+        <input type="file" accept="image/*" hidden />
         <p class="small muted" style="margin:0">${hint}</p>
         <div class="imgstatus small"></div>
       </div>
     </div>`;
   const input = el.querySelector("input");
   const status = el.querySelector(".imgstatus");
+  const stage = el.querySelector(".ph-stage");
+  el.querySelector("[data-pick]").onclick = () => input.click();
   input.onchange = async () => {
     const f = input.files[0];
     if (!f) return;
+    stage.classList.add("busy");
+    stage.insertAdjacentHTML("beforeend", `<span class="ph-load"><i></i>Uploading</span>`);
     status.textContent = "Uploading…";
     try {
       const url = await onUpload(f);
-      el.querySelector(".imgprev").innerHTML = `<img src="${url}" alt=""/>`;
-      status.textContent = "Uploaded ✓";
+      stage.classList.remove("busy");
+      stage.innerHTML = `<img src="${url}" alt=""/>`;
+      status.textContent = "Photo ready";
+      el.querySelector("[data-pick]").textContent = "Replace photo";
     } catch (e) {
-      status.textContent = "Error: " + (e.message || e.code);
+      stage.classList.remove("busy");
+      stage.querySelector(".ph-load")?.remove();
+      status.textContent = e.message || "Upload failed";
     }
     input.value = "";
   };

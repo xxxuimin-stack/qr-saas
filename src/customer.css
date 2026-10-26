@@ -1065,8 +1065,12 @@ html.dsk .c-catbody.lay-pin { column-count: 3; }
 .c-swipe { position: relative; }
 .c-swipe-in { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .c-swipe-in::-webkit-scrollbar { display: none; }
-.c-swipe-in img { flex: 0 0 100%; width: 100%; scroll-snap-align: center; object-fit: cover; }
+.c-swipe-in img { flex: 0 0 100%; width: 100%; scroll-snap-align: center; object-fit: cover; pointer-events: none; user-select: none; }
 .c-pinph .c-swipe-in { align-items: flex-start; }
+.c-swprev, .c-swnext { position: absolute; top: 46%; transform: translateY(-50%); z-index: 3; width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(255,255,255,.94); color: #111; font: 600 22px/1 Poppins, system-ui; box-shadow: 0 6px 16px rgba(0,0,0,.18); cursor: pointer; display: grid; place-items: center; }
+.c-swprev { left: 8px; } .c-swnext { right: 8px; }
+.c-swprev[hidden], .c-swnext[hidden] { display: none; }
+.c-swprev:active, .c-swnext:active { transform: translateY(-50%) scale(.96); }
 
 .c-dots { position: absolute; left: 0; right: 0; bottom: 8px; display: flex; justify-content: center; gap: 4px; pointer-events: none; z-index: 1; }
 .c-dots i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255,255,255,.55); box-shadow: 0 0 2px rgba(0,0,0,.3); }

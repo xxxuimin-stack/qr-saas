@@ -224,17 +224,18 @@ export function renderMenuPage(root, ctx) {
         ${mode === "table" ? `<div class="span2"><label>🍽 Plating checklist for Dispatch <span class="muted small">(one per line — kitchen items only)</span></label><textarea name="plating" rows="4" placeholder="1 cup rice&#10;Fried egg&#10;Side: tomato &amp; cucumber&#10;Garnish: spring onion">${esc((it?.plating || []).join("\n"))}</textarea>
           <div class="row" style="gap:8px;margin-top:6px;align-items:center"><span class="small muted">Plating photo (optional)</span><input type="file" accept="image/*" data-pfile style="max-width:220px"/><input name="platingPhoto" value="${esc(it?.platingPhoto || "")}" placeholder="…or image URL" style="flex:1"/></div></div>` : ""}
         <div class="span2"><label>Description (optional)</label><input name="description" value="${esc(it?.description || "")}" placeholder="Short description" /></div>
-        <div class="span2"><label>Photo (optional)</label>
-          <div class="row" style="align-items:flex-start">
-            <div class="imgprev" data-prev>${it?.imageUrl ? `<img src="${esc(it.imageUrl)}" alt=""/>` : `<span class="muted small">No photo</span>`}</div>
-            <div class="stack" style="flex:1">
-              <input type="file" accept="image/*" data-file />
-              <input name="imageUrl" value="${esc(it?.imageUrl || "")}" placeholder="…or paste an image URL" />
-              <div class="small muted" data-upstatus></div>
+        <div class="span2 ph-block"><label>Photos</label>
+          <div class="ph-edit">
+            <div class="ph-stage" data-prev>${it?.imageUrl ? `<img src="${esc(it.imageUrl)}" alt=""/>` : `<span class="ph-empty">No photo yet</span>`}</div>
+            <div class="ph-side">
+              <button class="btn" type="button" data-pick>Add photo</button>
+              <input type="file" accept="image/*" data-file hidden />
+              <input class="ph-url" name="imageUrl" value="${esc(it?.imageUrl || "")}" placeholder="or paste an image link" />
+              <div class="small" data-upstatus>Customers swipe these. They can't tap a photo to enlarge it.</div>
             </div>
           </div>
-          <label style="margin-top:10px">More photos <span class="small muted">(up to 4 — customers swipe through them)</span></label>
-          <div class="row wrap" data-more style="gap:8px;align-items:center"></div></div>
+          <div class="ph-strip" data-more></div>
+        </div>
         <div class="span2">
           <div class="row between"><label style="margin:0">Options / add-ons</label><button class="btn ghost sm" type="button" data-addopt>+ Option group</button></div>
           <p class="small muted">e.g. Size (16oz +0, 22oz +20), Add-ons (Extra shot +30, Oat milk +25)</p>
@@ -289,28 +290,30 @@ export function renderMenuPage(root, ctx) {
     let morePics = [...(it?.photos || [])].slice(0, 4);
     const drawMore = () => {
       const box = body.querySelector("[data-more]");
-      box.innerHTML = morePics.map((u, i) => `<span style="position:relative"><img src="${esc(u)}" alt="" style="width:64px;height:64px;object-fit:cover;border-radius:10px;display:block"/><button type="button" class="btn ghost sm" data-rmpic="${i}" style="position:absolute;top:-8px;right:-8px;padding:1px 6px">✕</button></span>`).join("")
-        + (morePics.length < 4 ? `<label class="btn ghost sm" style="cursor:pointer">📷 Add<input type="file" accept="image/*" multiple data-morefile hidden/></label>` : "") + `<span class="small muted" data-morest></span>`;
+      box.innerHTML = morePics.map((u, i) => `<span class="ph-tile"><img src="${esc(u)}" alt=""/><button type="button" class="ph-x" data-rmpic="${i}" aria-label="Remove">×</button></span>`).join("")
+        + (morePics.length < 4 ? `<label class="ph-add">+<small>Add</small><input type="file" accept="image/*" multiple data-morefile hidden/></label>` : "");
       box.querySelectorAll("[data-rmpic]").forEach((b) => (b.onclick = () => { morePics.splice(Number(b.dataset.rmpic), 1); drawMore(); }));
       box.querySelector("[data-morefile]")?.addEventListener("change", async (e) => {
-        const files = [...e.target.files].slice(0, 4 - morePics.length); const st = box.querySelector("[data-morest]");
-        photoJob = (async () => { for (const f of files) { st.textContent = "⏳ Uploading…"; try { const { url } = await uploadItemImage(storeId, `${it?.id || "new"}_p${Date.now()}`, f); morePics.push(url); } catch (x) { toast(x.message || "Upload failed", "error"); } } drawMore(); })();
+        const files = [...e.target.files].slice(0, 4 - morePics.length);
+        const add = box.querySelector(".ph-add");
+        photoJob = (async () => { for (const f of files) { if (add) { add.classList.add("busy"); add.querySelector("small").textContent = "…"; } try { const { url } = await uploadItemImage(storeId, `${it?.id || "new"}_p${Date.now()}`, f); morePics.push(url); } catch (x) { toast(x.message || "Upload failed", "error"); } drawMore(); } })();
         await photoJob; photoJob = null;
       });
     };
     drawMore();
+    body.querySelector("[data-pick]").onclick = () => body.querySelector("[data-file]").click();
     body.querySelector("[data-file]").onchange = async (e) => {
       const f = e.target.files[0]; if (!f) return;
-      const st = body.querySelector("[data-upstatus]"); st.className = "upstatus busy"; st.textContent = "⏳ Uploading photo… don't close this yet";
-      const prev = body.querySelector("[data-prev]"); prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" style="opacity:.45"/><span class="upbadge">Uploading…</span>`;
+      const st = body.querySelector("[data-upstatus]"); st.className = "small upstatus busy"; st.textContent = "Uploading…";
+      const prev = body.querySelector("[data-prev]"); prev.classList.add("busy"); prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt=""/><span class="ph-load"><i></i>Uploading</span>`;
       photoJob = (async () => {
         try {
           const id = it?.id || ("new-" + Date.now());
           const { url, thumbUrl } = await uploadItemImage(storeId, id, f);
           body.querySelector("[name=imageUrl]").value = url; body.dataset.thumb = thumbUrl;
-          prev.innerHTML = `<img src="${url}" alt=""/>`;
-          st.className = "upstatus ok"; st.textContent = "✓ Photo uploaded";
-        } catch (err) { st.className = "upstatus err"; st.textContent = "⚠️ Upload failed: " + (err.message || err.code); prev.innerHTML = `<span class="muted small">No photo</span>`; }
+          prev.classList.remove("busy"); prev.innerHTML = `<img src="${url}" alt=""/>`;
+          st.className = "small upstatus ok"; st.textContent = "Photo ready";
+        } catch (err) { prev.classList.remove("busy"); prev.innerHTML = `<span class="ph-empty">No photo yet</span>`; st.className = "small upstatus err"; st.textContent = err.message || "Upload failed"; }
       })();
       await photoJob; photoJob = null;
     };

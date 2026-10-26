@@ -462,14 +462,32 @@ const layoutOf = () => { const l = store.theme?.layout; if (l === "rows") return
 const photosOf = (it) => [it.imageUrl, ...(it.photos || [])].filter(Boolean).slice(0, 5);
 /** swipeable photos with dots (native scroll-snap — works with a finger, trackpad or the arrows) */
 function swipeHTML(list, cls = "") {
-  if (list.length < 2) return list[0] ? `<img class="${cls}" src="${esc(list[0])}" alt="" loading="lazy" decoding="async"/>` : "";
-  return `<div class="c-swipe ${cls}"><div class="c-swipe-in">${list.map((u, i) => `<img src="${esc(u)}" alt="" ${i ? 'loading="lazy"' : ""} decoding="async"/>`).join("")}</div><div class="c-dots">${list.map((_, i) => `<i class="${i ? "" : "on"}"></i>`).join("")}</div><span class="c-swn">1/${list.length}</span></div>`;
+  if (!list.length) return "";
+  const imgs = list.map((u, i) => `<img src="${esc(u)}" alt="" ${i ? 'loading="lazy"' : ""} decoding="async" draggable="false"/>`).join("");
+  if (list.length < 2) return `<div class="c-swipe ${cls} one"><div class="c-swipe-in">${imgs}</div></div>`;
+  return `<div class="c-swipe ${cls}"><button type="button" class="c-swprev" aria-label="Previous" hidden>‹</button><div class="c-swipe-in">${imgs}</div><button type="button" class="c-swnext" aria-label="Next">›</button><div class="c-dots">${list.map((_, i) => `<i class="${i ? "" : "on"}"></i>`).join("")}</div><span class="c-swn">1/${list.length}</span></div>`;
 }
 function wireSwipes(root) {
-  root.querySelectorAll(".c-swipe-in:not([data-w])").forEach((el) => {
-    el.setAttribute("data-w", ""); const dots = el.parentElement.querySelectorAll(".c-dots i"), n = el.parentElement.querySelector(".c-swn");
-    el.addEventListener("scroll", () => { const i = Math.round(el.scrollLeft / el.clientWidth); dots.forEach((d, k) => d.classList.toggle("on", k === i)); if (n) n.textContent = `${i + 1}/${dots.length}`; }, { passive: true });
-    el.addEventListener("click", (e) => { if (el._dragged) { e.stopPropagation(); e.preventDefault(); } }, true);
+  root.querySelectorAll(".c-swipe:not([data-w])").forEach((box) => {
+    box.setAttribute("data-w", "");
+    const el = box.querySelector(".c-swipe-in");
+    const dots = box.querySelectorAll(".c-dots i");
+    const n = box.querySelector(".c-swn");
+    const prev = box.querySelector(".c-swprev");
+    const next = box.querySelector(".c-swnext");
+    const at = () => Math.round(el.scrollLeft / Math.max(1, el.clientWidth));
+    const sync = () => {
+      const i = at();
+      dots.forEach((d, k) => d.classList.toggle("on", k === i));
+      if (n) n.textContent = `${i + 1}/${dots.length}`;
+      if (prev) prev.hidden = i <= 0;
+      if (next) next.hidden = i >= dots.length - 1;
+    };
+    const go = (i) => el.scrollTo({ left: Math.max(0, i) * el.clientWidth, behavior: "smooth" });
+    el.addEventListener("scroll", sync, { passive: true });
+    prev?.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); go(at() - 1); });
+    next?.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); go(at() + 1); });
+    box.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); });
   });
 }
 function sizePill(it) {
@@ -660,6 +678,7 @@ function renderMenu(keepScroll = false) {
 function openItemView(it, why) {
   const body = html(`<div>${photosOf(it).length ? swipeHTML(photosOf(it), "hero") : ""}${it.description ? `<p class="desc">${esc(it.description)}</p>` : ""}<div class="price-big">${it.unit === "estimate" ? "Quote after inspection" : money(it.price)}${it.durationMinutes && store.mode === "salon" ? ` <span class="muted small">· ~${it.durationMinutes} min</span>` : ""}</div>${why ? `<div class="c-alert warn" style="margin-top:12px">${esc(why)}</div>` : ""}</div>`);
   openSheet(it.name, body, html(`<div></div>`));
+  wireSwipes(body);
 }
 let imgCount = 0;
 /** Pinterest tile: photo first (natural height → staggered columns), price on the photo, swipe for more photos */
@@ -696,6 +715,7 @@ function itemRow(it, closedMsg, noService) {
   if (im) { const done = () => im.classList.add("ok"); im.addEventListener("load", done); im.addEventListener("error", done); if (im.complete) done(); setTimeout(done, 4000); }
   const addBtn = card.querySelector(".c-add");
   if (addBtn) addBtn.onclick = (e) => { e.stopPropagation(); quickAdd(it); };
+  card.querySelector(".img img")?.addEventListener("click", (e) => { e.preventDefault(); e.stopPropagation(); });
   if (store.mode === "salon") {
     if (it.available) {
       const pill = html(`<button class="c-bookpill" type="button">Book ›</button>`);
@@ -729,6 +749,7 @@ function openItem(it) {
     <div data-opts></div>
     <label>Note (optional)</label><input data-note placeholder="e.g. less ice, no onions" maxlength="120"/>
   </div>`);
+  wireSwipes(body);
   const opts = body.querySelector("[data-opts]");
   for (const g of it.options || []) {
     picked[g.name] = [];
