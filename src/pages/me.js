@@ -40,7 +40,7 @@ export function renderMePage(root, ctx) {
     ["shop", "Shop info", "#tools/shop:info"], ["hours", "Hours", "#tools/shop:hours"], ["pay", "Payments", "#tools/selling:payments"],
     mode === "stay" ? ["rooms", "Rooms", "#rooms"] : ["qr", fl ? "Link & QR" : "QR & link", "#tables"],
     ["staff", "Staff", "#staff"], mode === "stay" ? ["promo", "Stay rules", "#tools/booking:stay"] : ["promo", "Promos", "#promos"],
-    fl ? ["collab", "Projects", "#projects", true] : ["collab", "Collab", "#creators", true], ["bell", "Alerts", "#tools/alerts:telegram"],
+    ["bell", "Alerts", "#tools/alerts:telegram"],
   ];
   root.innerHTML = `<div class="me-wrap">
     <div class="me-head"><div class="me-row"><div class="me-ava">${store.logoUrl && !/icon-512/.test(store.logoUrl) ? `<img src="${esc(store.logoUrl)}" alt=""/>` : esc((store.name || "?").split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase())}</div>
