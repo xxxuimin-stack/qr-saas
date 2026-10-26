@@ -356,7 +356,7 @@ function startCountdown() {
   }), 1000);
 }
 const ESC_LABEL = { unassigned: "needs a rider", assigned: "assigned", to_client: "on the way to the client", dropped: "dropped off", pickup_requested: "WAITING FOR PICKUP", to_pickup: "on the way to pick up", picked_up: "picked up", back: "back at the shop", released: "staff went home" };
-const staffWord = () => ctx.store.businessType === "spa" ? "therapist" : "stylist";
+const staffWord = () => ctx.store.settings?.salon?.staffWord || (ctx.store.businessType === "spa" ? "therapist" : "stylist");
 const rooms = () => (ctx.store.settings?.salon?.rooms || []).filter((r) => r && r.id && r.active !== false);
 function pickList(title, opts, onPick) {
   const el = html(`<div style="position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:80;display:grid;place-items:center;padding:16px"><div class="k-card" style="max-width:380px;width:100%;border-top-color:var(--prep)"><div class="top"><b>${esc(title)}</b><button class="k-btn sm" data-x>✕</button></div><div class="stack" style="gap:6px;margin-top:8px" data-l></div></div></div>`);
