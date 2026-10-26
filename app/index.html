@@ -51,21 +51,30 @@
       </section>
 
       <section data-step="3" class="hidden">
-        <h2>Tell us about your business</h2>
-        <label for="bizName">Business name</label>
-        <input id="bizName" type="text" maxlength="60" placeholder="e.g. Kapehan ni Juan" />
-        <p class="small muted" style="margin-top:6px">Customer link: <span class="code" id="slugPreview">/m/…</span></p>
-        <label for="bizPhone">Mobile number <span class="muted small">(we text a code to confirm it)</span></label>
-        <input id="bizPhone" type="tel" placeholder="0917 123 4567" />
-        <label for="bizAddress">Address (optional)</label>
-        <input id="bizAddress" type="text" placeholder="Street, City" />
-        <div id="ownerBox" class="hidden" style="margin-top:14px;padding:14px;border:2px dashed var(--b-line, #eadfd2);border-radius:16px">
-          <b>Your staff profile</b>
-          <p class="small muted" style="margin:4px 0 8px">You'll use this PIN on the counter and staff screens (for management and to record who did what).</p>
-          <label for="ownerName">Your name (shown to customers)</label>
-          <input id="ownerName" type="text" maxlength="40" placeholder="e.g. Mia" />
-          <label for="ownerPin" style="margin-top:8px">Your PIN (4–6 digits)</label>
-          <input id="ownerPin" type="password" inputmode="numeric" maxlength="6" placeholder="••••" autocomplete="new-password" />
+        <h2 id="qTitle">What's the business name?</h2>
+        <div class="wiz-q" data-q="name">
+          <label for="bizName">Business name</label>
+          <input id="bizName" type="text" maxlength="60" placeholder="e.g. Kapehan ni Juan" />
+          <p class="small muted" style="margin-top:6px">Customer link: <span class="code" id="slugPreview">/m/…</span></p>
+        </div>
+        <div class="wiz-q hidden" data-q="phone">
+          <label for="bizPhone">Mobile number</label>
+          <input id="bizPhone" type="tel" placeholder="0917 123 4567" />
+          <p class="small muted">We'll text a code to confirm it.</p>
+        </div>
+        <div class="wiz-q hidden" data-q="address">
+          <label for="bizAddress">Address <span class="muted small">(optional — you can skip)</span></label>
+          <input id="bizAddress" type="text" placeholder="Street, City" />
+        </div>
+        <div class="wiz-q hidden" data-q="you">
+          <div id="ownerBox">
+            <b>Your staff profile</b>
+            <p class="small muted" style="margin:4px 0 8px">You'll use this PIN on the counter and staff screens.</p>
+            <label for="ownerName">Your name (shown to customers)</label>
+            <input id="ownerName" type="text" maxlength="40" placeholder="e.g. Mia" />
+            <label for="ownerPin" style="margin-top:8px">Your PIN (4–6 digits)</label>
+            <input id="ownerPin" type="password" inputmode="numeric" maxlength="6" placeholder="••••" autocomplete="new-password" />
+          </div>
         </div>
         <div class="row between" style="margin-top:18px">
           <button id="back2" class="btn ghost" type="button">Back</button>

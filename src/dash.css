@@ -224,7 +224,7 @@ body.dash .bnav { display: none; }
 @media (max-width: 900px) {
   body.dash .shell { padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
   body.dash .bnav { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; position: fixed; left: 0; right: 0; bottom: 0; z-index: 35; background: #fff; border-top: 1px solid var(--edge); padding: 8px 4px calc(8px + env(safe-area-inset-bottom)); }
-  body.dash .bnav a, body.dash .bnav button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; font: 500 11px/1.1 Poppins, system-ui, sans-serif; color: #8B9099; text-decoration: none; background: none; border: 0; padding: 4px 0; cursor: pointer; min-height: 48px; justify-content: center; }
+  body.dash .bnav a, body.dash .bnav button { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; font: 500 11px/1.1 var(--tt-font), system-ui, sans-serif; color: #8B9099; text-decoration: none; background: none; border: 0; padding: 4px 0; cursor: pointer; min-height: 48px; justify-content: center; }
   body.dash .bnav svg { width: 24px; height: 24px; }
   body.dash .bnav .on { color: var(--brand); font-weight: 600; }
   body.dash .bn-badge { position: absolute; top: 0; left: calc(50% + 4px); min-width: 18px; height: 18px; border-radius: 9px; background: var(--brand); color: #fff; font: 700 10px/18px Poppins, sans-serif; font-style: normal; text-align: center; padding: 0 5px; border: 2px solid #fff; }

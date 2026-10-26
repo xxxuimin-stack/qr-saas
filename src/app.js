@@ -232,10 +232,10 @@ if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wi
     drawPlace();
   };
   const toDetails = () => {
-    $("ownerBox").classList.toggle("hidden", !needsOwnerProfile());
     const ob = $("ownerBox"); const t = ob?.querySelector("b"), d = ob?.querySelector("p");
     if (t) t.textContent = isFreelance() ? "Your profile" : "Your staff profile";
-    if (d) d.textContent = isFreelance() ? "Your name is shown to clients. The PIN opens your bookings screen on any phone or tablet." : "You'll use this PIN on the counter and staff screens (for management and to record who did what).";
+    if (d) d.textContent = isFreelance() ? "Your name is shown to clients. The PIN opens your bookings screen." : "You'll use this PIN on the counter and staff screens.";
+    ask = 0; showAsk();
     goStep(3);
   };
   const isFreelance = () => wiz.businessType === "freelance";
@@ -246,10 +246,27 @@ if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wi
   $("ownerWorks").onchange = (e) => (wiz.ownerWorks = e.target.checked);
   $("back2s").onclick = () => goStep(1);
   $("next2s").onclick = toDetails;
-  $("back2").onclick = () => (SETUPS[setupMode()] && !isFreelance() ? goStep(2) : goStep(1));
+  $("back2").onclick = () => { if (ask > 0) { ask -= 1; showAsk(); wizMsg(""); return; } SETUPS[setupMode()] && !isFreelance() ? goStep(2) : goStep(1); };
   $("back3").onclick = () => goStep(3);
   $("bizName").oninput = (e) => ($("slugPreview").textContent = "/m/" + (slugify(e.target.value) || "…"));
+  let ask = 0;
+  const askList = () => [...document.querySelectorAll("#wizard [data-q]")].filter((el) => el.dataset.q !== "you" || needsOwnerProfile());
+  const askTitle = { name: "What's the business name?", phone: "What's your mobile number?", address: "Where is the shop?", you: "Your name and PIN" };
+  function showAsk() {
+    const list = askList();
+    ask = Math.max(0, Math.min(ask, list.length - 1));
+    document.querySelectorAll("#wizard [data-q]").forEach((el) => el.classList.add("hidden"));
+    list[ask]?.classList.remove("hidden");
+    const h = $("qTitle"); if (h) h.textContent = askTitle[list[ask]?.dataset.q] || "Tell us about your business";
+    const btn = $("next2"); if (btn) btn.textContent = ask === list.length - 1 ? "Continue" : "Next";
+    list[ask]?.querySelector("input")?.focus();
+  }
   $("next2").onclick = () => {
+    const list = askList();
+    const key = list[ask]?.dataset.q;
+    if (key === "name" && $("bizName").value.trim().length < 2) return wizMsg("Enter your business name (min 2 characters).");
+    if (key === "phone" && $("bizPhone").value.trim().length < 10) return wizMsg("Enter your mobile number.");
+    if (ask < list.length - 1) { ask += 1; showAsk(); wizMsg(""); return; }
     wiz.name = $("bizName").value.trim();
     wiz.phone = $("bizPhone").value.trim();
     wiz.address = $("bizAddress").value.trim();
