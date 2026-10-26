@@ -38,8 +38,26 @@ export const PRESETS = {
     theme: { preset: "spa", primary: "#7B2D8E" },
     blurb: "Therapists, treatment rooms (auto-assigned), couple massage, home service with rider drop-off & pick-up",
   },
+  makeup: {
+    title: "Makeup",
+    icon: "💄",
+    mode: "salon",
+    labels: { items: "Services", unit: "Chair", order: "Booking", staff: "Artist" },
+    categories: ["Makeup"],
+    theme: { preset: "pink", primary: "#FF3D7F" },
+    blurb: "You add the services: glam, bridal, brows, lashes.",
+  },
+  tattoo: {
+    title: "Tattoo",
+    icon: "🖋️",
+    mode: "salon",
+    labels: { items: "Services", unit: "Chair", order: "Booking", staff: "Artist" },
+    categories: ["Tattoo"],
+    theme: { preset: "pink", primary: "#111111" },
+    blurb: "Sessions and bookings. You name the services.",
+  },
   freelance: {
-    hidden: true
+    hidden: true,
     title: "Freelancer & Creator",
     icon: "🎨",
     mode: "salon",
@@ -59,7 +77,7 @@ export const PRESETS = {
     blurb: "Hair, extensions, lashes, brows, nails, barber — appointments per stylist, walk-in waitlist",
   },
   products: {
-    hidden: true
+    hidden: true,
     title: "Products / Online seller",
     icon: "🛍️",
     mode: "table",

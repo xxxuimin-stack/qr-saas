@@ -25,8 +25,20 @@ const PRESETS = {
     categories: ["Massage", "Foot spa", "Body scrub", "Facial", "Add-ons"],
     theme: { preset: "spa", primary: "#7B2D8E" },
   },
+  makeup: {
+    mode: "salon",
+    labels: { items: "Services", unit: "Chair", order: "Booking", staff: "Artist" },
+    categories: ["Makeup"],
+    theme: { preset: "pink", primary: "#FF3D7F" },
+  },
+  tattoo: {
+    mode: "salon",
+    labels: { items: "Services", unit: "Chair", order: "Booking", staff: "Artist" },
+    categories: ["Tattoo"],
+    theme: { preset: "pink", primary: "#111111" },
+  },
   freelance: {
-    hidden: true
+    hidden: true,
     mode: "salon",
     labels: { items: "Services", unit: "Booking", order: "Booking", staff: "Team member" },
     categories: ["Shoots & sessions", "Whole-day events", "Content & collabs", "Add-ons"],
@@ -40,7 +52,7 @@ const PRESETS = {
     theme: { primary: "#2f6fb2" },
   },
   products: {
-    hidden: true
+    hidden: true,
     mode: "table",
     labels: { items: "Products", unit: "Order", order: "Order" },
     categories: ["Bestsellers", "New arrivals", "Bundles"],

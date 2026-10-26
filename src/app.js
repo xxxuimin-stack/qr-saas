@@ -120,7 +120,7 @@ const SETUPS = {
 };
 const setupMode = () => PRESETS[wiz.businessType]?.mode;
 // Food business: more than one way to sell (shop on weekdays, night market on weekends, pre-order bilao…)
-const FOOD = [["dinein", "🍽", "Dine-in shop", "Café, karinderya, resto — table QR, kitchen & counter screens"], ["takeout", "🥤", "Take-out counter / kiosk", "Milk tea, shawarma stand — order numbers and ready alerts"], ["popup", "🌙", "Pop-up / night market / bazaar", "Pay first, waiting timer, “come back when it's ready”"], ["home", "🏠", "Home-based", "Lutong-bahay, baked goods — pickup and delivery"], ["preorder", "🎂", "Pre-orders / catering", "Bilao, cakes, party trays — pickup date and a daily limit"], ["online", "🛵", "Online only / cloud kitchen", "Delivery and pickup, no tables"]];
+const FOOD = [["dinein", "🍽", "Dine-in shop", "Café, karinderya, resto — table QR, kitchen & counter screens"], ["takeout", "🥤", "Take-out counter / kiosk", "Milk tea, shawarma stand — order numbers and ready alerts"], ["popup", "🌙", "Pop-up / night market / bazaar", "Pay first, waiting timer, “come back when it's ready”"], ["home", "🏠", "Home-based", "Lutong-bahay, baked goods — pickup and delivery"], ["preorder", "🎂", "Bilao / pre-order", "Bilao, cakes, party trays — pickup date and a daily limit"], ["online", "🛵", "Online only / cloud kitchen", "Delivery and pickup, no tables"]];
 const isFood = () => wiz.businessType === "cafe";
 const foodKind = () => (wiz.channels?.has("dinein") ? "shop" : "home");
 const foodPayDefault = () => (wiz.channels?.size === 1 && wiz.channels.has("dinein") ? "after" : "first");
@@ -173,7 +173,7 @@ if (sellBox && !sellBox.childElementCount) {
 }
   wrap.innerHTML = "";
   for (const [key, p] of Object.entries(PRESETS).sort((a, b) => !!a[1].comingSoon - !!b[1].comingSoon)) {
-    const sellOf = { cafe: "food", restaurant: "food", salon: "service", spa: "service", clinic: "service", laundry: "service", stay: "stay" };
+    const sellOf = { cafe: "food", restaurant: "food", salon: "service", spa: "service", makeup: "service", tattoo: "service", clinic: "service", laundry: "service", stay: "stay" };
 if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wiz.sell) continue;
     const btn = document.createElement("button");
     btn.type = "button";
