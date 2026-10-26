@@ -417,7 +417,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
               <label class="check"><input type="checkbox" name="wvTable" ${wv.table ? "checked" : ""}/> Table</label>
               <label class="check"><input type="checkbox" name="wvEvent" ${wv.event !== false ? "checked" : ""}/> Event</label>
               <label class="check"><input type="checkbox" name="wvVip" ${wv.vip !== false ? "checked" : ""}/> VIP</label></div>
-            <div class="form2"><div><label>ID photo</label><select name="wvId"><option value="off" ${(wv.idMode || "optional") === "off" ? "selected" : ""}>Don't ask</option><option value="optional" ${(wv.idMode || "optional") === "optional" ? "selected" : ""}>Optional</option><option value="required" ${wv.idMode === "required" ? "selected" : ""}>Required</option></select></div></div>
+            <input type="hidden" name="wvId" value="off"/>
             <label class="check"><input type="checkbox" name="wvBlock" ${wv.blockConfirm !== false ? "checked" : ""}/> Staff cannot Confirm until the waiver is signed</label>
           </div>
         </div>
@@ -957,7 +957,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
       if (v("cfLoy")) settings.loyalty = { enabled: v("cfLoy").checked, stamps: Math.max(2, Number(v("cfLoyN").value || 10)), minTotal: Math.max(0, Number(v("cfLoyMin").value || 0)), rewardValue: Math.max(0, Number(v("cfLoyVal").value || 0)), rewardText: v("cfLoyText").value.trim(), maxPerDay: Math.max(1, Number(v("cfLoyDay").value || 1)) };
       settings.reservations = { enabled: v("resvEnabled").checked, maxPax: Number(v("resvMaxPax").value || 12), leadTimeHours: Number(v("resvLeadHours").value || 0), requirePhone: true };
       settings.policies = { table: v("polTable").value.trim(), event: v("polEvent").value.trim(), vip: v("polVip").value.trim() };
-      settings.waiver = { text: v("wvText").value.trim(), table: v("wvTable").checked, event: v("wvEvent").checked, vip: v("wvVip").checked, idMode: v("wvId").value, blockConfirm: v("wvBlock").checked };
+      settings.waiver = { text: v("wvText").value.trim(), table: v("wvTable").checked, event: v("wvEvent").checked, vip: v("wvVip").checked, idMode: "off", blockConfirm: v("wvBlock").checked };
       settings.feedback = { enabled: v("fbEnabled").checked, display: v("fbDisplay").value, askPhoto: v("fbPhoto").checked };
       settings.incidents = { enabled: v("incEnabled").checked, requireProof: v("incProof").checked, who: v("incWho").value, maxVoucherCrew: Number(v("incMaxCrew").value || 0), maxCompsCrew: Number(v("incMaxComps")?.value ?? 3), crewCancelMax: Number(v("incCancelMax")?.value ?? 300) };
       settings.callStaff = {
