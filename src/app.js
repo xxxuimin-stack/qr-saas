@@ -153,9 +153,28 @@ function initWizard() {
   try { const sn = localStorage.getItem("taptayo:shopName"); if (sn && $("bizName") && !$("bizName").value) $("bizName").value = sn; } catch {}
   if ($("wizSwitch")) $("wizSwitch").onclick = async (e) => { e.preventDefault(); await signOut(auth); location.replace("/login/"); };
   const wrap = $("types");
+  const sellBox = $("sell");
+if (sellBox && !sellBox.childElementCount) {
+  [["food", "Food"], ["service", "Service"], ["stay", "Stay"]].forEach(([k, label]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "type";
+    b.innerHTML = `<div class="t">${label}</div>`;
+    b.onclick = () => {
+      wiz.sell = k;
+      wiz.businessType = null;
+      sellBox.querySelectorAll(".type").forEach((x) => x.classList.remove("active"));
+      b.classList.add("active");
+      $("next1").disabled = true;
+      initWizard();
+    };
+    sellBox.appendChild(b);
+  });
+}
   wrap.innerHTML = "";
   for (const [key, p] of Object.entries(PRESETS).sort((a, b) => !!a[1].comingSoon - !!b[1].comingSoon)) {
-    if (p.hidden) continue;
+    const sellOf = { cafe: "food", restaurant: "food", salon: "service", spa: "service", clinic: "service", laundry: "service", stay: "stay" };
+if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wiz.sell) continue;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "type";
