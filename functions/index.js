@@ -1763,6 +1763,15 @@ async function writeAppointment(storeId, ctx, { lines, total, minutes, cats }, {
   const confirmMins = Number(cfg.confirmMinutes) || 60;
   const deadline = status === "unconfirmed" ? Math.min(startAt.getTime(), Date.now() + confirmMins * 60000) : null;
   const test = testOn(ctx.store.settings);
+  const endMs = startAt.getTime() + (Number(minutes) || 30) * 60000;
+  const lockRef = db.doc(`stores/${storeId}/slotLocks/${`${provider?.id || providerId || "open"}_${startAt.getTime()}`}`);
+  let slotTaken = false;
+  await db.runTransaction(async (tx) => {
+    const cur = await tx.get(lockRef);
+    slotTaken = cur.exists && Number(cur.data()?.until || 0) > startAt.getTime();
+    if (!slotTaken) tx.set(lockRef, { until: endMs, at: Date.now() });
+  });
+  if (slotTaken) throw new HttpsError("failed-precondition", "That time was just taken. Please pick another slot.");
   await ref.set({
     ...(test ? { test: true } : {}), ...(ctx.store?.contact?.messenger ? { shopMessenger: ctx.store.contact.messenger } : {}),
     code: test ? "T-" + apptCode().slice(2) : apptCode(), status, customer, customerUid: uid || null, customerKey: phoneKey.length >= 7 ? phoneKey : null,
@@ -4207,6 +4216,7 @@ exports.staffPlaceOrder = onCall(async (req) => {
   const { token } = requireAuth(req);
   const storeId = token.storeId;
   if (!storeId) throw new HttpsError("permission-denied", "No store.");
+  if (!["owner", "device", "manager", "crew", "cashier"].includes(token.role)) throw new HttpsError("permission-denied", "Not allowed.");
   const d = req.data || {};
   const serviceType = SERVICE_TYPES.includes(d.serviceType) ? d.serviceType : "take_out";
   const lines = Array.isArray(d.items) ? d.items : [];

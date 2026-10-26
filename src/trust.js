@@ -36,7 +36,7 @@ function card(store) {
   const intro = s.b.has("verified") ? `<p class="tb-intro">This shop has 50 finished orders or bookings from at least 10 customers.</p>` : `<p class="tb-intro">The gold badge turns on after 50 finished orders or bookings, from 10 different customers, once the shop is 7 days old.</p>`;
   return `<div class="tb-card" role="dialog" aria-label="Trust badges"><div class="tb-t">${top}</div>${intro}${s.rows.map(([k, l, d, c, i]) => { const on = s.b.has(k); return `<div class="tb-r${on ? "" : " off"}"><span class="tb-i" style="background:${on ? c : "#E7E5E4"}">${i}</span><span><b>${l}</b><br><small>${on ? d : "Not yet"}</small></span>${on ? `<em>✓</em>` : ""}</div>`; }).join("")}
     <div class="tb-prog"><i style="width:${Math.round((n / total) * 100)}%"></i></div><small class="tb-n">${n} of ${total}${s.complete ? " — all complete ✨" : ""}${s.t.tx >= 10 ? ` · ${Number(s.t.tx).toLocaleString("en-PH")} ${store.mode === "salon" || store.mode === "stay" ? "bookings" : "orders"} on TapTayo` : ""}</small>
-    <small class="tb-foot">${store.demo ? "🧪 Demo shop — these are sample badges to show how they look." : "Gold means real finished orders or bookings on TapTayo. It is not a government permit. See something wrong? Use “Report this shop”."}</small></div>`;
+    <small class="tb-foot">${store.demo ? "Demo shop — these are sample badges." : "Gold means real finished orders or bookings on TapTayo. See something wrong? Use Report this shop."}</small></div>`;
 }
 
 /** one listener for the whole page: tap a badge → fan out + explain card (tap outside / again / scroll to close) */

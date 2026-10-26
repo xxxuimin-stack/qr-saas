@@ -4,7 +4,7 @@ import { setShell } from "./appshell.js";
 import { auth, db, call } from "./firebase.js";
 import { deviceSignIn, showDeviceSetup, ownerOnStaffBanner } from "./device.js";
 import { onAuthStateChanged, signOut } from "firebase/auth";
-import { collection, doc, onSnapshot, query, orderBy, limit, updateDoc, serverTimestamp } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, orderBy, limit, where, updateDoc, serverTimestamp } from "firebase/firestore";
 import { FLOW } from "./pages/orders.js";
 import { stationsOf, stationPatch, dispatchOn, PACKED } from "./flow.js";
 import { PRESETS } from "./presets.js";
@@ -87,8 +87,12 @@ async function switchUser() {
 function boot() {
   app.innerHTML = `<div><div id="head"></div><div class="k-remind">📱 Keep this app open and don't lock the screen so you can hear new orders.</div><div id="paused" class="k-paused hidden">⏸ PAUSED — not accepting new orders</div><div id="board" class="k-board"></div></div>`;
   drawHead();
-  onSnapshot(query(collection(db, "stores", storeId, "orders"), orderBy("createdAt", "desc"), limit(150)), (snap) => {
-    orders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  let recentOrders = [], openOrders = [];
+  const applyOrders = (freshList) => {
+    const map = new Map();
+    for (const o of [...openOrders, ...recentOrders]) map.set(o.id, o);
+    orders = [...map.values()];
+    if (!freshList) return drawBoard();
     if (hub()) announce();
     else {
       const fresh = orders.filter((o) => o.status === flow[0][0] && forMe(o)).map((o) => o.id);
@@ -98,6 +102,14 @@ function boot() {
     seen = new Set(orders.map((o) => o.id));
     drawBoard();
     checkScheduledWindow();
+  };
+  onSnapshot(query(collection(db, "stores", storeId, "orders"), orderBy("createdAt", "desc"), limit(150)), (snap) => {
+    recentOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    applyOrders(true);
+  });
+  onSnapshot(query(collection(db, "stores", storeId, "orders"), where("status", "in", ["pending", "received", "preparing", "ready", "booked", "washing", "weighed", "picking_up"])), (snap) => {
+    openOrders = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    applyOrders(false);
   });
   onSnapshot(query(collection(db, "stores", storeId, "items"), orderBy("sortOrder")), (snap) => {
     items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));

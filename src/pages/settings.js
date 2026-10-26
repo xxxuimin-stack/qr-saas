@@ -123,7 +123,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
 
       <div class="tile" id="verifTile">
         <h3>Gold badge</h3>
-        <p class="small muted">The gold badge turns on by itself after 50 finished orders or bookings, from 10 different customers, once the shop is 7 days old. This app does not ask for a valid ID, DTI, BIR, or mayor's permit.</p>
+        <p class="small muted">The gold badge turns on by itself after 50 finished orders or bookings, from 10 different customers, once the shop is 7 days old.</p>
       </div>
 
       ${["salon", "stay", "table"].includes(mode) ? (() => { const bp = s.bookingPolicy || {}; const rp = bp.reschedule || {}; return `<div class="tile">
