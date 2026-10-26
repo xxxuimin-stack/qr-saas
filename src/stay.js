@@ -193,7 +193,7 @@ async function openBooking(room) {
     ${(cfg.amenities || []).length ? `<h3 class="s-step">Use of amenities</h3><div class="s-amen">${cfg.amenities.map((a) => `<div style="display:flex;align-items:center;gap:10px;margin:8px 0"><span style="flex:1;min-width:0"><b>${esc(a.name)}</b><br><span class="muted small">${a.unit === "free" ? "Free for guests" : `${money(a.price)} ${a.unit === "head" ? "per person" : a.unit === "hour" ? "per hour" : "per stay"}`}</span></span>${a.unit === "free" ? `<span class="pill ok">included</span>` : `<div class="c-qty" style="flex:none"><button type="button" data-mm="${a.id}">−</button><span data-mq="${a.id}">0</span><button type="button" data-mp="${a.id}">+</button></div>`}</div>`).join("")}</div>` : ""}
     ${(cfg.amenities || []).length ? "" : cfg.pool?.mode === "per_head" ? `<div class="row between" style="margin-top:8px"><span>🏊 Swimmers <span class="muted small">(${money(cfg.pool.price)} each)</span></span><div class="c-qty"><button type="button" data-sm>−</button><span data-s>0</span><button type="button" data-sp>+</button></div></div>` : cfg.pool?.mode === "included" ? `<div class="small muted" style="margin-top:6px">🏊 Pool use is included.</div>` : cfg.pool?.mode === "ask" ? `<div class="small muted" style="margin-top:6px">🏊 Want to swim? Add it in your request — the caretaker will tell you the price.</div>` : ""}
     ${(cfg.addons || []).length ? `<h3 class="s-step">Extras <span class="muted small">(optional)</span></h3><div class="s-addons">${cfg.addons.map((a) => `<div style="display:flex;align-items:center;gap:10px;margin:8px 0"><span style="flex:1;min-width:0"><b>${esc(a.name)}</b><br><span class="muted small">${money(a.price)}${a.per === "night" ? " / night" : ""}${a.approval ? " · if available" : ""}</span></span><div class="c-qty" style="flex:none"><button type="button" data-am="${a.id}">−</button><span data-aq="${a.id}">0</span><button type="button" data-ap="${a.id}">+</button></div></div>`).join("")}<p class="small muted">Items marked "if available" are confirmed by the caretaker. Kits are ready in the room when you arrive.</p></div>` : ""}
-    <div data-gids></div>
+    <div data-gids hidden></div>
     <h3 class="s-step">3 · Request <span class="muted small">(optional)</span></h3>
     <textarea data-req rows="2" maxlength="300" placeholder="e.g. early check-in, extra towels, swimming for 4"></textarea>
     <h3 class="s-step">4 · Your details</h3>
@@ -212,7 +212,7 @@ async function openBooking(room) {
     ${cfg.cleaning?.minutes ? `<p class="small muted" style="margin:4px 0 0">🧹 Rooms are cleaned between guests (about ${cfg.cleaning.minutes} min) — you'll see on your booking page when your room is ready.</p>` : ""}
     <label class="c-agree"><input type="checkbox" data-ok2/> <span>${store.bookingPolicy?.refundable !== false && (cfg.cancel?.fullDays || cfg.cancel?.partialDays) ? `<b>Refund policy:</b> ${cfg.cancel.fullDays ? `full refund if cancelled ${cfg.cancel.fullDays}+ days before` : ""}${cfg.cancel.fullDays && cfg.cancel.partialDays ? ", " : ""}${cfg.cancel.partialDays ? `${cfg.cancel.partialPct}% refund ${cfg.cancel.partialDays}+ days before` : ""}; no refund after that. I may request to reschedule.` : `<b>No refund.</b> I understand payments are non-refundable; I may request to reschedule.`}</span></label>
     ${cfg.waiverText ? `<div class="waiver-text" style="margin-top:10px">${esc(cfg.waiverText)}</div>` : ""}
-    <label>Valid ID photo ${cfg.requireId !== false ? "" : "(optional)"}</label><input type="file" accept="image/*" data-id/>${cfg.noIdOk !== false ? `<label class="c-agree"><input type="checkbox" data-noid/> I don't have a valid ID right now — the owner will decide</label>` : ""}<div class="small muted">🔒 Seen only by the staff · deleted automatically after 90 days · never shown publicly.</div>
+    <input type="checkbox" data-noid checked hidden/>
     <label>Signature</label><div data-sig></div>
     <div data-err></div></div>`);
   const foot = html(`<div class="c-ftrow"><button class="c-btn brand block" data-go><span>Book</span><b data-ft></b></button></div>`);
@@ -238,8 +238,7 @@ async function openBooking(room) {
     (cfg.addons || []).forEach((a) => { const q = body.querySelector(`[data-aq="${a.id}"]`); if (q) q.textContent = addq[a.id] || 0; });
     (cfg.amenities || []).forEach((a) => { const q = body.querySelector(`[data-mq="${a.id}"]`); if (q) q.textContent = amq[a.id] || 0; });
     const kq = body.querySelector("[data-k]"); if (kq) kq.textContent = kids;
-    const gw = body.querySelector("[data-gids]"); const need = cfg.guestIds ? guests - 1 : 0; void 0;
-    if (gw && gw.childElementCount !== need) { const keep = [...gw.querySelectorAll("input[type=file]")].map((i) => i.files?.[0]); gw.innerHTML = need ? `<h3 class="s-step">Valid ID of each guest</h3>${Array.from({ length: need }, (_, i) => `<label>Guest ${i + 2} — valid ID photo</label><input type="file" accept="image/*" data-gid="${i}"/>`).join("")}<div class="small muted">🔒 Seen only by the staff · deleted after 90 days.</div>` : ""; void keep; }
+    const gw = body.querySelector("[data-gids]"); if (gw) gw.innerHTML = "";
     const s = body.querySelector("[data-s]"); if (s) s.textContent = swimmers;
     body.querySelector("[data-pay]").innerHTML = t.tot ? `<div class="c-mini"><span>Downpayment (${cfg.downPct ?? 50}%)</span><b>${money(t.down)}</b></div><div class="c-mini small muted"><span>Balance at check-in</span><span>${money(t.tot - t.down)}</span></div>
       ${gcash.length ? `<div class="c-pick" data-pays style="margin-top:8px">${gcash.map((m) => `<button type="button" data-pm="${m.id}" class="${payId === m.id ? "on" : ""}"><b>${esc(m.name)}</b><span>${esc(m.number || "")}${m.accountName ? " · " + esc(m.accountName) : ""}</span></button>`).join("")}</div>
@@ -292,21 +291,18 @@ async function openBooking(room) {
     if (name.length < 2 || phone.replace(/\D/g, "").length < 7) return fail("Enter your full name and phone number.");
     if (gcash.length && t.down > 0 && gcash.some((m) => m.askRefBookings !== false) && (body.querySelector("[data-ref]")?.value.trim() || "").length < 4 && !body.querySelector("[data-proof]")?.files?.[0]) return fail("Enter the reference number of your downpayment, or attach the screenshot.");
     if (!body.querySelector("[data-ok1]").checked || !body.querySelector("[data-ok2]").checked) return fail("Please agree to the house policy and the no-refund policy.");
-    const idFile = body.querySelector("[data-id]").files[0]; const noId = !idFile && !!body.querySelector("[data-noid]")?.checked;
-    if (cfg.requireId !== false && !idFile && !noId) return fail("Please upload a photo of a valid ID — or tick “I don't have a valid ID”.");
+    const idFile = null; const noId = true; // ID collection is disabled.
     if ((room.notices || []).length && !body.querySelector("[data-noticeok]")?.checked) return fail("Please read the room notice and tick the box.");
     if (cfg.houseRules && !body.querySelector("[data-rules]")?.checked) return fail("Please accept the house rules.");
     if (ovRate(cfg) && !body.querySelector("[data-ovack]")?.checked) return fail("Please acknowledge the overstay fee.");
     if (pad.isEmpty()) return fail("Please sign inside the box.");
-    const gidFiles = [...body.querySelectorAll("[data-gid]")].map((i) => i.files?.[0]);
-    if (gidFiles.some((f) => !f)) return fail("Please upload a valid ID for each guest.");
-    const btn = foot.querySelector("[data-go]"); btn.disabled = true; btn.querySelector("span").textContent = "Uploading ID & waiver…";
+    const gidFiles = [];
+    const btn = foot.querySelector("[data-go]"); btn.disabled = true; btn.querySelector("span").textContent = "Creating waiver…";
     try {
       const code = "S-" + Array.from({ length: 5 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
       const uid = C.auth.currentUser.uid;
       const w = await signAndUploadWaiver({ storeId: store.storeId, uid, store, resv: { code, kind: "stay", name, phone, date: mode === "short" ? `${sh.date} · ${sh.hours}-hour stay` : `${dates.a} → ${dates.b}`, time: fmt12(mode === "short" ? sh.time : cfg.checkIn), pax: guests, roomName: room.name, estimate: t.tot, deposit: t.down }, waiverText: `${cfg.policy || ""}\n\n${cfg.waiverText || ""}`.trim(), signerName: name, sigDataUrl: pad.dataUrl(), idFile });
-      const guestIds = []; for (const f of gidFiles) guestIds.push(await uploadPrivateImage(store.storeId, uid, f, { max: 1400 }));
-      w.guestIds = guestIds;
+      // Guest ID documents are no longer collected or stored.
       let proofUrl = null; const pf = body.querySelector("[data-proof]")?.files?.[0];
       if (pf) proofUrl = await uploadPrivateImage(store.storeId, uid, pf, { max: 1400 });
       btn.querySelector("span").textContent = "Booking…";
