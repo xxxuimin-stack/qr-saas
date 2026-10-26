@@ -173,7 +173,7 @@ async function buildStore({ uid, token, data, orgId, copyFrom = null }) {
     items.docs.forEach((d) => { const it = d.data(); batch.set(storeRef.collection("items").doc(), { ...it, categoryId: catMap[it.categoryId] || it.categoryId, createdAt: now }); });
     promos.docs.forEach((d) => { const pr = d.data(); batch.set(storeRef.collection("promos").doc(), { ...pr, categoryIds: (pr.categoryIds || []).map((c) => catMap[c] || c), itemIds: [], createdAt: now }); });
   } else {
-    categories = preset.categories.map((catName, i) => {
+    categories = (preset.mode === "salon" ? ["Services"] : preset.categories).map((catName, i) => {
       const ref = storeRef.collection("categories").doc();
       const station = /drink|beverage|coffee|dessert/i.test(catName) ? "barista" : "kitchen";
       batch.set(ref, { name: catName, sortOrder: i + 1, active: true, station, createdAt: now });
