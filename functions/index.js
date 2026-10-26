@@ -6641,10 +6641,10 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
   const ref = await db.collection(`stores/${storeId}/stays`).add({
     ...(stayTest ? { test: true } : {}),
     code, roomId: roomRef.id, roomName: room.name, checkIn: Timestamp.fromMillis(startMs), checkOut: Timestamp.fromMillis(endMs), checkInYmd: inYmd, checkOutYmd: outYmd,
-    adults, kids, noId, needsIdOk: noId, noticeDiscount, rulesAck: cfg.houseRules ? Date.now() : null, overstayAck: ovRate ? { rate: ovRate, graceMin: cfg.overstay.graceMin, at: Date.now() } : null, cancelPolicy: cfg.cancel, visitors: [], issues: [],
+    adults, kids, noId: false, needsIdOk: false, noticeDiscount, rulesAck: cfg.houseRules ? Date.now() : null, overstayAck: ovRate ? { rate: ovRate, graceMin: cfg.overstay.graceMin, at: Date.now() } : null, cancelPolicy: cfg.cancel, visitors: [], issues: [],
     nights, nightsCount: nights.length, short, guests, poolGuests, addons, discount: discount || null, deposit: depositAmt ? { amount: depositAmt, status: "due" } : null, inventory: (room.inventory || []).slice(0, 40), visitNo: visits + 1, poolFee, subtotal, charges: [], total, downpayment, paidAmount: 0,
     payment: pm ? { methodId: pm.id, method: pm.type, methodName: pm.name, refNo: refNo || null, proofUrl: d.payment?.proofUrl ? String(d.payment.proofUrl).slice(0, 500) : null, status: "to_verify" } : null,
-    customer, customerUid: uid, customerKey: phoneKey, waiver: { guestIds, signatureUrl: String(d.waiver.signatureUrl).slice(0, 500), idPhotoUrl: d.waiver.idPhotoUrl ? String(d.waiver.idPhotoUrl).slice(0, 500) : null, pdfUrl: d.waiver.pdfUrl ? String(d.waiver.pdfUrl).slice(0, 500) : null, acceptedAt: FieldValue.serverTimestamp() },
+    customer, customerUid: uid, customerKey: phoneKey, waiver: { guestIds, signatureUrl: String(d.waiver.signatureUrl).slice(0, 500), idPhotoUrl: null, pdfUrl: d.waiver.pdfUrl ? String(d.waiver.pdfUrl).slice(0, 500) : null, acceptedAt: FieldValue.serverTimestamp() },
     noRefundAccepted: true, requests: reqText ? [{ id: "r1", type: "Note", text: reqText, status: "pending", at: Date.now() }] : [],
     status: needsConfirm ? "unconfirmed" : "pending", needsConfirm, confirmDeadline: needsConfirm ? Timestamp.fromMillis(Math.min(Date.now() + (Number(pub.confirm.minutes) || 60) * 60000, startMs)) : null,
     reschedule: null, extension: null, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
