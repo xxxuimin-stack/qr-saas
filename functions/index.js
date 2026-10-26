@@ -2357,7 +2357,7 @@ exports.cancelAppointment = onCall(async (req) => {
   const d = req.data || {}; const storeId = String(d.storeId || "");
   const ref = db.doc(`stores/${storeId}/appointments/${String(d.id || "")}`); const snap = await ref.get();
   if (!snap.exists || snap.data().customerUid !== uid) throw new HttpsError("permission-denied", "Not your booking.");
-  const a = snap.data(); if (!APPT_ACTIVE.includes(a.status) || a.status === "in_progress") throw new HttpsError("failed-precondition", "This booking can no longer be cancelled.");
+  const a = snap.data(); if (!APPT_ACTIVE.includes(a.status) || a.status === "in_progress") throw new HttpsError("failed-precondition", "This booking can no longer be cancelled."); if (a.pro?.arrived || a.arrivedAt) throw new HttpsError("failed-precondition", "The staff already arrived, so this can no longer be cancelled.");
   const cfg = (await db.doc(`stores/${storeId}`).get()).data().settings?.salon || {};
   if (a.startAt.toMillis() - Date.now() < (Number(cfg.cancelHours) || 0) * 3600000 && a.status !== "unconfirmed") throw new HttpsError("failed-precondition", `Cancellations must be made at least ${cfg.cancelHours} hours before. Please message the salon.`);
   const upd = { status: "cancelled", cancelReason: String(d.reason || "Cancelled by customer").slice(0, 120), cancelledAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() };
@@ -2372,7 +2372,7 @@ exports.rescheduleAppointment = onCall(async (req) => {
   const d = req.data || {}; const storeId = String(d.storeId || "");
   const ref = db.doc(`stores/${storeId}/appointments/${String(d.id || "")}`); const snap = await ref.get();
   if (!snap.exists || snap.data().customerUid !== uid) throw new HttpsError("permission-denied", "Not your booking.");
-  const a = snap.data(); if (!["unconfirmed", "pending", "confirmed"].includes(a.status)) throw new HttpsError("failed-precondition", "This booking can no longer be rescheduled.");
+  const a = snap.data(); if (!["unconfirmed", "pending", "confirmed"].includes(a.status)) throw new HttpsError("failed-precondition", "This booking can no longer be rescheduled."); if (a.pro?.arrived || a.arrivedAt) throw new HttpsError("failed-precondition", "The staff already arrived, so this can no longer be moved.");
   if (a.groupId) throw new HttpsError("failed-precondition", "This booking has more than one stylist — please message the salon to move it, or cancel and book again.");
   const ctx = await salonContext(storeId); const cfg = ctx.cfg;
   if (a.startAt.toMillis() - Date.now() < (Number(cfg.cancelHours) || 0) * 3600000 && a.status !== "unconfirmed") throw new HttpsError("failed-precondition", `Changes must be made at least ${cfg.cancelHours} hours before. Please message the salon.`);
