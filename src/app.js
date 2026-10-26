@@ -160,6 +160,15 @@ function initWizard() {
       wrap.querySelectorAll(".type").forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       $("next1").disabled = false;
+      const cfg = SETUPS[setupMode()];
+      if (cfg) {
+        if (!cfg.choices.some(([k]) => k === wiz.setup)) wiz.setup = cfg.choices[0][0];
+        drawSetup();
+        goStep(2);
+      } else {
+        wiz.setup = null;
+        toDetails();
+      }
     };
     wrap.appendChild(btn);
   }
