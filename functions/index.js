@@ -154,7 +154,7 @@ function setupFrom(mode, s) {
   if (mode === "table") return { kind: k === "home" ? "home" : "shop" };
   return { kind: "default" };
 }
-const ownerProfileNeeded = (mode, setup) => (mode === "salon" && (setup.kind === "solo" || setup.ownerWorks)) || (mode === "table" && setup.kind === "home");
+const ownerProfileNeeded = () => false; // Do not collect owner staff name/PIN during initial setup.
 /** Owner: change the business setup later (Tools → Business setup) */
 exports.changeSetup = onCall(async (req) => {
   const t = requireOwner(req);
@@ -213,11 +213,9 @@ exports.verifySignupOtp = onCallRaw(async (req) => {
   await ref.update({ verifiedPhone: o.phone, verifiedAt: Date.now(), hash: null });
   return { ok: true, phone: o.phone };
 });
-async function requireVerifiedPhone(uid, phone) {
-  const cfg = (await db.doc("config/platformSms").get()).data() || {};
-  if (!cfg.apiKey || cfg.required === false) return;
-  const o = (await db.doc(`otp/${uid}`).get()).data();
-  if (!o?.verifiedPhone || o.verifiedPhone !== phPhone(phone) || Date.now() - (o.verifiedAt || 0) > 3 * 3600e3) throw new HttpsError("failed-precondition", "OTP_REQUIRED:Verify your mobile number first.");
+async function requireVerifiedPhone() {
+  // Signup OTP is paused until delivery is reliable; phone remains available for business contact/trial abuse checks.
+  return;
 }
 
 /** One free trial per business type per mobile number / browser — a repeat starts on the Free plan (no time limit). */
@@ -1737,12 +1735,12 @@ exports.bookAppointment = onCall(HOT, withIndex("appt", async (req) => {
   if (homeService) {
     const hsCfg = ctx.cfg.homeService || {};
     if (hsCfg.requirePin !== false && !homeService.mapUrl) throw new HttpsError("invalid-argument", "Add your map pin (tap 📍 My location) so the stylist can find you.");
-    const idUrl = typeof d.idUrl === "string" && /^priv:stores\/[^/]+\/private\//.test(d.idUrl) ? d.idUrl.slice(0, 300) : null;
+    const idUrl = null; // Home-service bookings no longer collect customer ID documents.
     const keepDays = Math.max(7, Number(ctx.store.settings?.privacy?.retentionDays || 90));
     const onFile = cRec?.homeIdUrl && (cRec.homeIdAt?.toMillis?.() || 0) > Date.now() - (keepDays - 1) * 864e5 ? cRec.homeIdUrl : null; // the file is deleted after the retention period
-    if (hsCfg.requireId !== false && !onFile && !idUrl) throw new HttpsError("failed-precondition", "ID_REQUIRED:Please upload a valid ID for your first home service. Only the salon sees it, and it's kept for your next bookings.");
-    homeService.idUrl = idUrl || onFile || null;
-    if (idUrl && phoneKey.length >= 7) await db.doc(`stores/${storeId}/customers/${phoneKey}`).set({ homeIdUrl: idUrl, homeIdAt: FieldValue.serverTimestamp() }, { merge: true });
+    // No valid-ID upload is required for home-service bookings.
+    homeService.idUrl = null;
+    // Do not save ID document references on customer records.
   }
   const pax = d.pax === 2 && ctx.cfg.allowPax2 !== false ? 2 : 1;
   const gender = ["female", "male"].includes(d.gender) ? d.gender : null;
@@ -6467,12 +6465,12 @@ function stayCfg(store) {
   return { checkIn: c.checkIn || "14:00", checkOut: c.checkOut || "12:00", downPct: c.downPct ?? 50, weekendNights: c.weekendNights || ["fri", "sat"], holidays: c.holidays || [], pool: c.pool || { mode: "none", price: 0 }, extension: c.extension || { enabled: false, pricePerHour: 0, maxHours: 6 }, maxNights: c.maxNights || 14, maxDaysAhead: c.maxDaysAhead || 180,
     addons: (c.addons || []).filter((a) => a && a.name).slice(0, 30).map((a, i) => ({ id: String(a.id || "a" + i), name: String(a.name).slice(0, 40), price: Math.max(0, Number(a.price) || 0), per: a.per === "night" ? "night" : "stay", approval: !!a.approval, kind: a.kind === "kit" ? "kit" : "extra", max: Math.max(1, Math.min(20, Number(a.max) || 4)) })),
     deposit: { amount: Math.max(0, Number(c.deposit?.amount) || 0), checkMinutes: Math.max(15, Math.min(720, Number(c.deposit?.checkMinutes) || 60)) },
-    guestIds: c.guestIds === true, selfCheck: c.selfCheck?.enabled === true, codeHoursBefore: Number(c.selfCheck?.codeHoursBefore) || 2,
+    guestIds: false, requireId: false, selfCheck: c.selfCheck?.enabled === true, codeHoursBefore: Number(c.selfCheck?.codeHoursBefore) || 2,
     overstay: { enabled: c.overstay?.enabled !== false, graceMin: Math.max(0, Number(c.overstay?.graceMin ?? 15)), ratePerHour: Math.max(0, Number(c.overstay?.ratePerHour) || 0) },
     cleaning: { minutes: Math.max(0, Math.min(480, Number(c.cleaning?.minutes ?? 60))), showGuests: c.cleaning?.showGuests !== false },
     promos: (c.promos || []).filter((x) => x && x.name && Number(x.percent) > 0).slice(0, 12).map((x, i) => ({ id: String(x.id || "p" + i), name: String(x.name).slice(0, 40), percent: Math.min(90, Number(x.percent)), days: (x.days || []).filter((d) => STAY_DK.includes(d)), applies: ["night", "short", "both"].includes(x.applies) ? x.applies : "both", from: x.from || "", until: x.until || "", start: x.start || "", end: x.end || "" })),
     loyalty: c.loyalty?.enabled ? { enabled: true, every: Math.max(2, Number(c.loyalty.every) || 5), percent: Math.min(100, Math.max(1, Number(c.loyalty.percent) || 20)) } : { enabled: false },
-    noIdOk: c.noIdOk !== false, kids: { freeUnder: Number(c.kids?.freeUnder ?? 7), countInPax: c.kids?.countInPax === true },
+    noIdOk: true, kids: { freeUnder: Number(c.kids?.freeUnder ?? 7), countInPax: c.kids?.countInPax === true },
     amenities: (c.amenities || []).filter((a) => a && a.name).slice(0, 20).map((a, i) => ({ id: String(a.id || "m" + i), name: String(a.name).slice(0, 40), unit: ["free", "head", "hour", "stay"].includes(a.unit) ? a.unit : "free", price: Math.max(0, Number(a.price) || 0) })),
     nearby: (c.nearby || []).filter((x) => x && x.name).slice(0, 20).map((x) => ({ name: String(x.name).slice(0, 50), kind: String(x.kind || "").slice(0, 20), mins: Number(x.mins) || null, map: String(x.map || "").slice(0, 300) })),
     cancel: { fullDays: Math.max(0, Number(c.cancel?.fullDays) || 0), partialDays: Math.max(0, Number(c.cancel?.partialDays) || 0), partialPct: Math.max(0, Math.min(100, Number(c.cancel?.partialPct) || 0)) },
@@ -6622,14 +6620,13 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
   if (customer.name.length < 2 || customer.phone.replace(/\D/g, "").length < 7) throw new HttpsError("invalid-argument", "Name and phone number are required.");
   if (!d.policyAccepted || !d.noRefundAccepted) throw new HttpsError("invalid-argument", "Please accept the house policy and the no-refund policy.");
   const noId = !!d.noId && !d.waiver?.idPhotoUrl;
-  if (noId && !cfg.noIdOk) throw new HttpsError("invalid-argument", "A valid ID is required to book.");
-  if (store.settings?.stay?.requireId !== false && !d.waiver?.idPhotoUrl && !noId) throw new HttpsError("invalid-argument", "Please upload a valid ID — or tick “I don't have a valid ID” (the owner decides).");
+  // Valid ID collection is disabled; booking eligibility must not depend on ID uploads.
   if (cfg.houseRules && !d.rulesAck) throw new HttpsError("invalid-argument", "Please accept the house rules.");
   const ovRate = cfg.overstay.enabled ? Number(cfg.overstay.ratePerHour) || Number(cfg.extension.pricePerHour) || 0 : 0;
   if (ovRate && d.overstayAck !== true) throw new HttpsError("invalid-argument", `Please acknowledge the overstay fee (₱${ovRate} per hour after check-out).`);
   if (!d.waiver?.signatureUrl) throw new HttpsError("invalid-argument", "Please sign the waiver.");
   // every guest shows a valid ID (the booker's is idPhotoUrl; the rest go in guestIds)
-  const guestIds = (Array.isArray(d.waiver?.guestIds) ? d.waiver.guestIds : []).map(String).filter((u) => u.startsWith("priv:")).slice(0, 20);
+  const guestIds = []; // Do not collect or persist guest ID uploads.
   if (!short) { startMs = phAt(inYmd, cfg.checkIn).getTime(); endMs = phAt(outYmd, cfg.checkOut).getTime(); }
   const sbuf = (cfg.short.bufferMin || 0) * 60000;
   const conflict = short
@@ -6639,7 +6636,7 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
   const phoneKey = customer.phone.replace(/\D/g, "");
   const cRec = (await db.doc(`stores/${storeId}/customers/${phoneKey}`).get()).data();
   if (cRec?.flagged) throw new HttpsError("permission-denied", "We can't accept this booking. Please message us.");
-  if (cfg.guestIds && adults > 1 && guestIds.length < adults - 1) throw new HttpsError("invalid-argument", `Please upload a valid ID for each adult guest (${adults - 1} more).`);
+  // Per-guest ID collection is disabled.
   const subtotal = short ? round2(short.price) : round2(nights.reduce((a, n) => a + n.price, 0));
   // add-ons: extra bed foam, blankets, towels, amenity kits… (limited items wait for the caretaker's OK)
   const addons = [];
