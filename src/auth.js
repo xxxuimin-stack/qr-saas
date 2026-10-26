@@ -61,7 +61,8 @@ async function roleNext(user) {
     }
     const a = await call("myAccount", {});
     if (a.hasStore) return "/app/";
-    if ((a.roles || []).includes("client") && !(a.roles || []).some((x) => x !== "client")) return "/me/";
+    // While marketplace roles are paused, every new account enters business setup.
+    return "/app/";
   } catch (e) { console.warn("role", e); }
   return "/app/";
 }
