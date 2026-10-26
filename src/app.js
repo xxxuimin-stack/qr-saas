@@ -171,12 +171,6 @@ function initWizard() {
     };
     wrap.appendChild(btn);
   }
-  // preselect the edition picked on the landing page
-  try {
-    const pre = localStorage.getItem("taptayo:edition");
-    const b = pre && wrap.querySelector(`.type[data-key="${CSS.escape(pre)}"]`);
-    if (b && !b.disabled) b.click();
-  } catch {}
   const drawSetup = () => {
     const cfg = SETUPS[setupMode()]; if (!cfg) return;
     $("setupTitle").textContent = cfg.title;
@@ -192,6 +186,12 @@ function initWizard() {
     drawPlace();
   };
   const toDetails = () => { $("ownerBox").classList.toggle("hidden", !needsOwnerProfile()); goStep(3); };
+  // preselect the edition picked on the landing page
+  try {
+    const pre = localStorage.getItem("taptayo:edition");
+    const b = pre && wrap.querySelector(`.type[data-key="${CSS.escape(pre)}"]`);
+    if (b && !b.disabled) b.click();
+  } catch {}
   $("next1").onclick = () => { if (SETUPS[setupMode()]) { if (!SETUPS[setupMode()].choices.some(([k]) => k === wiz.setup)) wiz.setup = null; drawSetup(); goStep(2); } else { wiz.setup = null; toDetails(); } };
   $("ownerWorks").onchange = (e) => (wiz.ownerWorks = e.target.checked);
   $("back2s").onclick = () => goStep(1);
