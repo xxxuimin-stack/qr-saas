@@ -3105,7 +3105,7 @@ exports.onApptWrite = onDocumentWritten("stores/{storeId}/appointments/{id}", as
   if (a.homeService && ["done", "cancelled", "no_show"].includes(a.status)) {
     const st = (await db.doc(`stores/${storeId}`).get()).data();
     const p = st?.salonLive?.presence;
-    if (p?.auto && p.apptId === event.params.id) await db.doc(`stores/${storeId}`).update({ "salonLive.presence": { state: "in", backAt: null, waitNote: "", at: Date.now(), by: "auto", until: p.until || null }, updatedAt: FieldValue.serverTimestamp() });
+    if (p?.auto && p.apptId === event.params.id) { const travel = Math.max(0, Math.min(180, Number(st?.settings?.salon?.homeService?.travelMin) || 0)); const until = a.goHome ? (p.until || Date.now() + 8 * 3600e3) : (travel ? Date.now() + travel * 60000 : null); const presence = until ? { state: a.goHome ? "home" : "away", backAt: null, waitNote: a.goHome ? "Done for today" : "On the way back", at: Date.now(), by: "auto", until, auto: true, apptId: event.params.id } : { state: "in", backAt: null, waitNote: "", at: Date.now(), by: "auto", until: p.until || null }; await db.doc(`stores/${storeId}`).update({ "salonLive.presence": presence, updatedAt: FieldValue.serverTimestamp() }); }
   }
   if (!a.customerKey) return;
   const ref = db.doc(`stores/${storeId}/customers/${a.customerKey}`);
