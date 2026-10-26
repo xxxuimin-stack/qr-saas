@@ -208,7 +208,7 @@ async function openBooking(room) {
     </section>
     <section data-pane="3" hidden>
     <h3 class="s-step">Your details</h3>
-    <label>Full name (as on your ID)</label><input data-name value="${esc(saved.name || "")}"/>
+    <label>Full name</label><input data-name value="${esc(saved.name || "")}"/>
     <label>Phone</label><input data-phone type="tel" value="${esc(saved.phone || "")}" placeholder="09XX XXX XXXX"/>
     ${msgrField(saved)}
     <h3 class="s-step">Downpayment</h3>
@@ -232,7 +232,7 @@ async function openBooking(room) {
     ${cfg.cleaning?.minutes ? `<p class="small muted" style="margin:4px 0 0">🧹 Rooms are cleaned between guests (about ${cfg.cleaning.minutes} min) — you'll see on your booking page when your room is ready.</p>` : ""}
     <label class="c-agree"><input type="checkbox" data-ok2/> <span>${store.bookingPolicy?.refundable !== false && (cfg.cancel?.fullDays || cfg.cancel?.partialDays) ? `<b>Refund policy:</b> ${cfg.cancel.fullDays ? `full refund if cancelled ${cfg.cancel.fullDays}+ days before` : ""}${cfg.cancel.fullDays && cfg.cancel.partialDays ? ", " : ""}${cfg.cancel.partialDays ? `${cfg.cancel.partialPct}% refund ${cfg.cancel.partialDays}+ days before` : ""}; no refund after that. I may request to reschedule.` : `<b>No refund.</b> I understand payments are non-refundable; I may request to reschedule.`}</span></label>
     ${cfg.waiverText ? `<details class="s-more"><summary>Read the waiver you're signing</summary><div class="waiver-text">${esc(cfg.waiverText)}</div></details>` : ""}
-    <label>Valid ID photo ${cfg.requireId !== false ? "" : "(optional)"}</label><input type="file" accept="image/*" data-id/>${cfg.noIdOk !== false ? `<label class="c-agree"><input type="checkbox" data-noid/> I don't have a valid ID right now — the owner will decide</label>` : ""}<div class="small muted">🔒 Seen only by the staff · deleted automatically after 90 days · never shown publicly.</div>
+    
     <label>Signature</label><div data-sig></div>
     </section>
     <div data-err></div></div>`);
@@ -269,7 +269,7 @@ async function openBooking(room) {
     (cfg.amenities || []).forEach((a) => { const q = body.querySelector(`[data-mq="${a.id}"]`); if (q) q.textContent = amq[a.id] || 0; });
     const kq = body.querySelector("[data-k]"); if (kq) kq.textContent = kids;
     const gw = body.querySelector("[data-gids]"); const need = cfg.guestIds ? guests - 1 : 0; void 0;
-    if (gw && gw.childElementCount !== need) { const keep = [...gw.querySelectorAll("input[type=file]")].map((i) => i.files?.[0]); gw.innerHTML = need ? `<h3 class="s-step">Valid ID of each guest</h3>${Array.from({ length: need }, (_, i) => `<label>Guest ${i + 2} — valid ID photo</label><input type="file" accept="image/*" data-gid="${i}"/>`).join("")}<div class="small muted">🔒 Seen only by the staff · deleted after 90 days.</div>` : ""; void keep; }
+    if (gw && gw.childElementCount !== need) { const keep = [...gw.querySelectorAll("input[type=file]")].map((i) => i.files?.[0]); gw.innerHTML = false ? `<h3 class="s-step">Valid ID of each guest</h3>${Array.from({ length: need }, (_, i) => `<label>Guest ${i + 2} — valid ID photo</label><input type="file" accept="image/*" data-gid="${i}"/>`).join("")}<div class="small muted">🔒 Seen only by the staff · deleted after 90 days.</div>` : ""; void keep; }
     body.querySelector("[data-pay]").innerHTML = t.tot ? `${store.trust?.newShop ? `<div class="c-alert" style="text-align:left;margin:0 0 6px">🌱 <b>New on TapTayo</b> — to keep you safe, the downpayment is at most ${money(1500)} until this place is verified. Pay the rest at check-in.</div>` : ""}<div class="c-mini"><span>Downpayment${store.trust?.newShop && t.down >= 1500 ? "" : ` (${cfg.downPct ?? 50}%)`}</span><b>${money(t.down)}</b></div><div class="c-mini small muted"><span>Balance at check-in</span><span>${money(t.tot - t.down)}</span></div>
       ${gcash.length ? `<div class="c-pick" data-pays style="margin-top:8px">${gcash.map((m) => `<button type="button" data-pm="${m.id}" class="${payId === m.id ? "on" : ""}"><b>${esc(m.name)}</b><span>${esc(m.number || "")}${m.accountName ? " · " + esc(m.accountName) : ""}</span></button>`).join("")}</div>
       ${(() => { const m = gcash.find((x) => x.id === payId); return m?.qrUrl ? `<img src="${esc(m.qrUrl)}" alt="QR" style="width:170px;display:block;margin:8px auto;border-radius:10px"/>` : ""; })()}
@@ -335,7 +335,7 @@ async function openBooking(room) {
     if (gcash.length && t.down > 0 && gcash.some((m) => m.askRefBookings !== false) && (body.querySelector("[data-ref]")?.value.trim() || "").length < 4 && !body.querySelector("[data-proof]")?.files?.[0]) return fail("Enter the reference number of your downpayment, or attach the screenshot.");
     if (!body.querySelector("[data-ok1]").checked || !body.querySelector("[data-ok2]").checked) return fail("Please agree to the house policy and the no-refund policy.");
     const idFile = body.querySelector("[data-id]").files[0]; const noId = !idFile && !!body.querySelector("[data-noid]")?.checked;
-    if (cfg.requireId !== false && !idFile && !noId) return fail("Please upload a photo of a valid ID — or tick “I don't have a valid ID”.");
+    if (false && !idFile && !noId) return fail("Please upload a photo of a valid ID — or tick “I don't have a valid ID”.");
     if ((room.notices || []).length && !body.querySelector("[data-noticeok]")?.checked) return fail("Please read the room notice and tick the box.");
     if (cfg.houseRules && !body.querySelector("[data-rules]")?.checked) return fail("Please accept the house rules.");
     if (ovRate(cfg) && !body.querySelector("[data-ovack]")?.checked) return fail("Please acknowledge the overstay fee.");
