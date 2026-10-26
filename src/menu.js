@@ -1843,7 +1843,7 @@ function openWaiver(rec, r) {
   const body = html(`<div>
     <div class="waiver-text">${esc([store.waiver?.text, r.kind === "vip" ? overtimeClause(store.vip?.overtime) : ""].filter(Boolean).join("\n\n"))}</div>
     <label>Full name</label><input data-sname value="${esc(r.name || "")}"/>
-    ${idMode !== "off" ? `<label>ID photo ${idMode === "required" ? "(required)" : "(optional)"}</label><input type="file" accept="image/*" capture="environment" data-idf/><div class="small muted">🔒 ${PRIVACY_NOTE}</div>` : ""}
+    <p class="small muted">Identity-document uploads are disabled. Please complete the waiver and signature.</p>
     <label>Signature</label><div data-pad></div>
     <p class="small muted" style="margin-top:8px">By signing, you agree to the waiver above. You'll receive a PDF copy.</p>
     <div data-err></div></div>`);
@@ -1852,9 +1852,9 @@ function openWaiver(rec, r) {
   foot.querySelector("[data-go]").onclick = async () => {
     const err = body.querySelector("[data-err]"); err.innerHTML = "";
     const signerName = body.querySelector("[data-sname]").value.trim();
-    const idFile = body.querySelector("[data-idf]")?.files?.[0] || null;
+    const idFile = null;
     if (signerName.length < 2) return (err.innerHTML = `<div class="c-alert error">Enter your full name.</div>`);
-    if (idMode === "required" && !idFile) return (err.innerHTML = `<div class="c-alert error">An ID photo is required.</div>`);
+    
     if (pad.isEmpty()) return (err.innerHTML = `<div class="c-alert error">Please sign in the box.</div>`);
     const btn = foot.querySelector("[data-go]"); btn.disabled = true; btn.textContent = "Creating PDF…";
     try {
