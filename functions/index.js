@@ -5424,11 +5424,6 @@ async function collabLiveGuard(req, st) {
   const c = await collabCfg(); if (!c.live) throw new HttpsError("failed-precondition", `TapTayo Collab is coming soon — we're onboarding the first ${c.target || 100} creators. Join the waitlist and we'll tell you when it opens.`);
 }
 exports.collabStatus = onCall(async () => ({ live: false, target: 100, city: "Metro Manila", creators: 0 }));
-exports.collabWaitlist = onCall(async (req) => {
-  if (!realAccount(req)) throw new HttpsError("unauthenticated", "Log in to join the waitlist.");
-  const d = req.data || {}; await db.doc(`collabWaitlist/${req.auth.uid}`).set({ email: req.auth.token.email, role: ["business", "creator"].includes(d.role) ? d.role : "business", city: String(d.city || "").slice(0, 40), at: Date.now() }, { merge: true });
-  return { ok: true };
-});
 exports.adminCollabConfig = onCall(async (req) => {
   requireAdmin(req); const d = req.data || {};
   if (d.set) { await db.doc("config/collab").set({ live: !!d.live, target: Math.max(1, parseInt(d.target, 10) || 100), city: String(d.city || "Metro Manila").slice(0, 40), updatedAt: Date.now() }, { merge: true }); COLLAB_CFG = { at: 0, v: null }; }
