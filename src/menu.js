@@ -385,7 +385,7 @@ function showAgeGate() {
   if (document.querySelector(".c-agegate")) return;
   const g = html(`<div class="c-agegate"><div class="box"><div style="font-size:44px">🔞</div><h2>18+ Menu</h2><p>This menu has beer and liquor. Are you 18 years old or older?</p>
     <button class="c-btn block" data-yes>Yes, I'm 18 or older</button><button class="c-btn ghost block" data-no style="margin-top:8px">No — show the regular menu</button>
-    <p class="small muted" style="margin-top:10px">Staff may ask for a valid ID. Please drink responsibly.</p></div></div>`);
+    <p class="small muted" style="margin-top:10px">Please drink responsibly.</p></div></div>`);
   g.querySelector("[data-yes]").onclick = () => { try { localStorage.setItem(AGE_KEY, "1"); } catch {} g.remove(); openCats = null; renderMenu(); };
   g.querySelector("[data-no]").onclick = () => { adultDeclined = true; sessionStorage.setItem("orderqr:18no:" + slug, "1"); g.remove(); renderMenu(); };
   document.body.appendChild(g);
@@ -1073,7 +1073,7 @@ function renderSalonBook(body) {
       <label>Address</label><input data-address placeholder="House no., street, barangay, city" value="${esc(saved.address || "")}" autocomplete="street-address"/>
       <label>Landmark <span class="muted small">(optional)</span></label><input data-landmark placeholder="e.g. green gate beside the sari-sari store" value="${esc(saved.landmark || "")}"/>
       <label>Map pin <span class="muted small">(required — so the stylist can find you)</span></label><div style="display:flex;gap:6px"><input data-map placeholder="Paste a Google Maps link" value="${esc(saved.mapUrl || "")}" style="flex:1"/><button type="button" class="c-btn ghost sm" data-loc>📍 My location</button></div>
-      <div data-idbox ${saved.homeIdOk ? 'style="display:none"' : ""}><label>Valid ID <span class="muted small">(first home service only)</span></label><input type="file" accept="image/*" data-hsid/><p class="muted small" style="margin:4px 0 0">🔒 ${esc(PRIVACY_NOTE)}</p></div>
+      <div data-idbox hidden></div>
       <p class="muted small">${hs.minSpend ? `Minimum ${money(hs.minSpend)} in services. ` : ""}${areas.length ? "The transport fee is added to your bill." : esc(hs.note || "Transport fee depends on your area; the final fee is confirmed by the salon and shown on your status page.")}${areas.length && hs.note ? " " + esc(hs.note) : ""}</p>
     </div>
     <label>Notes (optional)</label><input data-notes placeholder="e.g. reference photo on Messenger, allergies"/>
@@ -1188,9 +1188,7 @@ function renderSalonBook(body) {
     if (home && customer.address.length < 5) { g("[data-address]").focus(); return toast("Enter your address for home service"); }
     if (home && !customer.mapUrl) { g("[data-map]")?.focus(); return toast("Add your map pin — tap 📍 My location"); }
     if (home && customer.mapUrl && !/^https:\/\//.test(customer.mapUrl)) return toast("The map pin should be a Google Maps link");
-    let idUrl = null;
-    const idFile = home ? g("[data-hsid]")?.files?.[0] : null;
-    if (idFile) { e.target.disabled = true; e.target.textContent = "Uploading ID…"; try { idUrl = await uploadPrivateImage(store.storeId, auth.currentUser.uid, idFile, { max: 1400, name: "home-id" }); } catch (x) { e.target.disabled = false; e.target.textContent = "Book"; return toast("Couldn't upload the ID: " + x.message); } }
+    const idUrl = null; // Customer ID collection is disabled.
     e.target.disabled = true; e.target.textContent = "Booking…";
     try {
       if (!walkIn && !chosen) { e.target.disabled = false; e.target.textContent = "Choose a time slot"; return toast("Pick a time slot"); }
@@ -1215,7 +1213,6 @@ function renderSalonBook(body) {
     } catch (err) {
       const m = /^DP_REQUIRED:(\d+(?:\.\d+)?):(.*)$/.exec(err.message || "");
       if (m) { dpNeeded = Number(m[1]); g("[data-dpbox]").dataset.amt = ""; drawDp(); g("[data-dpbox]").scrollIntoView({ behavior: "smooth", block: "center" }); toast(m[2]); }
-      else if (/^ID_REQUIRED:/.test(err.message || "")) { const box = g("[data-idbox]"); if (box) { box.style.display = ""; box.scrollIntoView({ behavior: "smooth", block: "center" }); } saveLocal({ customer: { ...(loadLocal().customer || {}), homeIdOk: false } }); toast(err.message.replace(/^ID_REQUIRED:/, "")); }
       else if (/^QUEUE_[A-Z_]+:/.test(err.message || "")) { const [, early, ...rest] = err.message.split(":"); g("[data-slots]").innerHTML = `<div class="c-alert warn"><b>${esc(rest.join(":"))}</b></div><div data-early></div>`; showEarliest(Number(early) || 0); g("[data-slots]").scrollIntoView({ behavior: "smooth", block: "center" }); }
       else toast(err.message);
       e.target.disabled = false; e.target.textContent = "Book";
@@ -1846,7 +1843,7 @@ function openWaiver(rec, r) {
   const body = html(`<div>
     <div class="waiver-text">${esc([store.waiver?.text, r.kind === "vip" ? overtimeClause(store.vip?.overtime) : ""].filter(Boolean).join("\n\n"))}</div>
     <label>Full name</label><input data-sname value="${esc(r.name || "")}"/>
-    ${idMode !== "off" ? `<label>ID photo ${idMode === "required" ? "(required)" : "(optional)"}</label><input type="file" accept="image/*" capture="environment" data-idf/><div class="small muted">🔒 ${PRIVACY_NOTE}</div>` : ""}
+    <p class="small muted">Identity-document uploads are disabled. Please complete the waiver and signature.</p>
     <label>Signature</label><div data-pad></div>
     <p class="small muted" style="margin-top:8px">By signing, you agree to the waiver above. You'll receive a PDF copy.</p>
     <div data-err></div></div>`);
@@ -1855,9 +1852,9 @@ function openWaiver(rec, r) {
   foot.querySelector("[data-go]").onclick = async () => {
     const err = body.querySelector("[data-err]"); err.innerHTML = "";
     const signerName = body.querySelector("[data-sname]").value.trim();
-    const idFile = body.querySelector("[data-idf]")?.files?.[0] || null;
+    const idFile = null;
     if (signerName.length < 2) return (err.innerHTML = `<div class="c-alert error">Enter your full name.</div>`);
-    if (idMode === "required" && !idFile) return (err.innerHTML = `<div class="c-alert error">An ID photo is required.</div>`);
+    
     if (pad.isEmpty()) return (err.innerHTML = `<div class="c-alert error">Please sign in the box.</div>`);
     const btn = foot.querySelector("[data-go]"); btn.disabled = true; btn.textContent = "Creating PDF…";
     try {

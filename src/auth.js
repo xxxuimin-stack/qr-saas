@@ -12,14 +12,14 @@ import { call } from "./firebase.js";
 
 const $ = (id) => document.getElementById(id);
 let mode = "login"; // login | signup
-let role = (() => { try { const t = new URLSearchParams(location.search).get("type") || ""; const r = new URLSearchParams(location.search).get("role") || ""; return ["client", "creator", "business"].includes(r) ? r : t === "freelance" ? "creator" : "business"; } catch { return "business"; } })();
-const ROLE_TXT = { client: ["Your name", "Juan dela Cruz", "Create your free account", "Book shops, hire creators and see all your bookings in one place."], creator: ["Your creator / page name", "Kain Tayo with Bea", "Let's set up your creator page", "Your rate card, offers and bookings — free to start."], business: ["Shop name", "Kapehan sa Kanto", "Let's set up your shop", "Takes about 10 minutes. Free for 14 days."] };
+let role = "business"; // Business accounts only while marketplace features are paused.
+const ROLE_TXT = { business: ["Shop name", "Kapehan sa Kanto", "Let's set up your shop", "Takes about 10 minutes. Free for 14 days."] };
 function drawRole() {
   document.querySelectorAll("[data-role]").forEach((b) => { const on = b.dataset.role === role; b.classList.toggle("on", on); b.setAttribute("aria-checked", String(on)); });
   const t = ROLE_TXT[role]; $("shopLabel").textContent = t[0]; $("a-shop").placeholder = t[1];
-  $("adultField").classList.toggle("hidden", role !== "creator");
+  $("adultField")?.classList.add("hidden");
   if (mode === "signup") { $("authTitle").textContent = t[2]; $("authSub").textContent = t[3]; $("ctaText").textContent = role === "business" ? "Start free trial" : "Create account"; }
-  try { localStorage.setItem("taptayo:role", role); if (role === "creator") localStorage.setItem("taptayo:edition", "freelance"); } catch {}
+  try { localStorage.setItem("taptayo:role", "business"); localStorage.removeItem("taptayo:newRole"); } catch {}
 }
 let showPw = false;
 
@@ -54,14 +54,15 @@ async function roleNext(user) {
   if (nextUrl && nextUrl.startsWith("/")) return safeNext;
   try {
     if (mode === "signup" || localStorage.getItem("taptayo:newRole")) {
-      const r = mode === "signup" ? role : localStorage.getItem("taptayo:newRole");
+      const r = "business";
       await call("accountSetup", { role: r, name: $("a-shop")?.value.trim() || user.displayName || "", adult: !!$("a-adult")?.checked });
       localStorage.removeItem("taptayo:newRole");
       if (r === "client") return "/me/";
     }
     const a = await call("myAccount", {});
     if (a.hasStore) return "/app/";
-    if ((a.roles || []).includes("client") && !(a.roles || []).some((x) => x !== "client")) return "/me/";
+    // While marketplace roles are paused, every new account enters business setup.
+    return "/app/";
   } catch (e) { console.warn("role", e); }
   return "/app/";
 }
@@ -128,7 +129,7 @@ $("authForm").onsubmit = async (e) => {
   const password = $("password").value;
   if (!email) { $("email").focus(); return showMsg("Enter your email."); }
   if (password.length < (mode === "signup" ? 8 : 6)) { $("password").focus(); return showMsg(mode === "signup" ? "Use at least 8 characters for your password." : "Enter your password."); }
-  if (mode === "signup" && role === "creator" && !$("a-adult").checked) return showMsg("Creators on TapTayo must be 18 or older — please confirm.");
+  
   const btn = $("submitBtn");
   btn.disabled = true;
   showMsg("");
@@ -150,7 +151,7 @@ $("authForm").onsubmit = async (e) => {
 
 $("googleBtn").onclick = async () => {
   showMsg("");
-  if (mode === "signup" && role === "creator" && !$("a-adult").checked) return showMsg("Creators on TapTayo must be 18 or older — please confirm.");
+  
   if (mode === "signup") { const shop = $("a-shop").value.trim(); if (shop) try { localStorage.setItem("taptayo:shopName", shop); } catch {} }
   try {
     await signInWithPopup(auth, googleProvider);

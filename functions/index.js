@@ -26,6 +26,10 @@ if (typeof db.settings === "function") db.settings({ ignoreUndefinedProperties: 
 // stay small (2). The busy customer / counter functions get more room (HOT below).
 setGlobalOptions({ region: "asia-southeast1", maxInstances: 2 });
 const HOT = { maxInstances: 8 };
+const CREATOR_MARKETPLACE_ENABLED = false; // Temporarily business-only SaaS mode.
+function creatorMarketplaceGuard() {
+  if (!CREATOR_MARKETPLACE_ENABLED) throw new HttpsError("failed-precondition", "Creator marketplace and business-collab features are temporarily paused.");
+}
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -138,7 +142,7 @@ async function buildStore({ uid, token, data, orgId, copyFrom = null }) {
   batch.set(db.doc(`publicStores/${slug}`), { storeId, name, slug, businessType, mode: preset.mode, theme: store.theme, labels: store.settings.labels || preset.labels, contact: { phone, address }, acceptOrders: true, locked: false, categories, items: [], updatedAt: now });
   await batch.commit();
   // the owner works too (salon solo / owner works with staff / home-based café) → a staff profile with a PIN for the counter & screens
-  if (!src && ownerProfileNeeded(preset.mode, setup)) {
+  if (!src && data.createOwnerStaff === true && ownerProfileNeeded(preset.mode, setup)) {
     const pin = String(data.ownerPin || "");
     if (!/^\d{4,6}$/.test(pin)) throw new HttpsError("invalid-argument", "Set a 4–6 digit PIN for yourself.");
     const roles = preset.mode === "salon" ? ["manager", "crew", "stylist"] : ["manager", "crew", "kitchen", "barista", "dispatch", "rider"];
@@ -213,11 +217,9 @@ exports.verifySignupOtp = onCallRaw(async (req) => {
   await ref.update({ verifiedPhone: o.phone, verifiedAt: Date.now(), hash: null });
   return { ok: true, phone: o.phone };
 });
-async function requireVerifiedPhone(uid, phone) {
-  const cfg = (await db.doc("config/platformSms").get()).data() || {};
-  if (!cfg.apiKey || cfg.required === false) return;
-  const o = (await db.doc(`otp/${uid}`).get()).data();
-  if (!o?.verifiedPhone || o.verifiedPhone !== phPhone(phone) || Date.now() - (o.verifiedAt || 0) > 3 * 3600e3) throw new HttpsError("failed-precondition", "OTP_REQUIRED:Verify your mobile number first.");
+async function requireVerifiedPhone() {
+  // Signup OTP is paused until delivery is reliable; phone remains available for business contact/trial abuse checks.
+  return;
 }
 
 /** One free trial per business type per mobile number / browser — a repeat starts on the Free plan (no time limit). */
@@ -270,43 +272,12 @@ exports.listBusinesses = onCall(async (req) => {
   const { list } = await myBusinesses(uid);
   return { businesses: list, current: token.orgId || null };
 });
-exports.addBusiness = onCall(async (req) => {
-  const { uid, token } = requireAuth(req);
-  if (token.role !== "owner") throw new HttpsError("permission-denied", "Owner only.");
-  const data = req.data || {};
-  const { u, list } = await myBusinesses(uid);
-  if (list.length >= 5) throw new HttpsError("resource-exhausted", "You can have up to 5 businesses. Message us if you need more.");
-  const orgRef = db.collection("orgs").doc();
-  const { storeId, slug, mode } = await buildStore({ uid, token, data, orgId: orgRef.id });
-  const now = FieldValue.serverTimestamp();
-  // anti-abuse: one free trial per business type per owner — another one of the same type starts on the Free plan
-  const sameType = list.some((b) => b.businessType === data.businessType) || (await trialUsed(mode, data.phone, data.bid));
-  const trialEnds = Timestamp.fromMillis(Date.now() + TRIAL_DAYS * 86400000);
-  const batch = db.batch();
-  batch.set(db.doc(`stores/${storeId}/subscription/current`), sameType ? freeSub(now) : { plan: "trial", status: "trial", trialEndsAt: trialEnds, paidUntil: null, paymentMethod: null, paymongoSubscriptionId: null, limits: TRIAL_LIMITS, createdAt: now, updatedAt: now });
-  if (!sameType) markTrial(batch, mode, data.phone, data.bid, storeId);
-  batch.set(orgRef, { name: String(data.name || "").trim(), ownerUid: uid, ownerEmail: token.email || null, mainStoreId: storeId, branches: [{ storeId, name: String(data.name || "").trim(), slug, createdAt: Date.now() }], createdAt: now, updatedAt: now });
-  const entry = { storeId, orgId: orgRef.id, name: String(data.name || "").trim(), businessType: String(data.businessType || "") };
-  batch.set(db.doc(`users/${uid}`), { businesses: [...list, entry], storeIds: FieldValue.arrayUnion(storeId), storeId, orgId: orgRef.id }, { merge: true });
-  await batch.commit();
-  await admin.auth().setCustomUserClaims(uid, { storeId, role: "owner", orgId: orgRef.id });
-  logger.info("business added", { uid, storeId, type: data.businessType, shortTrial: sameType });
-  return { storeId, slug, mode, trialDays: sameType ? 3 : TRIAL_DAYS };
+exports.addBusiness = onCall(async () => {
+  throw new HttpsError("failed-precondition", "Each business must use its own email account.");
 });
-exports.switchBusiness = onCall(async (req) => {
-  const { uid, token } = requireAuth(req);
-  if (token.role !== "owner") throw new HttpsError("permission-denied", "Owner only.");
-  const { list } = await myBusinesses(uid);
-  const b = list.find((x) => x.orgId === String(req.data?.orgId || ""));
-  if (!b) throw new HttpsError("not-found", "Business not found.");
-  const org = (await db.doc(`orgs/${b.orgId}`).get()).data();
-  if (!org || org.ownerUid !== uid) throw new HttpsError("permission-denied", "Not your business.");
-  const storeId = org.mainStoreId;
-  await admin.auth().setCustomUserClaims(uid, { storeId, role: "owner", orgId: b.orgId });
-  await db.doc(`users/${uid}`).set({ storeId, orgId: b.orgId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-  return { ok: true, storeId };
+exports.switchBusiness = onCall(async () => {
+  throw new HttpsError("failed-precondition", "Business switching is paused. Log in with the email used for that business.");
 });
-
 // ===========================================================================
 // MULTI-BRANCH — orgs/{orgId}; subscription lives on the main store and is mirrored to branches
 // ===========================================================================
@@ -1737,12 +1708,12 @@ exports.bookAppointment = onCall(HOT, withIndex("appt", async (req) => {
   if (homeService) {
     const hsCfg = ctx.cfg.homeService || {};
     if (hsCfg.requirePin !== false && !homeService.mapUrl) throw new HttpsError("invalid-argument", "Add your map pin (tap 📍 My location) so the stylist can find you.");
-    const idUrl = typeof d.idUrl === "string" && /^priv:stores\/[^/]+\/private\//.test(d.idUrl) ? d.idUrl.slice(0, 300) : null;
+    const idUrl = null; // Home-service bookings no longer collect customer ID documents.
     const keepDays = Math.max(7, Number(ctx.store.settings?.privacy?.retentionDays || 90));
     const onFile = cRec?.homeIdUrl && (cRec.homeIdAt?.toMillis?.() || 0) > Date.now() - (keepDays - 1) * 864e5 ? cRec.homeIdUrl : null; // the file is deleted after the retention period
-    if (hsCfg.requireId !== false && !onFile && !idUrl) throw new HttpsError("failed-precondition", "ID_REQUIRED:Please upload a valid ID for your first home service. Only the salon sees it, and it's kept for your next bookings.");
-    homeService.idUrl = idUrl || onFile || null;
-    if (idUrl && phoneKey.length >= 7) await db.doc(`stores/${storeId}/customers/${phoneKey}`).set({ homeIdUrl: idUrl, homeIdAt: FieldValue.serverTimestamp() }, { merge: true });
+    // No valid-ID upload is required for home-service bookings.
+    homeService.idUrl = null;
+    // Do not save ID document references on customer records.
   }
   const pax = d.pax === 2 && ctx.cfg.allowPax2 !== false ? 2 : 1;
   const gender = ["female", "male"].includes(d.gender) ? d.gender : null;
@@ -5199,6 +5170,7 @@ function offerQuote(o, FL, extra = {}) {
   return { lines, total, dpPercent: total ? Number(FL.dpPercent ?? 50) : 0, revisions: Number(FL.revisions ?? 2), terms: FL.terms || "", note: o.notes || "", date: extra.date || "", validUntil: Date.now() + 7 * 86400000, fromOffer: true, at: Date.now(), ...extra };
 }
 const inquirySendFn = async (req) => {
+  creatorMarketplaceGuard();
   await maintGuard(req);
   const { uid } = requireAuth(req); const d = req.data || {};
   const pub = await inqStore(d.slug);
@@ -5210,8 +5182,9 @@ const inquirySendFn = async (req) => {
   if (brief.details.length < 10) throw new HttpsError("invalid-argument", "Tell us a bit more about the project.");
   const fcfg = (await db.doc(`stores/${pub.storeId}`).get()).data()?.settings?.salon || {}; const FL = fcfg.freelance || {};
   // on-site work: inside the creator's travel radius, and a valid ID for the creator's protection
-  if (brief.location || B.pin) { radiusGuard(fcfg.homeService, String(B.pin || "")); if (FL.requireIdOnSite && !String(B.idUrl || "").startsWith(`priv:stores/${pub.storeId}/private/`)) throw new HttpsError("invalid-argument", "On-site bookings need a valid ID (for the creator's safety)."); }
-  if (String(B.idUrl || "").startsWith(`priv:stores/${pub.storeId}/private/`)) brief.idUrl = String(B.idUrl).slice(0, 300); if (B.pin) brief.pin = String(B.pin).slice(0, 120);
+  if (brief.location || B.pin) radiusGuard(fcfg.homeService, String(B.pin || ""));
+  // Identity-document collection is disabled for inquiries.
+  if (B.pin) brief.pin = String(B.pin).slice(0, 120);
   { const why = await sideJobBlock(pub.storeId, { settings: { salon: fcfg } }, brief.date || null); if (why) throw new HttpsError("failed-precondition", why); }
   const offer = d.offer ? cleanOffer(d.offer, "client") : null;
   if (offer) { if (FL.offers === false) throw new HttpsError("failed-precondition", "This creator only works with fixed rates — pick a service or request a quote."); if (FL.minFee && offer.fee + offer.transpo < FL.minFee) throw new HttpsError("failed-precondition", `This creator's minimum is ₱${FL.minFee.toLocaleString("en-PH")} (talent fee + transport).`); }
@@ -5291,6 +5264,7 @@ exports.inquiryAction = onCall(async (req) => { // the client: accept quote (ter
 });
 /** a business (café, salon…) invites a creator: offer = talent fee + transport + freebies */
 exports.creatorOffer = onCall(async (req) => {
+  creatorMarketplaceGuard();
   await maintGuard(req);
   const who = await staffFrom(req); if (!hasRole(who, "manager")) throw new HttpsError("permission-denied", "Only the owner or a manager can send offers.");
   const st = (await db.doc(`stores/${who.storeId}`).get()).data() || {}; const d = req.data || {};
@@ -5313,6 +5287,7 @@ exports.myCreatorOffers = onCall(async (req) => {
 });
 /** public creator directory (opt-in) */
 exports.creatorDirectory = onCall(async (req) => {
+  if (!CREATOR_MARKETPLACE_ENABLED) return [];
   const d = req.data || {}; const snap = await db.collection("publicStores").where("creatorListed", "==", true).limit(300).get();
   const niche = String(d.niche || "").toLowerCase(), city = String(d.city || "").toLowerCase(), qq = String(d.q || "").toLowerCase();
   return snap.docs.map((x) => x.data()).filter((p) => p.creator && (!niche || (p.creator.niches || []).some((n) => n.toLowerCase() === niche)) && (!city || `${p.creator.city} ${(p.salon?.homeService?.areas || []).map((a) => a.name).join(" ")}`.toLowerCase().includes(city)) && (!qq || `${p.name} ${p.tagline} ${p.creator.pitch} ${(p.creator.niches || []).join(" ")}`.toLowerCase().includes(qq)))
@@ -5361,6 +5336,7 @@ const COLLAB_NICHES = ["Food", "Lifestyle", "Beauty", "Travel", "Family", "Fitne
 const pubCollab = (id, c) => ({ id, title: c.title, details: c.details, niche: c.niche, city: c.city, budgetEach: c.budgetEach, freebies: c.freebies, deliverables: c.deliverables, deadline: c.deadline, slots: c.slots, filled: c.filled || 0, ugc: !!c.ugc, onSite: !!c.onSite, storeName: c.storeName, storeSlug: c.storeSlug, logoUrl: c.logoUrl || null, businessType: c.businessType || "", apps: c.apps || 0, status: c.status, createdAtMs: c.createdAtMs });
 /** Open Collab board: a business posts "need 3 food UGC videos, ₱1,500 each" → creators apply → the business picks */
 exports.collabPost = onCall(async (req) => {
+  creatorMarketplaceGuard();
   await maintGuard(req);
   const who = await staffFrom(req); if (!hasRole(who, "manager")) throw new HttpsError("permission-denied", "Owner or manager only.");
   const st = (await db.doc(`stores/${who.storeId}`).get()).data() || {}; if (st.businessType === "freelance") throw new HttpsError("failed-precondition", "Post collabs from a business account.");
@@ -5375,11 +5351,13 @@ exports.collabPost = onCall(async (req) => {
   return { id: ref.id };
 });
 exports.collabList = onCall(async (req) => { // public — no account needed to look
+  if (!CREATOR_MARKETPLACE_ENABLED) return [];
   const d = req.data || {}; const snap = await db.collection("collabs").where("status", "==", "open").limit(200).get();
   const niche = String(d.niche || ""), city = String(d.city || "").toLowerCase(), q = String(d.q || "").toLowerCase();
   return snap.docs.map((x) => pubCollab(x.id, x.data())).filter((c) => (!c.deadline || c.deadline >= phYmd(Date.now())) && (!niche || c.niche === niche || (niche === "UGC" && c.ugc)) && (!city || String(c.city).toLowerCase().includes(city)) && (!q || `${c.title} ${c.details} ${c.niche} ${c.storeName}`.toLowerCase().includes(q))).sort((a, b) => b.createdAtMs - a.createdAtMs).slice(0, 60);
 });
 exports.collabApply = onCall(async (req) => {
+  creatorMarketplaceGuard();
   await maintGuard(req);
   const who = await staffFrom(req); if (!hasRole(who, "manager")) throw new HttpsError("permission-denied", "Owner only.");
   const st = (await db.doc(`stores/${who.storeId}`).get()).data() || {}; if (st.businessType !== "freelance") throw new HttpsError("failed-precondition", "Apply from your creator account.");
@@ -5422,6 +5400,7 @@ exports.collabDecide = onCall(async (req) => { // the business picks a creator �
 });
 /** creator portfolio (UGC / posted work): photos uploaded, videos as links */
 exports.portfolioSave = onCall(async (req) => {
+  creatorMarketplaceGuard();
   const who = await staffFrom(req); if (!hasRole(who, "manager", "stylist")) throw new HttpsError("permission-denied", "Not allowed.");
   const d = req.data || {}; const col = db.collection(`stores/${who.storeId}/portfolio`);
   if (d.action === "delete") { const r = col.doc(String(d.id || "")); if ((await r.get()).data()?.creator) await r.delete(); return { ok: true }; }
@@ -5444,15 +5423,7 @@ async function collabLiveGuard(req, st) {
   const t = req.auth?.token || {}; if (t.admin === true || isAdminEmail(t.email) || st?.settings?.demo || st?.demo) return;
   const c = await collabCfg(); if (!c.live) throw new HttpsError("failed-precondition", `TapTayo Collab is coming soon — we're onboarding the first ${c.target || 100} creators. Join the waitlist and we'll tell you when it opens.`);
 }
-exports.collabStatus = onCall(async () => {
-  const c = await collabCfg(); const snap = await db.collection("publicStores").where("creatorListed", "==", true).get();
-  return { live: !!c.live, target: c.target || 100, city: c.city || "Metro Manila", creators: snap.docs.filter((x) => !x.data().testMode || !String(x.id).startsWith("taptayo-")).length };
-});
-exports.collabWaitlist = onCall(async (req) => {
-  if (!realAccount(req)) throw new HttpsError("unauthenticated", "Log in to join the waitlist.");
-  const d = req.data || {}; await db.doc(`collabWaitlist/${req.auth.uid}`).set({ email: req.auth.token.email, role: ["business", "creator"].includes(d.role) ? d.role : "business", city: String(d.city || "").slice(0, 40), at: Date.now() }, { merge: true });
-  return { ok: true };
-});
+exports.collabStatus = onCall(async () => ({ live: false, target: 100, city: "Metro Manila", creators: 0 }));
 exports.adminCollabConfig = onCall(async (req) => {
   requireAdmin(req); const d = req.data || {};
   if (d.set) { await db.doc("config/collab").set({ live: !!d.live, target: Math.max(1, parseInt(d.target, 10) || 100), city: String(d.city || "Metro Manila").slice(0, 40), updatedAt: Date.now() }, { merge: true }); COLLAB_CFG = { at: 0, v: null }; }
@@ -5475,6 +5446,7 @@ const cleanItem = (it) => { const type = XDEAL_TYPES.includes(it?.type) ? it.typ
 
 /** business → creator: an X-Deal request (item + optional tip + instructions) */
 exports.xdealSend = onCall(async (req) => {
+  creatorMarketplaceGuard();
   await maintGuard(req);
   const who = await staffFrom(req); if (!hasRole(who, "manager")) throw new HttpsError("permission-denied", "Owner or manager only.");
   const st = (await db.doc(`stores/${who.storeId}`).get()).data() || {};
@@ -5554,13 +5526,8 @@ exports.xdealTick = onSchedule({ schedule: "every 60 minutes", timeZone: "Asia/M
 });
 
 /** creator ID on file (private) — required for X-Deals because businesses send real items */
-exports.creatorKyc = onCall(async (req) => {
-  const who = await staffFrom(req); if (!hasRole(who, "manager")) throw new HttpsError("permission-denied", "Owner only.");
-  const idUrl = String(req.data?.idUrl || ""); if (!idUrl.startsWith(`priv:stores/${who.storeId}/private/`)) throw new HttpsError("invalid-argument", "Upload a photo of your valid ID.");
-  const sel = String(req.data?.selfie || ""); 
-  await db.doc(`stores/${who.storeId}/private/kyc`).set({ idUrl, selfie: sel.startsWith(`priv:stores/${who.storeId}/private/`) ? sel : null, at: Date.now(), by: req.auth.uid });
-  await db.doc(`stores/${who.storeId}`).set({ kycAt: Date.now() }, { merge: true });
-  return { ok: true };
+exports.creatorKyc = onCall(async () => {
+  throw new HttpsError("failed-precondition", "Identity-document collection is disabled. The Verified badge is handled separately.");
 });
 
 /** TapTayo Protect: the creator ghosted → the declared item value comes back as TapTayo credits (reviewed by TapTayo) */
@@ -6445,7 +6412,7 @@ exports.attachWaiver = onCall(async (req) => {
   const isStaff = token.storeId === storeId;
   if (!ownsResv(r, uid) && !isStaff) throw new HttpsError("permission-denied", "This is not your reservation.");
   if (!d.pdfUrl || !d.signatureUrl) throw new HttpsError("invalid-argument", "Missing files.");
-  await ref.update({ waiver: { pdfUrl: String(d.pdfUrl), signatureUrl: String(d.signatureUrl), idPhotoUrl: d.idPhotoUrl ? String(d.idPhotoUrl) : null, signerName: String(d.signerName || "").slice(0, 60), signedAt: FieldValue.serverTimestamp(), signedOnDevice: isStaff ? "store" : "customer" }, updatedAt: FieldValue.serverTimestamp() });
+  await ref.update({ waiver: { pdfUrl: String(d.pdfUrl), signatureUrl: String(d.signatureUrl), idPhotoUrl: null, signerName: String(d.signerName || "").slice(0, 60), signedAt: FieldValue.serverTimestamp(), signedOnDevice: isStaff ? "store" : "customer" }, updatedAt: FieldValue.serverTimestamp() });
   return { ok: true };
 });
 
@@ -6467,12 +6434,12 @@ function stayCfg(store) {
   return { checkIn: c.checkIn || "14:00", checkOut: c.checkOut || "12:00", downPct: c.downPct ?? 50, weekendNights: c.weekendNights || ["fri", "sat"], holidays: c.holidays || [], pool: c.pool || { mode: "none", price: 0 }, extension: c.extension || { enabled: false, pricePerHour: 0, maxHours: 6 }, maxNights: c.maxNights || 14, maxDaysAhead: c.maxDaysAhead || 180,
     addons: (c.addons || []).filter((a) => a && a.name).slice(0, 30).map((a, i) => ({ id: String(a.id || "a" + i), name: String(a.name).slice(0, 40), price: Math.max(0, Number(a.price) || 0), per: a.per === "night" ? "night" : "stay", approval: !!a.approval, kind: a.kind === "kit" ? "kit" : "extra", max: Math.max(1, Math.min(20, Number(a.max) || 4)) })),
     deposit: { amount: Math.max(0, Number(c.deposit?.amount) || 0), checkMinutes: Math.max(15, Math.min(720, Number(c.deposit?.checkMinutes) || 60)) },
-    guestIds: c.guestIds === true, selfCheck: c.selfCheck?.enabled === true, codeHoursBefore: Number(c.selfCheck?.codeHoursBefore) || 2,
+    guestIds: false, requireId: false, selfCheck: c.selfCheck?.enabled === true, codeHoursBefore: Number(c.selfCheck?.codeHoursBefore) || 2,
     overstay: { enabled: c.overstay?.enabled !== false, graceMin: Math.max(0, Number(c.overstay?.graceMin ?? 15)), ratePerHour: Math.max(0, Number(c.overstay?.ratePerHour) || 0) },
     cleaning: { minutes: Math.max(0, Math.min(480, Number(c.cleaning?.minutes ?? 60))), showGuests: c.cleaning?.showGuests !== false },
     promos: (c.promos || []).filter((x) => x && x.name && Number(x.percent) > 0).slice(0, 12).map((x, i) => ({ id: String(x.id || "p" + i), name: String(x.name).slice(0, 40), percent: Math.min(90, Number(x.percent)), days: (x.days || []).filter((d) => STAY_DK.includes(d)), applies: ["night", "short", "both"].includes(x.applies) ? x.applies : "both", from: x.from || "", until: x.until || "", start: x.start || "", end: x.end || "" })),
     loyalty: c.loyalty?.enabled ? { enabled: true, every: Math.max(2, Number(c.loyalty.every) || 5), percent: Math.min(100, Math.max(1, Number(c.loyalty.percent) || 20)) } : { enabled: false },
-    noIdOk: c.noIdOk !== false, kids: { freeUnder: Number(c.kids?.freeUnder ?? 7), countInPax: c.kids?.countInPax === true },
+    noIdOk: true, kids: { freeUnder: Number(c.kids?.freeUnder ?? 7), countInPax: c.kids?.countInPax === true },
     amenities: (c.amenities || []).filter((a) => a && a.name).slice(0, 20).map((a, i) => ({ id: String(a.id || "m" + i), name: String(a.name).slice(0, 40), unit: ["free", "head", "hour", "stay"].includes(a.unit) ? a.unit : "free", price: Math.max(0, Number(a.price) || 0) })),
     nearby: (c.nearby || []).filter((x) => x && x.name).slice(0, 20).map((x) => ({ name: String(x.name).slice(0, 50), kind: String(x.kind || "").slice(0, 20), mins: Number(x.mins) || null, map: String(x.map || "").slice(0, 300) })),
     cancel: { fullDays: Math.max(0, Number(c.cancel?.fullDays) || 0), partialDays: Math.max(0, Number(c.cancel?.partialDays) || 0), partialPct: Math.max(0, Math.min(100, Number(c.cancel?.partialPct) || 0)) },
@@ -6622,14 +6589,13 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
   if (customer.name.length < 2 || customer.phone.replace(/\D/g, "").length < 7) throw new HttpsError("invalid-argument", "Name and phone number are required.");
   if (!d.policyAccepted || !d.noRefundAccepted) throw new HttpsError("invalid-argument", "Please accept the house policy and the no-refund policy.");
   const noId = !!d.noId && !d.waiver?.idPhotoUrl;
-  if (noId && !cfg.noIdOk) throw new HttpsError("invalid-argument", "A valid ID is required to book.");
-  if (store.settings?.stay?.requireId !== false && !d.waiver?.idPhotoUrl && !noId) throw new HttpsError("invalid-argument", "Please upload a valid ID — or tick “I don't have a valid ID” (the owner decides).");
+  // Valid ID collection is disabled; booking eligibility must not depend on ID uploads.
   if (cfg.houseRules && !d.rulesAck) throw new HttpsError("invalid-argument", "Please accept the house rules.");
   const ovRate = cfg.overstay.enabled ? Number(cfg.overstay.ratePerHour) || Number(cfg.extension.pricePerHour) || 0 : 0;
   if (ovRate && d.overstayAck !== true) throw new HttpsError("invalid-argument", `Please acknowledge the overstay fee (₱${ovRate} per hour after check-out).`);
   if (!d.waiver?.signatureUrl) throw new HttpsError("invalid-argument", "Please sign the waiver.");
   // every guest shows a valid ID (the booker's is idPhotoUrl; the rest go in guestIds)
-  const guestIds = (Array.isArray(d.waiver?.guestIds) ? d.waiver.guestIds : []).map(String).filter((u) => u.startsWith("priv:")).slice(0, 20);
+  const guestIds = []; // Do not collect or persist guest ID uploads.
   if (!short) { startMs = phAt(inYmd, cfg.checkIn).getTime(); endMs = phAt(outYmd, cfg.checkOut).getTime(); }
   const sbuf = (cfg.short.bufferMin || 0) * 60000;
   const conflict = short
@@ -6639,7 +6605,7 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
   const phoneKey = customer.phone.replace(/\D/g, "");
   const cRec = (await db.doc(`stores/${storeId}/customers/${phoneKey}`).get()).data();
   if (cRec?.flagged) throw new HttpsError("permission-denied", "We can't accept this booking. Please message us.");
-  if (cfg.guestIds && adults > 1 && guestIds.length < adults - 1) throw new HttpsError("invalid-argument", `Please upload a valid ID for each adult guest (${adults - 1} more).`);
+  // Per-guest ID collection is disabled.
   const subtotal = short ? round2(short.price) : round2(nights.reduce((a, n) => a + n.price, 0));
   // add-ons: extra bed foam, blankets, towels, amenity kits… (limited items wait for the caretaker's OK)
   const addons = [];
@@ -6679,10 +6645,10 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
   const ref = await db.collection(`stores/${storeId}/stays`).add({
     ...(stayTest ? { test: true } : {}),
     code, roomId: roomRef.id, roomName: room.name, checkIn: Timestamp.fromMillis(startMs), checkOut: Timestamp.fromMillis(endMs), checkInYmd: inYmd, checkOutYmd: outYmd,
-    adults, kids, noId, needsIdOk: noId, noticeDiscount, rulesAck: cfg.houseRules ? Date.now() : null, overstayAck: ovRate ? { rate: ovRate, graceMin: cfg.overstay.graceMin, at: Date.now() } : null, cancelPolicy: cfg.cancel, visitors: [], issues: [],
+    adults, kids, noId: false, needsIdOk: false, noticeDiscount, rulesAck: cfg.houseRules ? Date.now() : null, overstayAck: ovRate ? { rate: ovRate, graceMin: cfg.overstay.graceMin, at: Date.now() } : null, cancelPolicy: cfg.cancel, visitors: [], issues: [],
     nights, nightsCount: nights.length, short, guests, poolGuests, addons, discount: discount || null, deposit: depositAmt ? { amount: depositAmt, status: "due" } : null, inventory: (room.inventory || []).slice(0, 40), visitNo: visits + 1, poolFee, subtotal, charges: [], total, downpayment, paidAmount: 0,
     payment: pm ? { methodId: pm.id, method: pm.type, methodName: pm.name, refNo: refNo || null, proofUrl: d.payment?.proofUrl ? String(d.payment.proofUrl).slice(0, 500) : null, status: "to_verify" } : null,
-    customer, customerUid: uid, customerKey: phoneKey, waiver: { guestIds, signatureUrl: String(d.waiver.signatureUrl).slice(0, 500), idPhotoUrl: d.waiver.idPhotoUrl ? String(d.waiver.idPhotoUrl).slice(0, 500) : null, pdfUrl: d.waiver.pdfUrl ? String(d.waiver.pdfUrl).slice(0, 500) : null, acceptedAt: FieldValue.serverTimestamp() },
+    customer, customerUid: uid, customerKey: phoneKey, waiver: { guestIds, signatureUrl: String(d.waiver.signatureUrl).slice(0, 500), idPhotoUrl: null, pdfUrl: d.waiver.pdfUrl ? String(d.waiver.pdfUrl).slice(0, 500) : null, acceptedAt: FieldValue.serverTimestamp() },
     noRefundAccepted: true, requests: reqText ? [{ id: "r1", type: "Note", text: reqText, status: "pending", at: Date.now() }] : [],
     status: needsConfirm ? "unconfirmed" : "pending", needsConfirm, confirmDeadline: needsConfirm ? Timestamp.fromMillis(Math.min(Date.now() + (Number(pub.confirm.minutes) || 60) * 60000, startMs)) : null,
     reschedule: null, extension: null, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),

@@ -69,7 +69,7 @@ export function openQuoteForm(ctx, mode = "quote") {
     ${isOffer ? "" : `<label>Budget (optional)</label><input data-budget placeholder="e.g. ₱10,000–₱15,000" maxlength="40"/>`}
     <label>On-site? Where (optional)</label><input data-loc maxlength="120" placeholder="Shop name, street, city"/>
     <div data-onsite hidden><div style="display:flex;gap:6px"><input data-pin placeholder="Paste a Google Maps link" style="flex:1"/><button type="button" class="c-btn ghost" data-mypin>📍 My location</button></div>${cr.radiusKm ? `<p class="c-hint">The creator travels up to ${cr.radiusKm} km.</p>` : ""}
-      ${cr.idOnSite ? `<label>Valid ID of the person meeting the creator <span class="muted small">(for the creator's safety — only they see it)</span></label><input type="file" accept="image/*" data-id/>` : ""}</div>
+      </div>
     ${isOffer ? "" : `<label>Deliverables you want</label><input data-del placeholder="e.g. 2 TikToks + 3 stories" maxlength="300"/>`}
     <label>Tell us about it</label><textarea data-details rows="4" maxlength="1500" placeholder="Goal, style, references, anything we should know"></textarea>
     <label>Your name</label><input data-name value="${esc(saved.name || "")}"/>
@@ -84,8 +84,7 @@ export function openQuoteForm(ctx, mode = "quote") {
   foot.querySelector("[data-send]").onclick = async (e) => {
     const g = (k) => body.querySelector(`[data-${k}]`)?.value.trim() || ""; e.target.disabled = true;
     try {
-      let idUrl = ""; const f = q("id")?.files?.[0];
-      if (f && g("loc")) { e.target.textContent = "Uploading ID…"; idUrl = await uploadPrivateImage(store.storeId, C.auth.currentUser.uid, f, { max: 1400, name: `inqid_${Date.now()}` }); }
+      const idUrl = "";
       const det = g("details") || (isOffer ? readOffer(body).deliverables : "");
       const r = await C.call("inquirySend", { slug: C.slug, ...(isOffer ? { offer: readOffer(body) } : {}), brief: { kind: isOffer ? "Brand collab / content" : g("kind"), brand: g("brand"), platform: g("platform"), date: g("date"), deadline: g("deadline"), budget: g("budget"), location: g("loc"), pin: g("loc") ? g("pin") : "", idUrl, rush: !!q("rush")?.checked, deliverables: g("del") || (isOffer ? readOffer(body).deliverables : ""), details: det } , customer: { name: g("name"), phone: g("phone"), email: g("email"), messenger: readMsgr(body) } });
       C.saveLocal({ customer: { ...(C.loadLocal().customer || {}), name: g("name"), phone: g("phone"), messenger: readMsgr(body) }, lastInquiry: { id: r.id, storeId: r.storeId, at: Date.now() } });

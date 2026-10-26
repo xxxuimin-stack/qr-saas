@@ -249,9 +249,9 @@ export function renderSettingsPage(root, ctx, opts = {}) {
           <label>City</label><input name="flCity" value="${esc(sl.freelance?.city || "")}" placeholder="Makati"/>
           <label>Why book me</label><textarea name="flPitch" rows="3" maxlength="600" placeholder="Honest food reviews, 120K Manila foodies, most videos hit 50K+ views in a week.">${esc(sl.freelance?.pitch || "")}</textarea>
           <label>Brands you've worked with (comma-separated)</label><input name="flBrands" value="${esc((sl.freelance?.brands || []).join(", "))}"/>
-          <label class="check"><input type="checkbox" name="flUgc" ${sl.freelance?.ugc ? "checked" : ""}/> 📱 I make UGC (videos the brand posts on its own page / ads — followers don't matter)</label>
+          <input type="checkbox" name="flUgc" hidden/>
           <label class="check"><input type="checkbox" name="flAdult" ${sl.freelance?.adult ? "checked" : ""}/> I'm 18 or older <span class="muted small">(required to be listed)</span></label>
-          <label class="check"><input type="checkbox" name="flDir" ${sl.freelance?.directory ? "checked" : ""}/> 🎥 List me on TapTayo Collab (businesses can find and invite me — needs 3 portfolio samples)</label>
+          <input type="checkbox" name="flDir" hidden/>
           <h4 style="margin:16px 0 6px">🕒 Side-job availability</h4>
           <p class="small muted" style="margin:0 0 6px">Have a day job? Take bookings only when you're free.</p>
           <div class="row wrap" style="gap:6px">${[["weekends", "Weekends only"], ["evenings", "Weeknight evenings"], ["evenings & weekends", "Evenings & weekends"], ["", "Any day"]].map(([k, t]) => `<button type="button" class="btn sm ${(sl.freelance?.availability?.sideJob || "") === k ? "" : "ghost"}" data-sidejob="${k}">${t}</button>`).join("")}</div>
@@ -270,12 +270,9 @@ export function renderSettingsPage(root, ctx, opts = {}) {
           <div class="form3"><div><label>Release</label><select name="flRel">${[["both", "Raw first, then final"], ["together", "Raw + final together"], ["final", "Final only"]].map(([k, t]) => `<option value="${k}" ${(sl.freelance?.release?.mode || "both") === k ? "selected" : ""}>${t}</option>`).join("")}</select></div><div><label>Raw copies (days after)</label><input name="flRaw" type="number" min="0" value="${sl.freelance?.release?.rawDays ?? 3}"/></div><div><label>Final edits (days after)</label><input name="flFin" type="number" min="0" value="${sl.freelance?.release?.finalDays ?? 7}"/></div></div>
           <p class="small muted">Filled in automatically on quotes for shoots and events — the client sees a countdown.</p>
           <h4 style="margin:16px 0 6px">🛡 Safety</h4>
-          <label class="check"><input type="checkbox" name="flId" ${sl.freelance?.requireIdOnSite ? "checked" : ""}/> On-site jobs need the client's valid ID (only you see it)</label>
-          <h4 style="margin:16px 0 6px">🎁 X-Deals (barter: free food, product or staycation for a video)</h4>
-          <label class="check"><input type="checkbox" name="xOn" ${sl.freelance?.xdeal?.on ? "checked" : ""}/> I accept X-Deals</label>
-          <div class="form2"><div><label>Minimum tip with an X-Deal (₱, 0 = none)</label><input name="xTip" type="number" min="0" value="${sl.freelance?.xdeal?.minTip || 0}"/></div><div><label>Video ready (days after I receive the item)</label><input name="xDays" type="number" min="1" max="30" value="${sl.freelance?.xdeal?.releaseDays || 5}"/></div></div>
-          <div class="row wrap" style="gap:12px">${[["food", "🍽 Food"], ["product", "📦 Products"], ["staycation", "🏡 Staycations"]].map(([k, t]) => `<label class="check" style="margin:0"><input type="checkbox" name="xType" value="${k}" ${!sl.freelance?.xdeal?.types || sl.freelance.xdeal.types.includes(k) ? "checked" : ""}/> ${t}</label>`).join("")}</div>
-          <div style="margin-top:8px">${store.kycAt ? `<span class="pill ok">🪪 Valid ID on file</span>` : `<label class="btn sm ghost" style="cursor:pointer">🪪 Upload valid ID (required for X-Deals)<input type="file" accept="image/*" id="xKyc" hidden/></label>`}<p class="small muted" style="margin:4px 0 0">Businesses send real items, so X-Deals need your ID. Only TapTayo sees it; deleted automatically later. New creators: items up to ₱800 → ₱2,000 after 3 on-time X-Deals.</p></div>` : ""}
+          <input type="checkbox" name="flId" hidden/>
+          <input type="checkbox" name="xOn" hidden/><input type="number" name="xTip" value="0" hidden/><input type="number" name="xDays" value="5" hidden/><input type="checkbox" name="xType" value="food" hidden/>
+           <div style="margin-top:8px"><p class="small muted" style="margin:4px 0 0">ID and permit document uploads are disabled. The Verified badge remains subject to TapTayo review.</p></div>` : ""}
           <h4 style="margin:16px 0 6px">💸 Staff collect &amp; remit</h4>
           <label class="check"><input type="checkbox" name="slRemit" ${sl.remit?.enabled ? "checked" : ""}/> On-call staff take the client's payment themselves (cash or their GCash) and remit to you online</label>
           <p class="small muted" style="margin:2px 0 0">Each staff sees their balance: collected − commission / basic / allowance. They send a remittance (GCash, bank or cash) with the reference no., you confirm it in Reports. Great when you're away from the shop.</p>
@@ -312,7 +309,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
           <label>While I'm out on home service (no other staff in the shop)</label><select name="slAway"><option value="queue" ${sl.walkInWhenAway !== "off" ? "selected" : ""}>Walk-ins can still join the line (served when I'm back)</option><option value="off" ${sl.walkInWhenAway === "off" ? "selected" : ""}>Pause walk-ins — customers book a time instead</option></select>` : ""}
           <label class="check"><input type="checkbox" name="hsEscort" ${hs.escort ? "checked" : ""}/> 🛵 A rider drops off & picks up the ${store.businessType === "spa" ? "therapist" : "staff"} ${lock("delivery")} <span class="small muted">(rider sees the trip; when the service is done the rider is told to pick up)</span></label>
           <label class="check"><input type="checkbox" name="hsPin" ${hs.requirePin !== false ? "checked" : ""}/> 📍 Require a map pin (the client taps “My location”)</label>
-          <label class="check"><input type="checkbox" name="hsId" ${hs.requireId !== false ? "checked" : ""}/> 🪪 Require a valid ID on the client's <b>first</b> home service (private, kept for next bookings, auto-deleted after the retention period)</label>
+          <input type="checkbox" name="hsId" hidden/>
           <div class="form2"><div><label>Reservation fee for home service (₱, 0 = none) ${proLock("salondp")}</label><input name="hsDp" type="number" min="0" value="${hs.dpAmount || 0}" /></div><div><label>Note shown to customer</label><input name="slHomeNote" value="${esc(hs.note || "")}" placeholder="e.g. Please prepare a chair near an outlet" /></div></div>
           </div>
           <label>Salon policy (shown on booking)</label><textarea name="polSalon" rows="5">${esc(s.policies?.salon ?? "")}</textarea>
@@ -420,7 +417,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
               <label class="check"><input type="checkbox" name="wvTable" ${wv.table ? "checked" : ""}/> Table</label>
               <label class="check"><input type="checkbox" name="wvEvent" ${wv.event !== false ? "checked" : ""}/> Event</label>
               <label class="check"><input type="checkbox" name="wvVip" ${wv.vip !== false ? "checked" : ""}/> VIP</label></div>
-            <div class="form2"><div><label>ID photo</label><select name="wvId"><option value="off" ${(wv.idMode || "optional") === "off" ? "selected" : ""}>Don't ask</option><option value="optional" ${(wv.idMode || "optional") === "optional" ? "selected" : ""}>Optional</option><option value="required" ${wv.idMode === "required" ? "selected" : ""}>Required</option></select></div></div>
+            <input type="hidden" name="wvId" value="off"/>
             <label class="check"><input type="checkbox" name="wvBlock" ${wv.blockConfirm !== false ? "checked" : ""}/> Staff cannot Confirm until the waiver is signed</label>
           </div>
         </div>
@@ -594,10 +591,10 @@ export function renderSettingsPage(root, ctx, opts = {}) {
           <p class="small muted span2" style="margin:0">Each room can have its own hour prices in Rooms. A short stay is blocked automatically if it would overlap an overnight booking (plus cleaning time).</p>
           <div class="span2" style="border-top:1px solid var(--line);padding-top:10px"><b>🏊 Use of amenities</b><p class="small muted" style="margin:2px 0 6px">Pool, gym, videoke, grill… free or paid (per head, per hour or per stay). Guests pick them when booking.</p><div id="stAmen"></div></div>
           <div class="span2" style="border-top:1px solid var(--line);padding-top:10px"><b>📍 Nearby places</b><p class="small muted" style="margin:2px 0 6px">e.g. hospital, SM / mall, Jollibee, church, beach — with minutes away. Shown on your page.</p><div id="stNear"></div></div>
-          <div class="span2" style="border-top:1px solid var(--line);padding-top:10px"><b>👨‍👩‍👧 Guests &amp; IDs</b></div>
+          <div class="span2" style="border-top:1px solid var(--line);padding-top:10px"><b>👨‍👩‍👧 Guests</b></div>
           <div><label>Kids below this age are free</label><input name="stKidAge" type="number" min="0" max="17" value="${st.kids?.freeUnder ?? 7}"/></div>
           <div><label class="check" style="margin-top:28px"><input type="checkbox" name="stKidPax" ${st.kids?.countInPax ? "checked" : ""}/> Kids count toward the room's max guests</label></div>
-          <div class="span2"><label class="check"><input type="checkbox" name="stNoId" ${st.noIdOk !== false ? "checked" : ""}/> Guests without a valid ID can still book — you decide (the booking waits for your OK)</label></div>
+          <input type="checkbox" name="stNoId" hidden checked/>
           <div class="span2" style="border-top:1px solid var(--line);padding-top:10px"><b>↩️ Cancellation refund</b><p class="small muted" style="margin:2px 0 6px">Leave at 0 for no refund. Example: full refund 7+ days before, 50% refund 3+ days before.</p></div>
           <div><label>Full refund if cancelled … days before (0 = never)</label><input name="stCxFull" type="number" min="0" value="${st.cancel?.fullDays ?? 0}"/></div>
           <div><label>Partial refund … days before</label><input name="stCxPart" type="number" min="0" value="${st.cancel?.partialDays ?? 0}"/></div>
@@ -613,7 +610,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
           <div><label>Deposit (₱, 0 = none)</label><input name="stDep" type="number" min="0" value="${st.deposit?.amount ?? 0}"/></div>
           <div><label>Room check within (minutes after check-out)</label><input name="stDepMin" type="number" min="15" max="720" value="${st.deposit?.checkMinutes ?? 60}"/></div>
           <p class="small muted span2" style="margin:0">If nobody checks the room in time, the guest sees "full refund" — fair to both sides.</p>
-          <div class="span2"><label class="check"><input type="checkbox" name="stGuestIds" ${st.guestIds ? "checked" : ""}/> 🪪 Every guest uploads a valid ID (not just the one booking)</label></div>
+          <input type="checkbox" name="stGuestIds" hidden/>
           <div class="span2" style="border-top:1px solid var(--line);padding-top:10px"><label class="check"><input type="checkbox" name="stSelf" ${st.selfCheck?.enabled ? "checked" : ""}/> 🔑 <b>Self check-in / check-out</b> (smart lock) — the guest sees the door code only when the booking is confirmed, the downpayment is verified and the deposit is paid</label></div>
           <div><label>Show the door code (hours before check-in)</label><input name="stCodeH" type="number" min="0" max="24" value="${st.selfCheck?.codeHoursBefore ?? 2}"/></div>
           <p class="small muted" style="margin:0;align-self:end">Set the code per room in Rooms. Change it there anytime — guests always see the current one.</p>
@@ -627,7 +624,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
           <div class="span2" style="border-top:1px solid var(--line);padding-top:10px"><label class="check"><input type="checkbox" name="stLoy" ${st.loyalty?.enabled ? "checked" : ""}/> 🎁 <b>Loyalty card</b> — every few stays, the guest gets a discount</label></div>
           <div><label>Every … stays</label><input name="stLoyN" type="number" min="2" value="${st.loyalty?.every ?? 5}"/></div>
           <div><label>Discount on that stay (%)</label><input name="stLoyP" type="number" min="1" max="100" value="${st.loyalty?.percent ?? 20}"/></div>
-          <div class="span2"><label class="check"><input type="checkbox" name="stId" ${st.requireId !== false ? "checked" : ""}/> 🪪 Require a valid ID photo when booking</label></div>
+          <input type="checkbox" name="stId" hidden/>
           <div class="span2"><label>House policy (shown when booking — include your no-refund rule)</label><textarea name="stPolicy" rows="6">${esc(st.policy || "")}</textarea></div>
           <div class="span2"><label>Waiver text (guest signs this)</label><textarea name="stWaiver" rows="4">${esc(s.waiver?.text || "")}</textarea></div>
         </div>
@@ -797,8 +794,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
     const P = { weekends: { sat: ["09:00", "18:00"], sun: ["09:00", "18:00"] }, evenings: { mon: ["18:00", "22:00"], tue: ["18:00", "22:00"], wed: ["18:00", "22:00"], thu: ["18:00", "22:00"], fri: ["18:00", "22:00"] }, "evenings & weekends": { mon: ["18:00", "22:00"], tue: ["18:00", "22:00"], wed: ["18:00", "22:00"], thu: ["18:00", "22:00"], fri: ["18:00", "22:00"], sat: ["09:00", "20:00"], sun: ["09:00", "20:00"] } }[b.dataset.sidejob];
     if (P) { sideHours = P; toast("Hours will be set when you save"); } else sideHours = null;
   }));
-  root.querySelector("#xKyc")?.addEventListener("change", async (e) => { const f = e.target.files?.[0]; if (!f) return; try { toast("Uploading your ID…"); const { uploadPrivateImage } = await import("../upload.js"); const url = await uploadPrivateImage(storeId, auth.currentUser.uid, f, { max: 1600, name: "kyc_id" }); await call("creatorKyc", { idUrl: url }); toast("ID saved ✓ — you can take X-Deals"); e.target.closest("label").outerHTML = `<span class="pill ok">🪪 Valid ID on file</span>`; } catch (x) { toast(x.message, "error"); } });
-  root.querySelector("#flVerify")?.addEventListener("click", async (e) => { e.target.disabled = true; try { const r = await call("creatorVerifyRequest", {}); toast(`Sent! Put ${r.code} in one of your bios for a day so we can check it's you.`); } catch (x) { toast(x.message, "error"); e.target.disabled = false; } });
+    root.querySelector("#flVerify")?.addEventListener("click", async (e) => { e.target.disabled = true; try { const r = await call("creatorVerifyRequest", {}); toast(`Sent! Put ${r.code} in one of your bios for a day so we can check it's you.`); } catch (x) { toast(x.message, "error"); e.target.disabled = false; } });
   if (root.querySelector("#flPlat")) stRows.plat = rowsEditor(root.querySelector("#flPlat"), (s.salon || {}).freelance?.platforms || [], [{ k: "platform", label: "Platform", type: "select", options: [["TikTok", "TikTok"], ["Instagram", "Instagram"], ["YouTube", "YouTube"], ["Facebook", "Facebook"], ["X", "X"], ["Website", "Website"], ["Portfolio", "Portfolio"]] }, { k: "handle", label: "Handle", ph: "@you" }, { k: "followers", label: "Followers", ph: "120K" }, { k: "url", label: "Link", w: 2 }], { addLabel: "+ Add platform" });
   if (root.querySelector("#stAddons")) {
     const st0 = s.stay || {};
@@ -961,7 +957,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
       if (v("cfLoy")) settings.loyalty = { enabled: v("cfLoy").checked, stamps: Math.max(2, Number(v("cfLoyN").value || 10)), minTotal: Math.max(0, Number(v("cfLoyMin").value || 0)), rewardValue: Math.max(0, Number(v("cfLoyVal").value || 0)), rewardText: v("cfLoyText").value.trim(), maxPerDay: Math.max(1, Number(v("cfLoyDay").value || 1)) };
       settings.reservations = { enabled: v("resvEnabled").checked, maxPax: Number(v("resvMaxPax").value || 12), leadTimeHours: Number(v("resvLeadHours").value || 0), requirePhone: true };
       settings.policies = { table: v("polTable").value.trim(), event: v("polEvent").value.trim(), vip: v("polVip").value.trim() };
-      settings.waiver = { text: v("wvText").value.trim(), table: v("wvTable").checked, event: v("wvEvent").checked, vip: v("wvVip").checked, idMode: v("wvId").value, blockConfirm: v("wvBlock").checked };
+      settings.waiver = { text: v("wvText").value.trim(), table: v("wvTable").checked, event: v("wvEvent").checked, vip: v("wvVip").checked, idMode: "off", blockConfirm: v("wvBlock").checked };
       settings.feedback = { enabled: v("fbEnabled").checked, display: v("fbDisplay").value, askPhoto: v("fbPhoto").checked };
       settings.incidents = { enabled: v("incEnabled").checked, requireProof: v("incProof").checked, who: v("incWho").value, maxVoucherCrew: Number(v("incMaxCrew").value || 0), maxCompsCrew: Number(v("incMaxComps")?.value ?? 3), crewCancelMax: Number(v("incCancelMax")?.value ?? 300) };
       settings.callStaff = {
@@ -987,15 +983,15 @@ export function renderSettingsPage(root, ctx, opts = {}) {
       settings.stay = { ...(s.stay || {}), payFirst: !!v("stPayFirst")?.checked, checkIn: v("stIn").value || "14:00", checkOut: v("stOut").value || "12:00", downPct: Math.max(0, Math.min(100, Number(v("stDown").value) || 0)), maxNights: Number(v("stMaxN").value || 14),
         weekendNights: [...root.querySelectorAll("[data-wk]:checked")].map((c) => c.dataset.wk), holidays: v("stHol").value.split(",").map((x) => x.trim()).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x)),
         pool: { mode: v("stPool").value, price: Number(v("stPoolP").value || 0) }, extension: { enabled: v("stExt").checked, pricePerHour: Number(v("stExtP").value || 0), maxHours: Number(v("stExtH").value || 6) },
-        requireId: v("stId").checked, policy: v("stPolicy").value.trim(),
+        requireId: false, policy: v("stPolicy").value.trim(),
         addons: (stRows.addons?.() || []).filter((a) => a.name).map((a) => ({ ...a, price: a.price || 0, max: a.max || 4 })),
         deposit: { amount: Math.max(0, Number(v("stDep").value) || 0), checkMinutes: Math.max(15, Number(v("stDepMin").value) || 60) },
-        guestIds: v("stGuestIds").checked, selfCheck: { enabled: v("stSelf").checked, codeHoursBefore: Math.max(0, Number(v("stCodeH").value) || 0) },
+        guestIds: false, selfCheck: { enabled: v("stSelf").checked, codeHoursBefore: Math.max(0, Number(v("stCodeH").value) || 0) },
         overstay: { enabled: v("stOver").checked, graceMin: Math.max(0, Number(v("stOverG").value) || 0), ratePerHour: Math.max(0, Number(v("stOverR").value) || 0) },
         cleaning: { minutes: Math.max(0, Math.min(480, Number(v("stClean").value) || 0)), showGuests: v("stCleanShow").checked },
         promos: (stRows.promos?.() || []).filter((p) => p.name && p.percent > 0),
         amenities: (stRows.amen?.() || []).filter((a) => a.name).map((a) => ({ ...a, price: a.unit === "free" ? 0 : a.price || 0 })), nearby: (stRows.near?.() || []).filter((x) => x.name),
-        kids: { freeUnder: Number(v("stKidAge").value) || 0, countInPax: v("stKidPax").checked }, noIdOk: v("stNoId").checked,
+        kids: { freeUnder: Number(v("stKidAge").value) || 0, countInPax: v("stKidPax").checked }, noIdOk: true,
         cancel: { fullDays: Number(v("stCxFull").value) || 0, partialDays: Number(v("stCxPart").value) || 0, partialPct: Number(v("stCxPct").value) || 0 },
         lastMinute: { enabled: v("stLast").checked, percent: Number(v("stLastP").value) || 20, after: v("stLastT").value || "18:00" },
         houseRules: v("stRules").value.trim(), visitorLog: v("stVisit").checked, ical: { exportShort: v("stIcalShort").checked },
@@ -1024,7 +1020,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
         intake: { enabled: v("slIntake") ? v("slIntake").checked : !!sl.intake?.enabled },
         queue: v("qOn") ? { ...(sl.queue || {}), enabled: v("qOn").checked, maxPeople: Math.max(1, Math.min(50, Number(v("qMax").value) || 8)), maxWaitMin: Math.max(10, Math.min(600, Number(v("qWait").value) || 90)), cutoffMin: Math.max(0, Math.min(240, Number(v("qCut").value) || 0)), graceMin: Math.max(3, Math.min(30, Number(v("qGrace").value) || 10)), callOnCallAt: Math.max(2, Math.min(50, Number(v("qOnCall").value) || 5)), remote: v("qRemote").checked, sms: v("qSms").checked } : (sl.queue || {}),
         offers: v("ofOn") ? { enabled: v("ofOn").checked, mode: v("ofMode").value === "race" ? "race" : "rotate", seconds: Math.max(1, Math.min(15, Number(v("ofMin").value) || 5)) * 60, auto: v("ofAuto").checked } : (sl.offers || { enabled: false }),
-        slotMinutes: Number(v("slSlot").value || 30), bufferMin: Number(v("slBuffer").value || 0), leadTimeHours: Number(v("slLead").value || 0), cancelHours: Number(v("slCancel").value || 0), graceMin: Number(v("slGrace").value || 15), maxDaysAhead: Number(v("slDays").value || 14), confirmMinutes: Number(v("slConfirm").value || 60), allowAnyone: v("slAnyone").checked, ownerWorks: v("slOwnerWorks").checked, tips: v("slTips").checked, homeService: { ...hs, radiusKm: Math.max(0, Number(v("hsRadius")?.value || 0)), base: (() => { const t = String(v("hsBase")?.value || ""); const m = /(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/.exec(t); return m ? { lat: Number(m[1]), lng: Number(m[2]) } : null; })(), enabled: v("slHome").checked, fee: Number(v("slHomeFee").value || 0), note: v("slHomeNote").value.trim(), travelMin: Math.max(0, Math.min(180, Number(v("hsTravel").value || 0))), minSpend: Number(v("hsMin").value || 0), dpAmount: Number(v("hsDp").value || 0), escort: v("hsEscort") ? v("hsEscort").checked : !!hs.escort, requirePin: v("hsPin") ? v("hsPin").checked : hs.requirePin !== false, requireId: v("hsId") ? v("hsId").checked : hs.requireId !== false, exclusive: v("hsExcl") ? v("hsExcl").checked : hs.exclusive !== false,
+        slotMinutes: Number(v("slSlot").value || 30), bufferMin: Number(v("slBuffer").value || 0), leadTimeHours: Number(v("slLead").value || 0), cancelHours: Number(v("slCancel").value || 0), graceMin: Number(v("slGrace").value || 15), maxDaysAhead: Number(v("slDays").value || 14), confirmMinutes: Number(v("slConfirm").value || 60), allowAnyone: v("slAnyone").checked, ownerWorks: v("slOwnerWorks").checked, tips: v("slTips").checked, homeService: { ...hs, radiusKm: Math.max(0, Number(v("hsRadius")?.value || 0)), base: (() => { const t = String(v("hsBase")?.value || ""); const m = /(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/.exec(t); return m ? { lat: Number(m[1]), lng: Number(m[2]) } : null; })(), enabled: v("slHome").checked, fee: Number(v("slHomeFee").value || 0), note: v("slHomeNote").value.trim(), travelMin: Math.max(0, Math.min(180, Number(v("hsTravel").value || 0))), minSpend: Number(v("hsMin").value || 0), dpAmount: Number(v("hsDp").value || 0), escort: v("hsEscort") ? v("hsEscort").checked : !!hs.escort, requirePin: v("hsPin") ? v("hsPin").checked : hs.requirePin !== false, requireId: false, exclusive: v("hsExcl") ? v("hsExcl").checked : hs.exclusive !== false,
           areas: [...root.querySelectorAll("[data-hsarea]")].map((r) => ({ name: r.querySelector("[name=haName]").value.trim().slice(0, 40), fee: Number(r.querySelector("[name=haFee]").value || 0) })).filter((a) => a.name).slice(0, 40),
           days: Object.fromEntries(DAYS.map(([k]) => [k, { on: v("hsOn_" + k).checked, from: v("hsFrom_" + k).value || "09:00", to: v("hsTo_" + k).value || "12:00" }])) },
         ...(v("slAway") ? { walkInWhenAway: v("slAway").value } : {}), ...(v("slHomeAway") ? { homeAway: v("slHomeAway").value } : {}) };
