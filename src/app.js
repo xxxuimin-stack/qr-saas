@@ -126,7 +126,7 @@ function drawPlace() {
   $("placeHint").textContent = PLACES.find(([k]) => k === wiz.place)?.[2] || "";
   box.querySelectorAll("[data-place]").forEach((b) => (b.onclick = () => { wiz.place = b.dataset.place; drawPlace(); }));
 }
-const needsOwnerProfile = () => (setupMode() === "salon" && (wiz.setup === "solo" || wiz.ownerWorks)) || (setupMode() === "table" && wiz.setup === "home");
+const needsOwnerProfile = () => false; // Staff name/PIN setup is deferred; owners can add staff later.
 
 function slugify(s) {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
@@ -148,7 +148,7 @@ function initWizard() {
   const wrap = $("types");
   wrap.innerHTML = "";
   for (const [key, p] of Object.entries(PRESETS).sort((a, b) => !!a[1].comingSoon - !!b[1].comingSoon)) {
-    if (p.hidden) continue;
+    if (p.hidden || key === "freelance") continue;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "type";
@@ -211,27 +211,9 @@ function initWizard() {
     $("review").innerHTML = `<dl class="review-list">${rows.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`;
     goStep(4);
   };
-  // mobile number check (SMS code) before the store is created — one free trial per real number
-  let otpOk = false;
-  const otpStep = async () => {
-    if (addingBusiness || otpOk) return true;
-    const r = await call("sendSignupOtp", { phone: wiz.phone });
-    if (r.skipped) { otpOk = true; return true; }
-    return new Promise((resolve) => {
-      let box = document.getElementById("otpBox"); box?.remove();
-      box = document.createElement("div"); box.id = "otpBox"; box.className = "tile"; box.style.cssText = "margin-top:12px;border:2px solid var(--primary,#C62828)";
-      box.innerHTML = `<b>📱 Enter the 6-digit code</b><p class="small muted" style="margin:4px 0 8px">We texted it to ${esc(r.phone)}. It may take up to a minute.</p>
-        <div class="row" style="gap:8px"><input id="otpCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="123456" style="max-width:160px;font-size:1.3rem;letter-spacing:4px;text-align:center"/><button class="btn" type="button" id="otpVerify">Verify</button></div>
-        <div class="small" style="margin-top:8px"><a href="#" id="otpResend">Send a new code</a> · <a href="#" id="otpBack">Change number</a></div><div id="otpMsg" class="small" style="color:#B42318;margin-top:6px"></div>`;
-      $("review").after(box); box.querySelector("#otpCode").focus();
-      const msg = (t) => (box.querySelector("#otpMsg").textContent = t);
-      box.querySelector("#otpVerify").onclick = async (e) => { e.target.disabled = true; try { await call("verifySignupOtp", { code: box.querySelector("#otpCode").value }); otpOk = true; box.remove(); resolve(true); } catch (x) { msg(x.message); e.target.disabled = false; } };
-      box.querySelector("#otpCode").oninput = (e) => { if (e.target.value.replace(/\D/g, "").length === 6) box.querySelector("#otpVerify").click(); };
-      box.querySelector("#otpResend").onclick = async (e) => { e.preventDefault(); try { await call("sendSignupOtp", { phone: wiz.phone }); msg("New code sent ✓"); } catch (x) { msg(x.message); } };
-      box.querySelector("#otpBack").onclick = (e) => { e.preventDefault(); box.remove(); resolve(false); goStep(3); };
-    });
-  };
-  $("createBtn").onclick = async () => {
+  // Signup verification is temporarily disabled so a delivery failure cannot block business creation.
+  const otpStep = async () => true;
+$("createBtn").onclick = async () => {
     const btn = $("createBtn");
     btn.disabled = true;
     btn.textContent = "Checking your number…";
@@ -239,10 +221,9 @@ function initWizard() {
     catch (err) { wizMsg(err.message); btn.disabled = false; btn.textContent = "Create my store"; if (/mobile number/i.test(err.message)) goStep(3); return; }
     btn.textContent = "Creating…";
     try {
-      await call(addingBusiness ? "addBusiness" : "createStore", { bid: (() => { try { let b = localStorage.getItem("taptayo:bid"); if (!b) { b = Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => x.toString(16).padStart(2, "0")).join(""); localStorage.setItem("taptayo:bid", b); } return b; } catch { return null; } })(), ref: (() => { try { return localStorage.getItem("taptayo:ref"); } catch { return null; } })(), name: wiz.name, businessType: wiz.businessType, phone: wiz.phone, address: wiz.address, setup: wiz.setup ? { kind: wiz.setup, ownerWorks: wiz.ownerWorks, place: wiz.place || undefined } : null, ownerName: wiz.ownerName || null, ownerPin: wiz.ownerPin || null });
+      await call("createStore", { bid: (() => { try { let b = localStorage.getItem("taptayo:bid"); if (!b) { b = Array.from(crypto.getRandomValues(new Uint8Array(12)), (x) => x.toString(16).padStart(2, "0")).join(""); localStorage.setItem("taptayo:bid", b); } return b; } catch { return null; } })(), ref: (() => { try { return localStorage.getItem("taptayo:ref"); } catch { return null; } })(), name: wiz.name, businessType: wiz.businessType, phone: wiz.phone, address: wiz.address, setup: wiz.setup ? { kind: wiz.setup, ownerWorks: wiz.ownerWorks, place: wiz.place || undefined } : null, ownerName: wiz.ownerName || null, ownerPin: wiz.ownerPin || null });
       claims = (await currentUser.getIdTokenResult(true)).claims;
       hide("wizard");
-      if (addingBusiness) { addingBusiness = false; location.hash = "#overview"; location.reload(); return; }
       await loadDashboard();
     } catch (err) {
       console.error(err);
@@ -265,9 +246,7 @@ const PAGES = {
   menu:         { title: (l) => l.items,  icon: "📋", render: renderMenuPage, hideMode: ["stay"] },
   tables:       { title: (l, m, st) => (m === "table" && st?.settings?.setup?.kind !== "home" ? `${l.unit}s & QR` : "QR & link"), icon: "🔲", render: renderTablesPage },
   calendar:     { title: "Calendar",      icon: "🗓", render: (root, c) => renderCalendarPage(root, c), onlyMode: "salon" },
-  projects:     { title: "Projects", icon: "📨", render: renderProjectsPage, onlyMode: "salon", onlyType: "freelance" },
   me:           { title: "Me", icon: "👤", render: renderMePage, hidden: true, nav: true },
-  creators:     { title: "Invite a creator", icon: "🎥", render: renderCreatorsPage, ownerOnly: true, hideType: "freelance" },
   orders:       { title: (l) => `${l.order}s`, icon: "🧾", render: renderOrdersPage, hideMode: ["stay", "salon"] }, // salon appointments live in Calendar (this page read the wrong collection for salons)
   promos:       { title: "Promos",        icon: "🏷️", render: renderPromosPage, ownerOnly: true, hideMode: ["stay"], pro: "promos" },
   reservations: { title: "Reservations", icon: "📅", render: renderReservationsPage, onlyMode: "table", pro: ["reservations", "events_vip"] },
@@ -369,22 +348,14 @@ async function loadDashboard() {
   logoBox.querySelector(".slogo")?.remove();
   if (store.logoUrl) logoBox.prepend(Object.assign(document.createElement("img"), { src: store.logoUrl, className: "slogo", alt: "" }));
   $("storeType").textContent = `${preset.icon} ${preset.title} · ${claims.role}`;
-  if (claims.role === "owner") call("listBusinesses").then((r) => {
-    document.getElementById("bizSwitch")?.remove();
-    const box = document.createElement("div"); box.id = "bizSwitch"; box.className = "biz-switch";
-    const list = r.businesses || [];
-    box.innerHTML = `${list.length > 1 ? `<select aria-label="Switch business">${list.map((b) => `<option value="${esc(b.orgId)}" ${b.orgId === r.current ? "selected" : ""}>${esc((PRESETS[b.businessType]?.icon || "🏪") + " " + (b.name || "Business"))}</option>`).join("")}</select>` : ""}<a href="#addbusiness" data-addbiz>＋ Add another business</a>`;
-    box.querySelector("select")?.addEventListener("change", async (e) => { e.target.disabled = true; try { await call("switchBusiness", { orgId: e.target.value }); await currentUser.getIdToken(true); location.hash = "#overview"; location.reload(); } catch (x) { alert(x.message); e.target.disabled = false; } });
-    box.querySelector("[data-addbiz]").onclick = (e) => { e.preventDefault(); location.hash = "#addbusiness"; location.reload(); };
-    document.querySelector(".side .store")?.appendChild(box);
-  }).catch(() => {});
-  $("welcome").textContent = `Welcome back, ${currentUser.displayName || currentUser.email}`;
+    // Multi-business switching is paused. Use a separate email for each business.
+$("welcome").textContent = `Welcome back, ${currentUser.displayName || currentUser.email}`;
   $("openMenuLink").href = `/m/${store.slug}`;
 
   // nav
   const nav = $("nav");
   nav.innerHTML = "";
-  const MAIN = ["overview", "rooms", "stays", "orders", "calendar", "projects", "menu", "tables", "staff", "reports", "creators", "tools"];
+  const MAIN = ["overview", "rooms", "stays", "orders", "calendar", "menu", "tables", "staff", "reports", "tools"];
   for (const key of MAIN) {
     const p = PAGES[key];
     if (p.onlyMode && p.onlyMode !== store.mode) continue;
