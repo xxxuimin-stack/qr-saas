@@ -133,7 +133,7 @@ function drawPlace() {
   $("placeHint").textContent = PLACES.find(([k]) => k === wiz.place)?.[2] || "";
   box.querySelectorAll("[data-place]").forEach((b) => (b.onclick = () => { wiz.place = b.dataset.place; drawPlace(); }));
 }
-const needsOwnerProfile = () => (setupMode() === "salon" && (wiz.setup === "solo" || wiz.ownerWorks)) || (setupMode() === "table" && (wiz.setup === "home" || (isFood() && wiz.team === "solo")));
+const needsOwnerProfile = () => (setupMode() === "salon" && wiz.setup !== "solo" && wiz.ownerWorks) || (setupMode() === "table" && wiz.setup === "home" && wiz.team !== "solo");
 
 function slugify(s) {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40);
