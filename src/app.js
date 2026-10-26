@@ -290,7 +290,8 @@ if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wi
     });
   };
   // email + password sign-ups confirm their email first (free; Google accounts are already verified)
-  const emailStep = () => { return Promise.resolve(true);
+  const emailStep = () => Promise.resolve(true);
+  const emailStepUnused = () => {
     const u = currentUser; if (addingBusiness || !u || u.emailVerified || !(u.providerData || []).some((x) => x.providerId === "password")) return Promise.resolve(true);
     const send = () => sendEmailVerification(u, { url: `${location.origin}/app/` }).catch((e) => { if (!/too-many/.test(e.code || "")) throw e; });
     return new Promise((resolve) => {

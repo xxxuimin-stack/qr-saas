@@ -457,3 +457,11 @@ html[data-theme="dark"] .k-head .k-app { background: #3A1A1A; color: #F4A9A9; }
 .k-card .where { font-size: .98rem; }
 .k-card li { font-size: .95rem; }
 .k-head .name { font-size: 1rem; }
+
+/* Phone: the next step is one big tap. */
+@media (max-width: 700px) {
+  .k-card .acts .k-btn.primary, .k-card .acts .k-btn.ready {
+    min-height: 52px; font-size: 17px; border-radius: 16px;
+  }
+  .k-btn:active { transform: scale(.98); }
+}

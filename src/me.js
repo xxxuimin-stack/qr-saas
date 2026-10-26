@@ -12,6 +12,8 @@ const KIND = { appt: "Booking", order: "Order", stay: "Stay", resv: "Reservation
 const ST = (s) => ({ pending: ["Waiting", "wait"], unconfirmed: ["Confirm on Messenger", "wait"], confirmed: ["Confirmed", "ok"], accepted: ["Confirmed", "ok"], in_progress: ["In progress", "ok"], preparing: ["Preparing", "ok"], ready: ["Ready", "ok"], checked_in: ["Checked in", "ok"], done: ["Done", "off"], completed: ["Done", "off"], checked_out: ["Done", "off"], claimed: ["Done", "off"], cancelled: ["Cancelled", "off"], declined: ["Declined", "off"], no_show: ["No-show", "off"], new: ["Sent", "wait"], negotiating: ["Negotiating", "wait"], quoted: ["Quote ready", "wait"], delivered: ["Delivered", "ok"] }[s] || [s || "", ""]);
 
 onAuthStateChanged(auth, async (u) => {
+  location.replace(!u || u.isAnonymous ? "/login/?next=/app/&signup=1" : "/app/");
+  return;
   if (!u || u.isAnonymous) { location.replace("/login/?next=/me/&signup=1&role=client"); return; }
   document.getElementById("out").hidden = false; document.getElementById("out").onclick = async () => { await signOut(auth); location.replace("/"); };
   let a = {}; try { a = await call("myAccount", {}); } catch (e) { app.innerHTML = `<p>${esc(e.message)}</p>`; return; }

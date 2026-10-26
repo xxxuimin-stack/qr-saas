@@ -89,7 +89,7 @@ function draw() {
 
   // ---------- top bar
   const topHtml = `<div class="d-top-in"><a class="d-brand" href="${esc(location.pathname)}">${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt=""/>` : `<span class="d-lg">${esc((store.name || "·").trim()[0])}</span>`}<b>${esc(store.name)}</b>${trustBadge(store)}</a>
-    <nav class="d-top-links">${c.phone ? `<a href="tel:${esc(String(c.phone).replace(/[^\d+]/g, ""))}">📞 ${esc(c.phone)}</a>` : ""}<a href="/me/">👤 My bookings</a></nav></div>`;
+    <nav class="d-top-links">${c.phone ? `<a href="tel:${esc(String(c.phone).replace(/[^\d+]/g, ""))}">📞 ${esc(c.phone)}</a>` : ""}</nav></div>`;
 
   // ---------- LEFT: navigation on top, everything else folded into one-line buttons
   const left = [];

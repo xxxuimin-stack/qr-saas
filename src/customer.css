@@ -1077,3 +1077,11 @@ html.dsk .c-catbody.lay-pin { column-count: 3; }
 .c-swipe.hero .c-swipe-in img { aspect-ratio: 4 / 3; }
 html.dsk .c-catbody.lay-pin { display: block !important; column-count: 3; column-gap: 14px; }
 @media (min-width: 1500px) { html.dsk .c-catbody.lay-pin { column-count: 4; } }
+
+/* Phone: bigger add and a checkout bar you can hit without looking. */
+@media (max-width: 700px) {
+  .c-add { width: 44px; height: 44px; font-size: 26px; }
+  .c-cartbar button { min-height: 56px; border-radius: 16px; font-size: 16px; }
+  .c-cartbar button:active, .c-btn:active { transform: scale(.98); }
+  .c-sheet .ft .c-btn, .c-ftrow .c-btn { min-height: 52px; }
+}

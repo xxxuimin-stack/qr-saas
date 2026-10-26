@@ -95,6 +95,10 @@ function fixText(n) { const v = n.data; if (done.get(n) === v) return; const t =
 
 /** start translating this page (only when Filipino is picked) */
 export function startI18n() {
+  if (location.pathname === "/" || location.pathname === "/index.html") {
+    document.getElementById("near")?.remove();
+    document.querySelectorAll('a[href="/explore/"], a[href^="/explore/"]').forEach((a) => a.remove());
+  }
   document.documentElement.lang = getLang() === "fil" ? "fil" : "en";
   if (getLang() !== "fil") return;
   const go = () => {

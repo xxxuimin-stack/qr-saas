@@ -340,3 +340,15 @@ body.dash .upr ul { margin: 8px 0 12px; padding-left: 18px; font-size: 13px; lin
 .rm-ic { font-size: 24px; width: 36px; text-align: center; flex: none; }
 .rm-body { flex: 1; min-width: 0; }
 .rm-eta { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 2px 8px; background: #FEF3C7; color: #92400E; margin-left: 4px; }
+
+/* Phone: one big action, the rest stay quiet. Feels like a 2026 app. */
+@media (max-width: 700px) {
+  body.dash .ocard .ofoot { flex-direction: column; align-items: stretch; }
+  body.dash .ocard [data-acts] { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+  body.dash .ocard [data-acts] .btn:not(.ghost) {
+    grid-column: 1 / -1; order: -1; width: 100%; min-height: 52px;
+    font-size: 16px; border-radius: 14px;
+  }
+  body.dash .ocard [data-acts] .btn.ghost { min-height: 44px; border-radius: 12px; }
+  body.dash .btn:active { transform: scale(.98); }
+}

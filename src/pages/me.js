@@ -56,7 +56,6 @@ export function renderMePage(root, ctx) {
         ${owner ? `<a class="me-li" href="#billing">${svg("card", 18)}<span>Plan &amp; billing</span><small>${esc(plan)}</small></a>` : ""}
         <a class="me-li" href="#tools">${svg("gear", 18)}<span>All settings</span></a>
         <button type="button" class="me-li" data-help>${svg("help", 18)}<span>Help &amp; chat</span><small>reply in 24 h</small></button>
-        <a class="me-li" href="/me/">${svg("user", 18)}<span>My TapTayo</span><small>my bookings as a client</small></a>
         <button type="button" class="me-li" data-menu>${svg("menu", 18)}<span>Full menu</span></button>
         <button type="button" class="me-li" data-out style="color:#B42318">${svg("out", 18)}<span>Log out</span></button>
       </div>
