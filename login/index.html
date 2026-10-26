@@ -84,11 +84,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #F4A9A9;outline-offset:2p
 </div>
 <form id="authForm" novalidate>
 <div id="nameField" class="hidden" style="display:contents">
-<div class="f"><label>I'm a…</label><div class="roles" id="roles" role="radiogroup" aria-label="Account type">
-<button type="button" data-role="client" role="radio" aria-checked="false"><b>🙋 Client</b><span>Book shops &amp; hire creators</span></button>
-<button type="button" data-role="creator" role="radio" aria-checked="false"><b>🎨 Freelancer / Creator</b><span>Get booked &amp; paid</span></button>
-<button type="button" data-role="business" role="radio" aria-checked="true" class="on"><b>🏪 Business owner</b><span>Run my shop, find creators</span></button>
-</div></div>
+<div class="f hidden" id="roleField"><div class="roles" id="roles" role="radiogroup" aria-label="Account type"><button type="button" data-role="business" role="radio" aria-checked="true" class="on">Business owner</button></div></div>
 <div class="f hidden" id="adultField"><label class="adult"><input type="checkbox" id="a-adult"/> I'm 18 or older (required for creators)</label></div>
 <div class="f"><label for="a-shop" id="shopLabel">Shop name</label><input id="a-shop" name="shop" type="text" maxlength="60" placeholder="Kapehan sa Kanto" autocomplete="organization"></div>
 </div>
