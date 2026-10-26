@@ -275,14 +275,15 @@ function card(o, cls) {
   if (hub()) { hubActions(o, cls, acts, set); return el; }
   if (printCfg(store).enabled && printCfg(store).kitchenTicket) { const kt = html(`<button class="k-btn sm" title="Print kitchen ticket">🖨</button>`); kt.onclick = () => printKitchenTicket(store, o, station === "all" ? "" : station); acts.appendChild(kt); }
   if (cls === "new") {
-    if (store.mode === "table") {
-      acts.innerHTML = `<div class="k-etas" style="width:100%">${[5, 10, 15, 20, 30].map((m) => `<button data-m="${m}">${m}<br><small>min</small></button>`).join("")}</div>`;
-      acts.querySelectorAll("[data-m]").forEach((b) => (b.onclick = () => set({ status: next[0], etaMinutes: Number(b.dataset.m), acceptedAt: serverTimestamp() })));
-    } else {
-      const b = html(`<button class="k-btn prep">Accept</button>`); b.onclick = () => set({ status: next[0], acceptedAt: serverTimestamp() }); acts.appendChild(b);
-    }
+    const mins = store.settings?.kitchen?.status === "busy" ? 35 : (Number(store.settings?.service?.prepDefault) || 15);
+    const b = html(`<button class="k-btn primary">Accept</button>`);
+    b.onclick = () => set({ status: next[0], etaMinutes: mins, acceptedAt: serverTimestamp(), busyExtra: store.settings?.kitchen?.status === "busy" ? Math.max(0, 35 - (Number(store.settings?.service?.prepDefault) || 15)) : 0 });
+    acts.appendChild(b);
   } else if (cls === "prep") {
-    const b = html(`<button class="k-btn ready">✓ ${station === "all" ? "Ready" : STATIONS[station][1] + " ready"}</button>`);
+    const row = html(`<div class="k-etas">${[10, 15, 20].map((m) => `<button type="button" data-a="${m}">+${m} min</button>`).join("")}</div>`);
+    row.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => set({ etaMinutes: (o.etaMinutes || 0) + Number(b.dataset.a) })));
+    acts.appendChild(row);
+    const b = html(`<button class="k-btn ready">${station === "all" ? "Ready" : STATIONS[station][1] + " ready"}</button>`);
     b.onclick = () => {
       const stations = { ...(o.stations || {}) };
       if (station === "all") Object.keys(stations).forEach((k) => (stations[k] = "ready"));

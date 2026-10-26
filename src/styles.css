@@ -85,8 +85,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid color-mix(in srgb
 }
 .type:hover { border-color: #cfc8bd; }
 .type.active { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 6%, #fff); }
-.type .ic { font-size: 22px; }
-.type .t { font-weight: 700; margin-top: 6px; }
+.type .ic:empty { display: none; }
+.type .t { font-weight: 700; margin-top: 0; }
 .type .b { color: var(--muted); font-size: .8rem; margin-top: 2px; line-height: 1.35; }
 
 .steps { display: flex; gap: 6px; margin-bottom: 18px; }
@@ -244,7 +244,7 @@ label.check input { width: auto; }
 .ono { font-size: 1.3rem; font-weight: 900; }
 .osub { margin-top: 4px; font-size: .9rem; }
 .olines { list-style: none; padding: 0; margin: 10px 0; }
-.olines li { padding: 3px 0; border-bottom: 1px dashed var(--line); }
+.olines li { padding: 3px 0; border-bottom: 1px solid var(--line); }
 .note { color: var(--warn); font-style: italic; }
 .ofoot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
 

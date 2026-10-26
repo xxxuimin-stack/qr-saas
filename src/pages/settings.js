@@ -200,9 +200,9 @@ export function renderSettingsPage(root, ctx, opts = {}) {
             <div class="span2"><label class="check"><input type="checkbox" name="smallPickup" ${(svc.smallOrderFor || []).includes("pickup") ? "checked" : ""}/> Also charge the small-order fee on pickup orders (delivery always)</label><p class="small muted" style="margin:2px 0 0">Instead of refusing small orders, customers pay a small fee — the cart shows "Add ₱X more to skip the fee".</p></div>
             <div><label>Advance order lead time (minutes)</label><input name="scheduleLeadMin" type="number" min="0" value="${svc.scheduleLeadMin ?? 30}" /></div>
             <div><label>Show in kitchen before scheduled time (minutes)</label><input name="fireBeforeMin" type="number" min="5" value="${svc.fireBeforeMin ?? 30}" /></div>
-            <div><label>Standard prep time</label><select name="prepDefault">${[10, 15, 20].map((m) => `<option value="${m}" ${(svc.prepDefault || 15) === m ? "selected" : ""}>${m} min</option>`).join("")}</select></div>
+            <div><label>Default wait on Normal</label><select name="prepDefault">${[15, 20, 25, 30, 35].map((m) => `<option value="${m}" ${(svc.prepDefault || 15) === m ? "selected" : ""}>${m} min</option>`).join("")}</select></div>
             <div class="span2"><label class="check"><input type="checkbox" name="useDispatch" ${svc.dispatch !== false ? "checked" : ""}/> 📋 Use the Dispatch screen — cooked food is checked against its plating guide before serving (Dispatch completes the order)</label></div>
-            <div><label>Prep time when Busy</label><select name="busyPrep">${[25, 30, 35, 40, 45, 50, 60].map((m) => `<option value="${m}" ${(svc.busyPrep || 35) === m ? "selected" : ""}>${m} min</option>`).join("")}</select></div>
+            <div><label>Wait when Busy</label><input name="busyPrep" value="35" readonly/></div>
             <div><label>Remind to switch to Busy at</label><select name="busyRemind">${[0, 5, 6, 8, 10, 12, 15].map((m) => `<option value="${m}" ${(svc.busyRemind ?? 8) === m ? "selected" : ""}>${m ? m + " orders in progress" : "Never"}</option>`).join("")}</select></div>
             <div><label>Auto-pause online orders if an order isn't accepted in</label><select name="autoPauseMin">${[0, 3, 5, 7, 10, 15].map((m) => `<option value="${m}" ${(svc.autoPause === false ? 0 : svc.autoPauseMin ?? 5) === m ? "selected" : ""}>${m ? m + " min" : "Off"}</option>`).join("")}</select></div>
           </div>
@@ -741,6 +741,31 @@ export function renderSettingsPage(root, ctx, opts = {}) {
       </div>
     </form>`;
   organizeSettings(root, mode, opts);
+  root.querySelectorAll("#settingsForm h3").forEach((h, i) => {
+    h.textContent = h.textContent.replace(/^\s*\p{Extended_Pictographic}\uFE0F?\s*/u, "");
+    if (!h.id) h.id = "set-" + i;
+  });
+  if (!opts.group) {
+    root.querySelectorAll("#settingsForm > .tile").forEach((tile, i) => {
+      const h = tile.querySelector(":scope > h3");
+      if (!h) return;
+      tile.classList.add("set-sec");
+      if (i) tile.classList.add("shut");
+      h.addEventListener("click", () => tile.classList.toggle("shut"));
+    });
+  }
+  const heads = [...root.querySelectorAll("#settingsForm > .tile > h3, #settingsForm .tile > h3")];
+  if (heads.length > 2) {
+    const nav = document.createElement("nav");
+    nav.className = "set-jump";
+    nav.innerHTML = heads.map((h) => `<a href="#${h.id}">${esc(h.textContent)}</a>`).join("");
+    nav.onclick = (e) => {
+      const a = e.target.closest("a"); if (!a) return;
+      const tile = root.querySelector(a.getAttribute("href"))?.closest(".tile");
+      if (tile) tile.classList.remove("shut");
+    };
+    root.querySelector("#settingsForm")?.prepend(nav);
+  }
 
   const form = root.querySelector("#settingsForm");
   // ---- store link (slug) ----

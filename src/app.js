@@ -116,16 +116,16 @@ onIdTokenChanged(auth, async (u) => {
 const wiz = { businessType: null, name: "", phone: "", address: "", setup: null, ownerWorks: false };
 // setup choices per store type (only salon and café/restaurant have them)
 const SETUPS = {
-  salon: { title: "How do you run your salon?", choices: [["team", "👥", "I have staff", "Stylists / technicians with their own PIN, skills and schedule. Rotation, duty and staff pay included."], ["solo", "🙋", "Just me (owner-only)", "You are the only one serving clients. Simple 'My day' list and calendar. Add staff anytime."]] },
-  table: { title: "How do you sell?", choices: [["shop", "🏪", "I have a shop and staff", "Dine-in tables with QR, take-out, and staff with roles (counter, kitchen, barista, rider)."], ["home", "🏠", "Home-based (delivery / pickup only)", "No tables. Staff optional — you can still use the Kitchen, Dispatch (check before sending out) and Rider screens yourself."]] },
+  salon: { title: "How do you run your salon?", choices: [["team", "", "I have staff", "Stylists with their own PIN, skills and schedule."], ["solo", "", "Just me", "You are the only one serving clients. Add staff anytime."]] },
+  table: { title: "How do you sell?", choices: [["shop", "", "I have a shop and staff", "Tables, take-out, and staff roles."], ["home", "", "Home-based", "Delivery and pickup. No tables."]] },
 };
 const setupMode = () => PRESETS[wiz.businessType]?.mode;
 // Food business: more than one way to sell (shop on weekdays, night market on weekends, pre-order bilao…)
-const FOOD = [["dinein", "🍽", "Dine-in shop", "Café, karinderya, resto — table QR, kitchen & counter screens"], ["takeout", "🥤", "Take-out counter / kiosk", "Milk tea, shawarma stand — order numbers and ready alerts"], ["popup", "🌙", "Pop-up / night market / bazaar", "Pay first, waiting timer, “come back when it's ready”"], ["home", "🏠", "Home-based", "Lutong-bahay, baked goods — pickup and delivery"], ["preorder", "🎂", "Bilao / pre-order", "Bilao, cakes, party trays — pickup date and a daily limit"], ["online", "🛵", "Online only / cloud kitchen", "Delivery and pickup, no tables"]];
+const FOOD = [["dinein", "", "Dine-in shop", "Table QR, kitchen and counter."], ["takeout", "", "Take-out counter", "Order numbers and ready alerts."], ["popup", "", "Pop-up or night market", "Pay first, then they come back when it's ready."], ["home", "", "Home-based", "Pickup and delivery."], ["preorder", "", "Pre-order", "Pickup date and a daily limit."], ["online", "", "Online only", "Delivery and pickup, no tables."]];
 const isFood = () => wiz.businessType === "cafe";
 const foodKind = () => (wiz.channels?.has("dinein") ? "shop" : "home");
 const foodPayDefault = () => (wiz.channels?.size === 1 && wiz.channels.has("dinein") ? "after" : "first");
-const PLACES = [["shop", "🏪 In my shop", "Walk-ins and bookings at your shop."], ["home", "🏠 Home service only", "You go to your clients. No walk-ins — bookings with address, area fee and travel time."], ["both", "🏪+🏠 Both", "Shop and home service, each with its own hours on your calendar."]];
+const PLACES = [["shop", "In my shop", "Walk-ins and bookings at your shop."], ["home", "Home service only", "You go to your clients."], ["both", "Shop and home service", "Each has its own hours."]];
 function drawPlace() {
   const box = $("placeChoices"); if (!box) return;
   const show = setupMode() === "salon" && !!wiz.setup; $("placeBox").classList.toggle("hidden", !show); if (!show) return;
@@ -180,7 +180,7 @@ if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wi
     btn.type = "button";
     btn.className = "type";
     btn.dataset.key = key;
-    btn.innerHTML = `<div class="ic">${p.icon}</div><div class="t">${p.title}${p.comingSoon ? ' <span style="font-size:11px;font-weight:700;background:#FDECEC;color:#B91C1C;border-radius:999px;padding:2px 8px;vertical-align:middle">Coming soon</span>' : ""}</div><div class="b">${p.blurb}</div>`;
+    btn.innerHTML = `<div class="t">${p.title}${p.comingSoon ? ' <span style="font-size:11px;font-weight:700;background:#FDECEC;color:#B91C1C;border-radius:999px;padding:2px 8px;vertical-align:middle">Coming soon</span>' : ""}</div><div class="b">${p.blurb}</div>`;
     if (p.comingSoon) { btn.disabled = true; btn.style.opacity = ".55"; btn.style.cursor = "not-allowed"; btn.title = "Coming soon"; wrap.appendChild(btn); continue; }
     btn.onclick = () => {
       wiz.businessType = key;
@@ -202,7 +202,7 @@ if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wi
     const ready = () => { wiz.setup = wiz.channels.size ? foodKind() : null; $("next2s").disabled = !(wiz.channels.size && wiz.team && wiz.pay); };
     FOOD.forEach(([k, ic, t, b]) => {
       const btn = document.createElement("button"); btn.type = "button"; btn.className = "type" + (wiz.channels.has(k) ? " active" : ""); btn.setAttribute("aria-pressed", String(wiz.channels.has(k)));
-      btn.innerHTML = `<div class="ic">${ic}</div><div class="t">${esc(t)}</div><div class="b">${esc(b)}</div>`;
+      btn.innerHTML = `<div class="t">${esc(t)}</div><div class="b">${esc(b)}</div>`;
       btn.onclick = () => { wiz.channels.has(k) ? wiz.channels.delete(k) : wiz.channels.add(k); btn.classList.toggle("active", wiz.channels.has(k)); btn.setAttribute("aria-pressed", String(wiz.channels.has(k))); if (!wiz.payPicked) { wiz.pay = wiz.channels.size ? foodPayDefault() : null; drawPay(); } ready(); };
       box.appendChild(btn);
     });
@@ -211,8 +211,8 @@ if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wi
       <div><div style="font-weight:800;margin-bottom:6px">When do customers pay?</div><div class="row wrap" style="gap:8px" role="radiogroup" aria-label="When do customers pay" data-pay></div><p class="small muted" style="margin:6px 0 0" data-payhint></p></div>`;
     box.appendChild(extra);
     const chip = (on, label) => `border:1px solid ${on ? "#C62828" : "#D1D5DB"};border-radius:999px;padding:8px 14px;font-weight:${on ? 600 : 500};color:${on ? "#C62828" : "inherit"};background:${on ? "#FDECEC" : "#fff"}`;
-    const drawTeam = () => { const el = extra.querySelector("[data-team]"); el.innerHTML = [["solo", "🙋 Just me — one phone, no PINs"], ["staff", "👥 I have staff — roles and PINs"]].map(([k, l]) => `<button type="button" class="chip" role="radio" aria-checked="${wiz.team === k}" data-k="${k}" style="${chip(wiz.team === k)}">${l}</button>`).join(""); el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => { wiz.team = b.dataset.k; drawTeam(); ready(); })); };
-    const drawPay = () => { const el = extra.querySelector("[data-pay]"); el.innerHTML = [["first", "💵 Pay first, then we make it"], ["after", "🍽 Pay after eating"]].map(([k, l]) => `<button type="button" class="chip" role="radio" aria-checked="${wiz.pay === k}" data-k="${k}" style="${chip(wiz.pay === k)}">${l}</button>`).join(""); extra.querySelector("[data-payhint]").textContent = wiz.pay === "first" ? "Best for pop-ups, take-out, home-based and pre-orders — the order goes to the kitchen once it's paid." : wiz.pay === "after" ? "Best for dine-in — the bill is settled at the end." : ""; el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => { wiz.pay = b.dataset.k; wiz.payPicked = true; drawPay(); ready(); })); };
+    const drawTeam = () => { const el = extra.querySelector("[data-team]"); el.innerHTML = [["solo", "Just me"], ["staff", "I have staff"]].map(([k, l]) => `<button type="button" class="chip" role="radio" aria-checked="${wiz.team === k}" data-k="${k}" style="${chip(wiz.team === k)}">${l}</button>`).join(""); el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => { wiz.team = b.dataset.k; drawTeam(); ready(); })); };
+    const drawPay = () => { const el = extra.querySelector("[data-pay]"); el.innerHTML = [["first", "Pay first"], ["after", "Pay after"]].map(([k, l]) => `<button type="button" class="chip" role="radio" aria-checked="${wiz.pay === k}" data-k="${k}" style="${chip(wiz.pay === k)}">${l}</button>`).join(""); extra.querySelector("[data-payhint]").textContent = wiz.pay === "first" ? "The order goes to the kitchen once it's paid." : wiz.pay === "after" ? "The bill is settled at the end." : ""; el.querySelectorAll("[data-k]").forEach((b) => (b.onclick = () => { wiz.pay = b.dataset.k; wiz.payPicked = true; drawPay(); ready(); })); };
     drawTeam(); drawPay(); ready();
     $("ownerWorksBox").classList.add("hidden"); $("placeBox").classList.add("hidden");
   };
@@ -223,7 +223,7 @@ if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wi
     const box = $("setupChoices"); box.innerHTML = "";
     cfg.choices.forEach(([k, ic, t, b]) => {
       const btn = document.createElement("button"); btn.type = "button"; btn.className = "type" + (wiz.setup === k ? " active" : "");
-      btn.innerHTML = `<div class="ic">${ic}</div><div class="t">${esc(t)}</div><div class="b">${esc(b)}</div>`;
+      btn.innerHTML = `<div class="t">${esc(t)}</div><div class="b">${esc(b)}</div>`;
       btn.onclick = () => { wiz.setup = k; box.querySelectorAll(".type").forEach((x) => x.classList.toggle("active", x === btn)); $("next2s").disabled = false; $("ownerWorksBox").classList.toggle("hidden", !(setupMode() === "salon" && k === "team")); wiz.place = null; drawPlace(); };
       box.appendChild(btn);
     });

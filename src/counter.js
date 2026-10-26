@@ -45,47 +45,41 @@ const fmtT = (d) => d.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-
 const kst = () => { const k = store?.settings?.kitchen || {}; return store?.settings?.acceptOrders === false ? "paused" : k.status === "busy" ? "busy" : "normal"; };
 const busyExtra = () => (kst() === "busy" || kst() === "paused") ? Number(store?.settings?.kitchen?.busyExtra) || 0 : 0;
 const prepDefault = () => Number(store?.settings?.service?.prepDefault) || 15;
-const busyPrep = () => Number(store?.settings?.service?.busyPrep) || 35;
-/** pick the prep time (10 / 15 / 20, +5 per tap; busy adds its extra); later-scheduled orders are accepted for their time instead */
+const busyPrep = () => 35;
+const waitNow = () => (kst() === "busy" ? 35 : prepDefault());
+const PREP_CHOICES = [15, 20, 25, 30, 35];
+/** later-scheduled orders still confirm their time; everything else uses Normal or Busy */
 const payFirstHold = (o) => !!(store.settings?.service?.payFirst || o.payFirst) && ["dine_in", "take_out"].includes(o.serviceType) && !o.paid && !o.parentPaidFirst;
-function acceptPicker(o, extra = {}) {
+function acceptOrder(o, extra = {}) {
   if (payFirstHold(o)) { if (confirm(`Pay first is on.\n\nOrder #${o.orderNo} (${money(o.total)}) isn't paid yet. Collect the payment now?`)) askMethod([o]); return; }
-  const later = isLater(o);
+  if (isLater(o)) {
+    const el = html(`<div><p>Scheduled for <b>${o.scheduledAt.toDate().toLocaleString("en-PH", { weekday: "short", hour: "numeric", minute: "2-digit" })}</b>. It goes to the kitchen ${store.settings?.service?.fireBeforeMin || 30} min before.</p><button class="k-btn primary" data-later style="width:100%">Accept scheduled order</button></div>`);
+    el.querySelector("[data-later]").onclick = () => { updateDoc(doc(db, "stores", storeId, "orders", o.id), { ...extra, status: "pending", acceptedAt: serverTimestamp(), acceptedBy: me?.name || null, staffId: me?.staffId || null, updatedAt: serverTimestamp() }).catch((e) => alert(e.message)); closeDrawer(); };
+    openDrawer("Accept order", el);
+    return;
+  }
   const busy = kst() === "busy";
-  let base = busy ? busyPrep() : prepDefault();
-  const el = html(`<div><p class="muted">Order <b style="color:var(--ink)">#${o.orderNo}</b> · ${(o.items || []).map((l) => `${l.qty}× ${esc(l.name)}`).join(", ")}</p>
-    ${later ? `<p>Scheduled for <b>${o.scheduledAt.toDate().toLocaleString("en-PH", { weekday: "short", hour: "numeric", minute: "2-digit" })}</b>. It goes to the kitchen ${store.settings?.service?.fireBeforeMin || 30} min before.</p><button class="k-btn primary" data-later style="width:100%">✓ Accept scheduled order</button>`
-      : `<p class="muted small">Prep time — the customer sees this.${busy ? ` <b style="color:var(--new)">Store is Busy — standard ${busyPrep()} min.</b>` : ""}</p>
-      <div class="k-etas">${[...new Set([10, 15, 20, ...(busy ? [busyPrep()] : [])])].map((m) => `<button data-b="${m}">${m}<br><small>min</small></button>`).join("")}<button data-plus>+5<br><small>min</small></button></div>
-      <button class="k-btn primary" data-ok style="width:100%;margin-top:12px;font-size:1.15rem;padding:16px"></button>`}</div>`);
-  const go = (patch) => { updateDoc(doc(db, "stores", storeId, "orders", o.id), { ...extra, ...patch, acceptedAt: serverTimestamp(), acceptedBy: me?.name || null, staffId: me?.staffId || null, updatedAt: serverTimestamp() }).catch((e) => alert(e.message)); closeDrawer(); };
-  const paint = () => { const ok = el.querySelector("[data-ok]"); if (!ok) return; ok.innerHTML = `✓ Accept · ${base} min`; el.querySelectorAll("[data-b]").forEach((b) => b.classList.toggle("on", Number(b.dataset.b) === base)); };
-  el.querySelector("[data-later]")?.addEventListener("click", () => go({ status: "pending" }));
-  el.querySelectorAll("[data-b]").forEach((b) => (b.onclick = () => { base = Number(b.dataset.b); paint(); }));
-  el.querySelector("[data-plus]")?.addEventListener("click", () => { base = Math.min(240, base + 5); paint(); });
-  el.querySelector("[data-ok]")?.addEventListener("click", () => go({ status: "preparing", etaMinutes: base, busyExtra: busy ? Math.max(0, busyPrep() - prepDefault()) : 0 }));
-  paint();
-  openDrawer(later ? "Accept order" : "Accept — set prep time", el);
+  updateDoc(doc(db, "stores", storeId, "orders", o.id), { ...extra, status: "preparing", etaMinutes: waitNow(), busyExtra: busy ? Math.max(0, 35 - prepDefault()) : 0, acceptedAt: serverTimestamp(), acceptedBy: me?.name || null, staffId: me?.staffId || null, updatedAt: serverTimestamp() }).catch((e) => alert(e.message));
 }
-async function setStatus(status, extraMin) {
-  try { const r = await call("setKitchenStatus", { status, extra: extraMin, staffName: me?.name }); if (r.changed) toastMsg(`${r.changed} ticket${r.changed > 1 ? "s" : ""} ${status === "busy" ? `+${r.extra} min (Busy)` : status === "normal" ? "back to normal time" : "updated"}`); }
+async function setStatus(status, prep) {
+  try { const r = await call("setKitchenStatus", { status, prep: PREP_CHOICES.includes(prep) ? prep : undefined, staffName: me?.name }); if (r.changed) toastMsg(`${r.changed} ticket${r.changed > 1 ? "s" : ""} ${status === "busy" ? `+${r.extra} min (Busy)` : status === "normal" ? "back to normal time" : "updated"}`); }
   catch (e) { alert(e.message); }
 }
 function toastMsg(t) { const n = html(`<div class="c-toast">${esc(t)}</div>`); document.body.appendChild(n); setTimeout(() => n.remove(), 2600); }
 function statusPicker() {
   const cur = kst();
   const el = html(`<div>
-    <button class="k-btn ${cur === "normal" ? "primary" : ""}" data-s="normal" style="width:100%;margin-bottom:8px">🟢 Normal <small>— standard prep ${prepDefault()} min</small></button>
-    <button class="k-btn ${cur === "busy" ? "primary" : ""}" data-s="busy" style="width:100%;margin-bottom:8px">🟠 Busy <small>— standard prep ${busyPrep()} min · customers see it on the menu</small></button>
-    <button class="k-btn ${cur === "paused" ? "danger" : ""}" data-s="paused" style="width:100%">⏸ Paused <small>— customers can't place new orders</small></button>
-    <p class="muted small" style="margin-top:12px">Switching to Busy adds ${Math.max(0, busyPrep() - prepDefault())} min to tickets still being made; back to Normal removes it. Change the times in Settings → Service.</p></div>`);
+    <div class="k-etas">${[["normal", `Normal · ${prepDefault()} min`], ["busy", "Busy · 35 min"]].map(([k, l]) => `<button type="button" data-s="${k}" class="${cur === k ? "on" : ""}">${l}</button>`).join("")}</div>
+    <p class="muted small" style="margin:14px 0 6px">Default wait on Normal. Busy stays at 35 min.</p>
+    <div class="k-etas">${PREP_CHOICES.map((m) => `<button type="button" data-p="${m}" class="${prepDefault() === m ? "on" : ""}">${m} min</button>`).join("")}</div>
+    <button class="k-btn ${cur === "paused" ? "danger" : ""}" data-s="paused" style="width:100%;margin-top:12px">Pause new orders</button>
+  </div>`);
   el.querySelectorAll("[data-s]").forEach((b) => (b.onclick = () => { closeDrawer(); setStatus(b.dataset.s); }));
-  openDrawer("Store status", el);
+  el.querySelectorAll("[data-p]").forEach((b) => (b.onclick = () => { closeDrawer(); setStatus(cur === "paused" ? "paused" : cur === "busy" ? "busy" : "normal", Number(b.dataset.p)); }));
+  openDrawer("Waiting time", el);
 }
-function addTime(o) {
-  const el = html(`<div><p class="muted">Order <b style="color:var(--ink)">#${o.orderNo}</b> · now ${o.etaMinutes} min</p><div class="k-etas">${[10, 15, 20].map((m) => `<button data-a="${m}">+${m}<br><small>min</small></button>`).join("")}</div></div>`);
-  el.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => { updateDoc(doc(db, "stores", storeId, "orders", o.id), { etaMinutes: (o.etaMinutes || 0) + Number(b.dataset.a), staffId: me?.staffId || null, updatedAt: serverTimestamp() }).catch((e) => alert(e.message)); closeDrawer(); }));
-  openDrawer("Add time", el);
+function addMinutes(o, m) {
+  updateDoc(doc(db, "stores", storeId, "orders", o.id), { etaMinutes: (o.etaMinutes || 0) + m, staffId: me?.staffId || null, updatedAt: serverTimestamp() }).catch((e) => alert(e.message));
 }
 
 onAuthStateChanged(auth, async (user) => {
@@ -197,16 +191,16 @@ function drawHead() {
   const autoBar = store.settings?.kitchen?.auto && kst() === "paused" ? `<div class="c-autobar">⏸ <b>AUTO-PAUSED</b> — an order waited too long without being accepted, so new online orders are on hold. Accept the waiting order, then tap <b>🟢 Normal</b> to reopen.</div>` : "";
   const needBarista = cats.some((c) => c.station === "barista") || items.some((i) => i.station === "barista");
   const dutyBar = feat("duty") && dutyList ? dutyBoardHTML(dutyList, { needBarista, needRider: !!store.settings?.service?.delivery && feat("delivery") }) : "";
-  head.innerHTML = `${autoBar}${lateBar}${waiting ? `<div class="c-ringbar" id="ringBar">🔔 ${waiting} new order${waiting > 1 ? "s" : ""} — tap to accept and set the prep time. Ringing until accepted.</div>` : ""}${remind ? `<div class="c-remind" id="busyRemind">🔥 ${inProg} orders in progress — switch to <b>Busy</b> (${busyPrep()} min)? <button class="k-btn sm" data-gobusy>Set Busy</button></div>` : ""}<header class="k-head">
+  head.innerHTML = `${autoBar}${lateBar}${waiting ? `<div class="c-ringbar" id="ringBar">${waiting} new order${waiting > 1 ? "s" : ""} — tap to accept. Ringing until accepted.</div>` : ""}${remind ? `<div class="c-remind" id="busyRemind">${inProg} orders in progress — switch to <b>Busy</b> (35 min)? <button class="k-btn sm" data-gobusy>Set Busy</button></div>` : ""}<header class="k-head">
     ${store.logoUrl ? `<img src="${esc(store.logoUrl)}" alt="" style="width:34px;height:34px;border-radius:8px;object-fit:cover"/>` : ""}<span class="name">${esc(store.name)}</span>
     <span class="k-stations">${tabs.map(([k, l]) => `<button data-tab="${k}" class="${tab === k ? "on" : ""}">${l}</button>`).join("")}</span>
     <span class="sp"></span>
     ${feat("shifts") ? `<button class="k-btn sm ${openShift ? "" : "danger"}" id="shiftBtn">${openShift ? (openShift.status === "needs_count" ? "🌙 Count cash" : openShift.status !== "open" ? "⚠️ Shift check" : "📊 Shift") : "▶ Start shift"}</button>` : ""}
-    ${hub() ? `<button class="k-btn sm k-status ${kst()}" id="stBtn">${kst() === "busy" ? `🟠 Busy · ${busyPrep()}m` : kst() === "paused" ? "⏸ Paused" : "🟢 Normal"}</button><button class="k-btn sm" id="volBtn" title="Ringtone volume">🔔</button>` : ""}
+    ${hub() ? `<button class="k-btn sm k-status ${kst()}" id="stBtn">${kst() === "busy" ? "Busy · 35m" : kst() === "paused" ? "Paused" : `Normal · ${prepDefault()}m`}</button><button class="k-btn sm" id="volBtn" title="Ringtone volume">Bell</button>` : ""}
     ${isManager() && store.mode === "table" ? `<button class="k-btn sm" id="toolsBtn">🧰 Menu</button>` : ""}
     <button class="k-btn sm" id="userBtn">👤 ${esc(me?.name || "")} <span class="k-tag">${esc(roleLabel(me?.roles?.[0] || ""))}</span></button>
   </header>${dutyBar}`;
-  head.querySelector("#ringBar")?.addEventListener("click", () => { tab = "orders"; drawHead(); draw(); const first = orders.filter(needsAccept).sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0))[0]; if (first) acceptPicker(first); });
+  head.querySelector("#ringBar")?.addEventListener("click", () => { tab = "orders"; drawHead(); draw(); const first = orders.filter(needsAccept).sort((a, b) => (a.createdAt?.toMillis?.() || 0) - (b.createdAt?.toMillis?.() || 0))[0]; if (first) acceptOrder(first); });
   head.querySelector("#stBtn")?.addEventListener("click", statusPicker);
   head.querySelector("#toolsBtn")?.addEventListener("click", () => menuTools());
   head.querySelector("[data-late]")?.addEventListener("click", async (e) => { const on = e.target.dataset.late === "1"; try { await call("setLateMode", { on, staffToken: me?.token || null }); } catch (err) { alert(err.message); } });
@@ -282,17 +276,19 @@ function orderCard(o, compact = false) {
   if (o.status === "unconfirmed") {
     const dl = o.confirmDeadline?.toMillis?.();
     if (dl) { const left = Math.max(0, dl - Date.now()); acts.appendChild(html(`<span class="small" style="flex-basis:100%;color:var(--new)">💬 Waiting for the customer's Messenger message · auto-cancels in ${Math.floor(left / 60000)} min${o.customer?.phone ? ` · ${esc(o.customer.phone)}` : ""}</span>`)); }
-    const b = html(`<button class="k-btn primary">✅ Confirmed — ${hub() ? "accept" : "send to kitchen"}</button>`); b.onclick = () => hub() ? acceptPicker(o, { confirmedAt: serverTimestamp(), confirmedBy: me?.name || null }) : set({ status: store.mode === "pickup" ? "received" : "pending", confirmedAt: serverTimestamp(), confirmedBy: me?.name || null }); acts.appendChild(b);
+    const b = html(`<button class="k-btn primary">✅ Confirmed — ${hub() ? "accept" : "send to kitchen"}</button>`); b.onclick = () => hub() ? acceptOrder(o, { confirmedAt: serverTimestamp(), confirmedBy: me?.name || null }) : set({ status: store.mode === "pickup" ? "received" : "pending", confirmedAt: serverTimestamp(), confirmedBy: me?.name || null }); acts.appendChild(b);
     const x = html(`<button class="k-btn danger">✕ Bogus / no reply</button>`); x.onclick = () => { if (confirm("Cancel and flag this customer? This phone number will no longer be able to order.")) orderOp(storeId, "cancel", { orderId: o.id, reason: "Not confirmed", flag: true }).catch((e) => alert(e.message)); }; acts.appendChild(x);
     return el;
   }
   if (needsAccept(o)) {
     el.style.borderTopColor = "var(--new)"; el.classList.add("c-ringing");
-    const b = html(`<button class="k-btn primary" style="flex-basis:100%">${payFirstHold(o) ? `💵 Collect ${money(o.total)} first` : `🔔 ${isLater(o) ? "Accept scheduled order" : "Accept — set prep time"}`}</button>`); b.onclick = () => acceptPicker(o); acts.appendChild(b);
+    const b = html(`<button class="k-btn primary" style="flex-basis:100%">${payFirstHold(o) ? `Collect ${money(o.total)} first` : (isLater(o) ? "Accept scheduled order" : "Accept")}</button>`); b.onclick = () => acceptOrder(o); acts.appendChild(b);
   } else if (hub() && o.status === "pending" && o.acceptedAt) acts.appendChild(html(`<span class="small muted" style="flex-basis:100%">✓ Accepted by ${esc(o.acceptedBy || "")} · goes to the kitchen ${o.scheduledAt ? fmtT(new Date(o.scheduledAt.toMillis() - fireMs())) : "soon"}</span>`));
   else if (hub() && o.status === "preparing" && o.etaMinutes && o.acceptedAt?.toDate) {
     acts.appendChild(html(`<span class="small muted" style="flex-basis:100%">⏱ ${o.etaMinutes} min${o.busyExtra ? ` (incl. +${o.busyExtra} busy)` : ""} · due ${fmtT(new Date(o.acceptedAt.toDate().getTime() + o.etaMinutes * 60000))}${o.acceptedBy ? ` · accepted by ${esc(o.acceptedBy)}` : ""}</span>`));
-    const at = html(`<button class="k-btn sm">⏱ +time</button>`); at.onclick = () => addTime(o); acts.appendChild(at);
+    const row = html(`<div class="k-etas">${[10, 15, 20].map((m) => `<button type="button" data-a="${m}">+${m} min</button>`).join("")}</div>`);
+    row.querySelectorAll("[data-a]").forEach((b) => (b.onclick = () => addMinutes(o, Number(b.dataset.a))));
+    acts.appendChild(row);
   }
   if (!o.paid && o.payment && o.payment.method !== "cash" && o.payment.method !== "card") {
     // One-tap GCash: the customer tapped "I've sent" (or will pay at the counter) → check your GCash, then Received / Not received
@@ -632,7 +628,7 @@ function drawNewOrder(main) {
     try {
       const res = await call("staffPlaceOrder", payload);
       cart = []; drawLines(); wrap.querySelector("[data-note]").value = "";
-      if (hub()) { let tries = 0; const wait = () => { const o = orders.find((x) => x.id === res.orderId); if (o) { if (needsAccept(o)) acceptPicker(o); } else if (tries++ < 20) setTimeout(wait, 150); }; wait(); }
+      if (hub()) { let tries = 0; const wait = () => { const o = orders.find((x) => x.id === res.orderId); if (o) { if (needsAccept(o)) acceptOrder(o); } else if (tries++ < 20) setTimeout(wait, 150); }; wait(); }
       else chime(0.2);
       if (printCfg(store).enabled && (printCfg(store).autoOrder || (paid && printCfg(store).autoPaid))) setTimeout(() => { const o = orders.find((x) => x.id === res.orderId); if (o) printReceipt(store, o, { cur: CUR, staffName: me?.name }); }, 1200);
       if (!hub()) alert(`Order sent · ${money(res.total)}`);

@@ -5385,7 +5385,9 @@ exports.setKitchenStatus = onCall(async (req) => {
   const cur = (await sref.get()).data()?.settings?.kitchen || {};
   // paused keeps the current busy extra on the tickets; normal clears it; busy sets it
   const svc = (await sref.get()).data()?.settings?.service || {};
-  const normalPrep = Number(svc.prepDefault) || 15, busyPrep = Number(svc.busyPrep) || 35;
+  const choices = [15, 20, 25, 30, 35];
+  const picked = choices.includes(Number(d.prep)) ? Number(d.prep) : null;
+  const normalPrep = picked || Number(svc.prepDefault) || 15, busyPrep = 35;
   const extra = status === "busy" ? Math.max(0, busyPrep - normalPrep) : status === "paused" ? Number(cur.busyExtra) || 0 : 0;
   const snap = await db.collection(`stores/${storeId}/orders`).where("status", "in", ["pending", "preparing"]).get();
   let changed = 0; const batch = db.batch();
@@ -5397,7 +5399,9 @@ exports.setKitchenStatus = onCall(async (req) => {
     batch.update(doc.ref, { etaMinutes: Math.max(1, o.etaMinutes - had + extra), busyExtra: extra, updatedAt: FieldValue.serverTimestamp() });
     changed++;
   });
-  batch.update(sref, { "settings.kitchen": { status, busyExtra: extra, since: Date.now(), by: String(d.staffName || "").slice(0, 40) }, "settings.acceptOrders": status !== "paused", updatedAt: FieldValue.serverTimestamp() });
+  const patch = { "settings.kitchen": { status, busyExtra: extra, since: Date.now(), by: String(d.staffName || "").slice(0, 40) }, "settings.acceptOrders": status !== "paused", "settings.service.busyPrep": 35, updatedAt: FieldValue.serverTimestamp() };
+  if (picked) patch["settings.service.prepDefault"] = picked;
+  batch.update(sref, patch);
   await batch.commit();
   return { status, extra, changed };
 });
