@@ -197,7 +197,7 @@ async function openBooking(room) {
     <h3 class="s-step">3 · Request <span class="muted small">(optional)</span></h3>
     <textarea data-req rows="2" maxlength="300" placeholder="e.g. early check-in, extra towels, swimming for 4"></textarea>
     <h3 class="s-step">4 · Your details</h3>
-    <label>Full name (as on your ID)</label><input data-name value="${esc(saved.name || "")}"/>
+    <label>Full name</label><input data-name value="${esc(saved.name || "")}"/>
     <label>Phone</label><input data-phone type="tel" value="${esc(saved.phone || "")}" placeholder="09XX XXX XXXX"/>
     ${msgrField(saved)}
     <h3 class="s-step">5 · Downpayment</h3>
@@ -468,7 +468,7 @@ function stayExtrasHTML(s, rec) {
         : (d.deductions || []).length && (d.checkedAt || 0) > Date.now() - 48 * 3600000 ? `<button class="c-btn ghost block" data-dispute style="margin-top:8px">⚖️ Dispute a deduction</button><div class="small muted" style="text-align:center">Within 48 hours of the room check</div>` : ""}`;
     out.push(`<div class="c-ticket"><div class="eyebrow">🔐 Security deposit · ${money(d.amount)} <span class="pill ${pill}">${esc(lab)}</span></div>${body}</div>`);
   }
-  if (s.needsIdOk && ["unconfirmed", "pending"].includes(s.status)) out.push(`<div class="c-alert warn" style="text-align:left">🪪 You booked without a valid ID — the owner is checking if that's OK.</div>`);
+  
   if (s.short && cfg.short?.timerOnArrival !== false && ["confirmed", "pending"].includes(s.status)) out.push(`<div class="c-alert" style="text-align:left">⏱ Your ${s.short.hours} hour${s.short.hours > 1 ? "s" : ""} start when you're in the room — at the latest ${new Date(s.checkIn.toMillis() + (cfg.short?.graceMin ?? 15) * 60000).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}.</div>`);
   (s.moves || []).slice(-1).forEach((m) => out.push(`<div class="c-alert ok" style="text-align:left">🔁 Moved from ${esc(m.from)} to <b>${esc(m.to)}</b>${m.diff > 0 ? ` · +${money(m.diff)}` : m.diff < 0 ? ` · ${money(-m.diff)} refund` : ""}</div>`));
   if (s.refund && s.refund.status !== "none") out.push(`<div class="c-ticket"><div class="eyebrow">↩️ Refund · ${money(s.refund.amount)} <span class="pill ${s.refund.status === "sent" ? "ok" : "wait"}">${s.refund.status === "sent" ? "sent" : "to be sent"}</span></div><div class="small">${esc(s.refund.reason || "")}${s.refund.status === "sent" ? ` · ${esc(s.refund.method || "")}${s.refund.ref ? ` ref ${esc(s.refund.ref)}` : ""}` : ""}</div></div>`);
