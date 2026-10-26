@@ -1512,7 +1512,7 @@ function renderApptStatus(rec) {
         ${protectHTML()}
         ${done || a.paid ? `<button class="c-btn ghost block" data-apptreceipt style="margin-bottom:8px">🧾 View receipt</button>` : ""}
         ${(store.salon?.reminders?.dayBefore || store.salon?.reminders?.hoursBefore) && ["pending", "confirmed"].includes(a.status) ? `<label class="c-agree small" style="margin:0 0 8px"><input type="checkbox" data-nosms ${a.noSms ? "checked" : ""}/> 🔕 Don't text me reminders for this booking</label>` : ""}
-        <button class="c-btn block ${done || bad ? "" : "ghost"}" data-more style="margin-top:8px">${done || bad ? "Book again" : "Back to services"}</button>
+        <button class="c-btn block ${done || bad ? "" : "ghost"}" data-more style="margin-top:8px">${done || bad ? "Book again" : "Back to services"}</button>${["pending","confirmed","unconfirmed","in_progress"].includes(a.status) ? `<div class="c-alert warn"><b>Adjusting.</b> Your booking time can move. Please arrive on time. If you are late, the shop can cancel this booking.</div>` : ""}
         <p class="muted small" style="text-align:center;margin-top:16px">This page updates on its own.</p>
       </div></div>`;
     saveLocal({ lastActive: done || bad ? null : { id: rec.id, storeId: rec.storeId, at: Date.now(), orderNo: a.code, status: title, kind: "appt" } });
