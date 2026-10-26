@@ -26,6 +26,7 @@ const PRESETS = {
     theme: { preset: "spa", primary: "#7B2D8E" },
   },
   freelance: {
+    hidden: true
     mode: "salon",
     labels: { items: "Services", unit: "Booking", order: "Booking", staff: "Team member" },
     categories: ["Shoots & sessions", "Whole-day events", "Content & collabs", "Add-ons"],
@@ -39,6 +40,7 @@ const PRESETS = {
     theme: { primary: "#2f6fb2" },
   },
   products: {
+    hidden: true
     mode: "table",
     labels: { items: "Products", unit: "Order", order: "Order" },
     categories: ["Bestsellers", "New arrivals", "Bundles"],

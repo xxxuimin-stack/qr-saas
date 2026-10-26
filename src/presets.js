@@ -39,6 +39,7 @@ export const PRESETS = {
     blurb: "Therapists, treatment rooms (auto-assigned), couple massage, home service with rider drop-off & pick-up",
   },
   freelance: {
+    hidden: true
     title: "Freelancer & Creator",
     icon: "🎨",
     mode: "salon",
@@ -58,6 +59,7 @@ export const PRESETS = {
     blurb: "Hair, extensions, lashes, brows, nails, barber — appointments per stylist, walk-in waitlist",
   },
   products: {
+    hidden: true
     title: "Products / Online seller",
     icon: "🛍️",
     mode: "table",
