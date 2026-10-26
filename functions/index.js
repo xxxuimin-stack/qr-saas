@@ -3236,11 +3236,11 @@ exports.apptCheckIn = onCall(async (req) => {
   if (!["unconfirmed", "pending", "confirmed"].includes(a.status)) throw new HttpsError("failed-precondition", "This booking is no longer active.");
   if (d.action === "late") {
     const minutes = Math.max(5, Math.min(60, parseInt(d.minutes, 10) || 10));
-    await ref.update({ lateBy: { minutes, at: Date.now() }, updatedAt: FieldValue.serverTimestamp() });
-    notifyTelegram(String(d.storeId), "reservation", `⏰ ${a.customer?.name} (${a.code}) is running ${minutes} min late`);
+    await ref.update({ lateBy: { minutes, at: Date.now() }, held: true, updatedAt: FieldValue.serverTimestamp() });
+    notifyTelegram(String(d.storeId), "reservation", `⏰ ${a.customer?.name} (${a.code}) is running ${minutes} min late`); const nextLate = (await dayAppointments(String(d.storeId), new Date(a.startAt.toMillis() + 8 * 3600000).toISOString().slice(0, 10))).filter((x) => x.id !== ref.id && x.providerId && x.providerId === a.providerId && APPT_ACTIVE.includes(x.status) && x.startAt.toMillis() > a.startAt.toMillis()).sort((x, y) => x.startAt.toMillis() - y.startAt.toMillis())[0]; if (nextLate && nextLate.holdAsk?.status !== "go" && nextLate.holdAsk?.status !== "move") await db.doc(`stores/${String(d.storeId)}/appointments/${nextLate.id}`).update({ holdAsk: { minutes, fromCode: a.code || "", at: Date.now(), status: "waiting" }, updatedAt: FieldValue.serverTimestamp() });
     return { ok: true };
   }
-  if (a.startAt.toMillis() - Date.now() > 3 * 3600e3) throw new HttpsError("failed-precondition", "Check in when you arrive at the salon.");
+  if (d.action === "hold") { const answer = d.answer === "move" ? "move" : "go"; if (!a.holdAsk || a.holdAsk.status !== "waiting") throw new HttpsError("failed-precondition", "Nothing to confirm."); await ref.update({ "holdAsk.status": answer, "holdAsk.answeredAt": Date.now(), updatedAt: FieldValue.serverTimestamp() }); notifyTelegram(String(d.storeId), "reservation", answer === "move" ? `${a.customer?.name} (${a.code}) wants to move because the previous client is late. The time was not changed.` : `${a.customer?.name} (${a.code}) will still come at the booked time.`); return { ok: true }; } if (a.startAt.toMillis() - Date.now() > 3 * 3600e3) throw new HttpsError("failed-precondition", "Check in when you arrive at the salon.");
   await ref.update({ arrivedAt: Date.now(), arrivedBy: "customer", updatedAt: FieldValue.serverTimestamp() });
   return { ok: true };
 });
