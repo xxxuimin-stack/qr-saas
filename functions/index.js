@@ -2098,7 +2098,7 @@ exports.bookAppointment = onCall(HOT, withIndex("appt", async (req) => {
     const idUrl = typeof d.idUrl === "string" && /^priv:stores\/[^/]+\/private\//.test(d.idUrl) ? d.idUrl.slice(0, 300) : null;
     const keepDays = Math.max(7, Number(ctx.store.settings?.privacy?.retentionDays || 90));
     const onFile = cRec?.homeIdUrl && (cRec.homeIdAt?.toMillis?.() || 0) > Date.now() - (keepDays - 1) * 864e5 ? cRec.homeIdUrl : null; // the file is deleted after the retention period
-    if (hsCfg.requireId !== false && !onFile && !idUrl) throw new HttpsError("failed-precondition", "ID_REQUIRED:Please upload a valid ID for your first home service. Only the salon sees it, and it's kept for your next bookings.");
+    /* ID is sent in Messenger, not on the booking form */
     homeService.idUrl = idUrl || onFile || null;
     if (idUrl && phoneKey.length >= 7) await db.doc(`stores/${storeId}/customers/${phoneKey}`).set({ homeIdUrl: idUrl, homeIdAt: FieldValue.serverTimestamp() }, { merge: true });
     if (idUrl) countIdUpload("home");
