@@ -863,7 +863,7 @@ export function renderSettingsPage(root, ctx, opts = {}) {
           <button class="btn ghost sm" type="button" data-del>✕</button>
         </div>
         ${["gcash", "maya", "bank", "custom"].includes(m.type) ? `<div class="row wrap" style="margin-top:6px">
-          <input data-k="number" value="${esc(m.number || "")}" placeholder="${m.type === "bank" ? "Bank + account no." : "Number"}" style="flex:1;min-width:140px"/>
+          ${m.type === "bank" || m.type === "custom" ? `<input data-k="number" value="${esc(m.number || "")}" placeholder="${m.type === "bank" ? "Bank + account no." : "Number"}" style="flex:1;min-width:140px"/>` : `<span class="small muted">Customers see the QR only. The number is not shown.</span>`}
           <input data-k="accountName" value="${esc(m.accountName || "")}" placeholder="Account name" style="flex:1;min-width:120px"/>
           <label class="check" style="margin:0" title="One-tap GCash: customers just tap “I've sent”. Turn this on only if you want them to type the reference no. too."><input type="checkbox" data-k="askRef" ${m.askRef === true ? "checked" : ""}/> Ask ref no. on orders</label>
           ${mode !== "table" ? `<label class="check" style="margin:0" title="Bookings with a downpayment / reservation fee: the customer must type the reference no. or attach the screenshot."><input type="checkbox" data-k="askRefBookings" ${m.askRefBookings !== false ? "checked" : ""}/> Require ref no. / screenshot for booking DP</label>` : ""}

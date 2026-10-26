@@ -1,6 +1,6 @@
 /* TapTayo owner dashboard — brand tokens with a calm, Grab-like finish: thin soft outlines, soft shadows, light buttons. Scoped to body.dash. */
 body.dash {
-  --brand: #C62828; --ink: #111111; --muted: #6B7280; --paper: #F5F6F8; --surface: #FFFFFF; --grid: #EEF0F2;
+  --brand: #C62828; --ink: #111111; --muted: #6B7280; --paper: #FFFFFF; --surface: #FFFFFF; --grid: #EEF0F2;
   --lime: #DCFCE7; --lilac: #EDE9FE; --mango: #FEF3C7; --peach: #FDECEC;
   --edge: #E5E7EB; --edge-strong: #D1D5DB; --brand-soft: #FDECEC; --brand-ink: #B91C1C; --soft: #F3F4F6;
   --sh: 0 1px 2px rgba(17,17,17,.04); --sh-lg: 0 8px 28px rgba(17,17,17,.10);
@@ -98,7 +98,7 @@ body.dash .tile.flash { box-shadow: 0 0 0 3px var(--brand-soft), var(--sh-lg); t
 
 /* ---------- Overview ---------- */
 .ov-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-.ov-head h1 { font-size: 30px; font-weight: 700; letter-spacing: -.025em; line-height: 1.02; margin: 10px 0 6px; }
+.ov-head h1 { font-size: 32px; font-weight: 700; letter-spacing: -.03em; line-height: 1.02; margin: 10px 0 6px; }
 .ov-head .sub { color: var(--muted); font-weight: 600; margin: 0; }
 .ov-head .acts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .ov-head .branch-switch { min-height: 44px; border-radius: 999px; padding: 0 14px; font-weight: 700; width: auto; }
@@ -107,15 +107,15 @@ body.dash .tile.flash { box-shadow: 0 0 0 3px var(--brand-soft), var(--sh-lg); t
 .period button { border: 0; background: transparent; font: inherit; font-weight: 700; padding: 0 18px; min-height: 40px; border-radius: 999px; cursor: pointer; color: var(--ink); }
 .period button { color: var(--muted); }
 .period button[aria-selected="true"] { background: var(--surface); color: var(--ink); box-shadow: var(--sh); }
-.ov-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 20px; }
-.ov-card { background: var(--surface); border: 1px solid var(--edge); box-shadow: none; border-radius: 16px; padding: 18px; min-width: 0; }
-.ov-card h2 { font-size: .9rem; font-weight: 700; margin: 0 0 8px; letter-spacing: 0; color: var(--ink); }
-.ov-card .big { font-size: 1.9rem; font-weight: 700; letter-spacing: -.025em; line-height: 1.05; }
-.ov-card .note { color: var(--muted); font-weight: 600; font-size: .85rem; margin-top: 6px; }
-.ov-card.sales { background: #C62828; color: #fff; border-color: transparent; box-shadow: 0 8px 24px rgba(198,40,40,.22); }
+.ov-cards { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.ov-card { background: #fff; border: 1px solid #E7E5E4; box-shadow: none; border-radius: 18px; padding: 18px 18px 16px; min-width: 0; }
+.ov-card h2 { font-size: .72rem; font-weight: 700; margin: 0 0 10px; letter-spacing: .08em; text-transform: uppercase; color: #78716C; }
+.ov-card .big { font-size: 2.35rem; font-weight: 700; letter-spacing: -.04em; line-height: 1; }
+.ov-card .note { color: #78716C; font-weight: 600; font-size: .85rem; margin-top: 8px; }
+.ov-card.sales { background: #C62828; color: #fff; border-color: transparent; box-shadow: none; }
 .ov-card.sales h2, .ov-card.sales .big { color: #fff; }
 .ov-card.sales .note { color: rgba(255,255,255,.9); }
-.ov-card.sales .chip { color: var(--ink); border-color: transparent; }
+.ov-card.sales .chip { color: #111; background: #fff; border-color: transparent; }
 .chip { display: inline-block; background: var(--surface); border: 1px solid var(--edge); border-radius: 999px; padding: 2px 10px; font-weight: 700; font-size: .8rem; margin-top: 8px; }
 .split-bar { display: flex; height: 26px; border: 1px solid var(--edge); border-radius: 999px; overflow: hidden; margin-top: 10px; background: var(--paper); }
 .split-bar span { display: block; height: 100%; }
@@ -290,11 +290,11 @@ body.dash .bnav { display: none; }
 .addon-pick .ap input[type=checkbox]{width:20px;height:20px;margin:0;flex:none}
 
 /* ===== Poppins type scale ===== */
-.ov-head h1 { font-size: 24px; }
+.ov-head h1 { font-size: 32px; letter-spacing: -.03em; }
 @media (max-width: 600px) { .ov-head h1 { font-size: 20px; } }
-.ov-card h2 { font-size: .76rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.ov-card h2 { font-size: .72rem; text-transform: uppercase; letter-spacing: .08em; color: #78716C; }
 .ov-card.sales h2 { color: rgba(255,255,255,.92); }
-.ov-card .big { font-size: 1.75rem; }
+.ov-card .big { font-size: 2.35rem; letter-spacing: -.04em; }
 body.dash .page-head h1 { font-size: 1.55rem; }
 .ov-sec h2 { font-size: .82rem; text-transform: uppercase; letter-spacing: .05em; }
 
