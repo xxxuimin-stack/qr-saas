@@ -5400,6 +5400,7 @@ exports.collabDecide = onCall(async (req) => { // the business picks a creator â
 });
 /** creator portfolio (UGC / posted work): photos uploaded, videos as links */
 exports.portfolioSave = onCall(async (req) => {
+  creatorMarketplaceGuard();
   const who = await staffFrom(req); if (!hasRole(who, "manager", "stylist")) throw new HttpsError("permission-denied", "Not allowed.");
   const d = req.data || {}; const col = db.collection(`stores/${who.storeId}/portfolio`);
   if (d.action === "delete") { const r = col.doc(String(d.id || "")); if ((await r.get()).data()?.creator) await r.delete(); return { ok: true }; }
@@ -5422,10 +5423,7 @@ async function collabLiveGuard(req, st) {
   const t = req.auth?.token || {}; if (t.admin === true || isAdminEmail(t.email) || st?.settings?.demo || st?.demo) return;
   const c = await collabCfg(); if (!c.live) throw new HttpsError("failed-precondition", `TapTayo Collab is coming soon â€” we're onboarding the first ${c.target || 100} creators. Join the waitlist and we'll tell you when it opens.`);
 }
-exports.collabStatus = onCall(async () => {
-  const c = await collabCfg(); const snap = await db.collection("publicStores").where("creatorListed", "==", true).get();
-  return { live: !!c.live, target: c.target || 100, city: c.city || "Metro Manila", creators: snap.docs.filter((x) => !x.data().testMode || !String(x.id).startsWith("taptayo-")).length };
-});
+exports.collabStatus = onCall(async () => ({ live: false, target: 100, city: "Metro Manila", creators: 0 }));
 exports.collabWaitlist = onCall(async (req) => {
   if (!realAccount(req)) throw new HttpsError("unauthenticated", "Log in to join the waitlist.");
   const d = req.data || {}; await db.doc(`collabWaitlist/${req.auth.uid}`).set({ email: req.auth.token.email, role: ["business", "creator"].includes(d.role) ? d.role : "business", city: String(d.city || "").slice(0, 40), at: Date.now() }, { merge: true });
