@@ -54,7 +54,7 @@ async function roleNext(user) {
   if (nextUrl && nextUrl.startsWith("/")) return safeNext;
   try {
     if (mode === "signup" || localStorage.getItem("taptayo:newRole")) {
-      const r = mode === "signup" ? role : localStorage.getItem("taptayo:newRole");
+      const r = "business";
       await call("accountSetup", { role: r, name: $("a-shop")?.value.trim() || user.displayName || "", adult: !!$("a-adult")?.checked });
       localStorage.removeItem("taptayo:newRole");
       if (r === "client") return "/me/";
