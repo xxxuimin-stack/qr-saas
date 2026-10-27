@@ -16,8 +16,8 @@ a{color:var(--tt-red-ink);font-weight:600;text-decoration:none}a:hover{text-deco
 img{display:block;max-width:100%}
 .hidden{display:none !important}
 .wrap{max-width:1120px;margin:0 auto;padding:0 24px}
-.sec{padding:80px 0}.sec.gray{background:#EFECE6}.sec.dark{background:#161412;color:#fff}
-h2{font-size:clamp(28px,3.2vw,40px);letter-spacing:-.035em;line-height:1.08;margin:0 0 8px;font-weight:600}
+.sec{padding:88px 0}.sec.gray{background:#EBE6DE}.sec.dark{background:#141210;color:#fff}
+h2{font-size:clamp(32px,3.6vw,46px);letter-spacing:-.045em;line-height:1.02;margin:0 0 10px;font-weight:600}
 .lead{font-size:16.5px;color:var(--tt-muted);margin:0 0 26px;line-height:1.55;max-width:640px}
 .dark .lead{color:#D1D5DB}
 .dcard .try{display:inline-flex;align-items:center;height:36px;margin-top:10px;padding:0 14px;border-radius:999px;background:#111;color:#fff;font-size:13px;font-weight:600;font-style:normal}
@@ -27,21 +27,26 @@ h2{font-size:clamp(28px,3.2vw,40px);letter-spacing:-.035em;line-height:1.08;marg
 .bs{height:48px;padding:0 18px;background:#fff;color:var(--tt-ink)!important;border:1px solid var(--tt-line);font-size:15px}
 .bsm{height:40px;padding:0 16px;font-size:14px}
 /* header */
-.top{position:sticky;top:0;z-index:20;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid #EEF0F2}
-.top .wrap{display:flex;align-items:center;gap:22px;height:66px}
-.brand{display:flex;align-items:center;gap:9px;color:#111!important;font-size:21px;font-weight:700;letter-spacing:-.03em;text-decoration:none!important}
-.nav{display:flex;gap:4px;align-items:center;flex:1}
-.nav a{color:#374151;font-weight:500;font-size:14.5px;padding:8px 10px;border-radius:10px}.nav a:hover{background:#F5F6F8;text-decoration:none}
+.top{position:sticky;top:0;z-index:20;background:#141210;border-bottom:1px solid #2A2622}
+.top .wrap{display:flex;align-items:center;gap:22px;height:68px}
+.brand{display:flex;align-items:center;gap:9px;color:#F6F3EE!important;font-size:20px;font-weight:650;letter-spacing:-.04em;text-decoration:none!important}
+.nav{display:flex;gap:2px;align-items:center;flex:1}
+.nav a{color:#D9D3C9;font-weight:500;font-size:14px;padding:8px 12px;border-radius:999px}.nav a:hover{background:#2A2622;color:#fff;text-decoration:none}
 .right{display:flex;gap:8px;align-items:center}
+.top .bs{background:transparent;color:#F6F3EE!important;border-color:#3A342E}
+.top .bp{background:#F6F3EE;color:#141210!important}
+.top .bp:hover{background:#fff}
+.pill{display:inline-flex;align-items:center;height:28px;padding:0 10px;border-radius:999px;background:#F3E6E4;color:#8E1E1E;font-size:12px;font-weight:650;letter-spacing:.02em}
 /* hero */
-.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,440px);gap:56px;align-items:center;padding:56px 24px 64px}
-.hero h1{font-size:clamp(40px,5.2vw,60px);line-height:1.02;letter-spacing:-.045em;margin:18px 0 16px;font-weight:600}
+.hero{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(320px,440px);gap:64px;align-items:center;padding:72px 24px 28px}
+.hero h1{font-size:clamp(44px,5.6vw,68px);line-height:.98;letter-spacing:-.05em;margin:16px 0 16px;font-weight:600}
 .hero h1 em{font-style:normal;color:var(--tt-red)}
-.hero p{font-size:18.5px;color:#4B5563;line-height:1.55;margin:0 0 26px;max-width:540px}
+.hero p{font-size:18px;color:#4A453F;line-height:1.55;margin:0 0 26px;max-width:520px}
+.heroimgs{display:grid;grid-template-columns:1.35fr .85fr;grid-template-rows:118px 118px;gap:10px;margin-top:34px;max-width:520px}
+.heroimgs div{border-radius:18px;background:#E7E1D8 center/cover;min-height:0}
+.heroimgs div:first-child{grid-row:1 / span 2;height:auto;aspect-ratio:auto}
 .ctas{display:flex;gap:12px;flex-wrap:wrap}
 .checks{display:flex;gap:18px;flex-wrap:wrap;margin-top:22px;font-size:13.5px;color:#6B7280}.checks span{display:flex;gap:6px;align-items:center}
-.heroimgs{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:30px;max-width:540px}
-.heroimgs div{aspect-ratio:1;border-radius:16px;background:#EEF0F2 center/cover}
 /* login card (same as /login/) */
 .card{background:#fff;border:1px solid var(--tt-line);border-radius:16px;padding:26px 24px;display:flex;flex-direction:column;gap:18px;box-shadow:var(--tt-shadow)}
 .seg{display:grid;grid-template-columns:1fr 1fr;background:#EEF0F2;border-radius:12px;padding:3px;gap:3px}
@@ -73,10 +78,11 @@ button:disabled{opacity:.6;cursor:wait}
 .cat b{display:block;margin-top:8px;font-size:14.5px;font-weight:600}
 /* demo grid */
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
-.dcard{border-radius:20px;overflow:hidden;background:#fff;border:1px solid #EEF0F2;color:#111!important;display:flex;flex-direction:column;transition:transform .15s,box-shadow .15s}
-.dcard:hover{text-decoration:none;transform:translateY(-3px);box-shadow:0 14px 30px rgba(17,17,17,.10)}
-.dcard .ph{height:200px;background:#EEF0F2 center/cover;position:relative}.dcard .sample{position:absolute;top:12px;left:12px;background:#161412;color:#fff;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:700;letter-spacing:.04em}
-.dcard div.t{padding:16px}.dcard b{font-size:17px}.dcard p{font-size:13.5px;color:#6B7280;margin:6px 0 12px}.dcard em{display:inline-flex;align-items:center;height:40px;padding:0 14px;border-radius:12px;background:#C62828;color:#fff;font-style:normal;font-weight:700;font-size:14px}
+.dcard{border-radius:18px;overflow:hidden;background:#fff;border:1px solid #E4DDD4;color:#161412!important;display:flex;flex-direction:column;box-shadow:0 1px 0 rgba(22,20,18,.04)}
+.dcard:hover{text-decoration:none;box-shadow:0 18px 40px rgba(22,20,18,.10)}
+.dcard .ph{height:210px;background:#E7E1D8 center/cover;position:relative}
+.dcard .sample{position:absolute;top:12px;left:12px;background:#141210;color:#F6F3EE;border-radius:999px;padding:5px 9px;font-size:11px;font-weight:650;letter-spacing:.06em;text-transform:uppercase}
+.dcard div.t{padding:16px 16px 18px}.dcard b{font-size:17px;letter-spacing:-.02em}.dcard p{font-size:14px;color:#6F6A63;margin:6px 0 14px}.dcard em{display:inline-flex;align-items:center;height:36px;padding:0 12px;border-radius:999px;background:#141210;color:#fff;font-style:normal;font-weight:600;font-size:13px}
 /* order travel */
 .travel{position:relative;border-radius:22px;overflow:hidden;min-height:380px;background:url(/demo/food/boodle-fight.jpg) center/cover;display:flex;align-items:center}
 .travel::before{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(0,0,0,.7),rgba(0,0,0,.15))}
@@ -122,12 +128,12 @@ details p{margin:10px 0 0;color:#4B5563;line-height:1.6;font-size:15px}
 /* cta */
 .cta{border-radius:24px;padding:56px 48px;background:linear-gradient(90deg,rgba(150,20,20,.92),rgba(198,40,40,.7)),url(/demo/food/inihaw-meal.jpg) center/cover;color:#fff}
 .cta h2{font-size:clamp(30px,4vw,44px)}
-footer{border-top:1px solid #EEF0F2;padding:26px 0;font-size:13px;color:#6B7280}
-footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}footer nav{display:flex;gap:14px;flex-wrap:wrap}footer a{color:#374151;font-weight:500}
+footer{background:#141210;color:#C9C2B8;padding:28px 0;font-size:13px;border-top:0}
+footer .wrap{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;align-items:center}footer nav{display:flex;gap:16px;flex-wrap:wrap}footer a{color:#F6F3EE;font-weight:500}
 button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #F4A9A9;outline-offset:2px}
 @media (max-width:1020px){.top .wrap{height:auto;flex-wrap:wrap;padding-top:8px;padding-bottom:8px}.nav{order:3;flex:1 0 100%;overflow-x:auto}.grid4,.plans{grid-template-columns:1fr 1fr}}
 @media (max-width:860px){.hero{grid-template-columns:1fr;gap:28px;padding-top:32px}.grid3{grid-template-columns:1fr 1fr}.two,.setup{grid-template-columns:1fr}.sec{padding:52px 0}.cta{padding:36px 24px}}
-@media (max-width:560px){.wrap{padding:0 16px}.hero{padding:24px 16px 40px}.grid3,.grid4,.plans{grid-template-columns:1fr}.heroimgs{grid-template-columns:repeat(4,1fr);gap:6px}.cat,.cat span{width:128px}.cat span{height:128px}.step{width:calc(50% - 6px)}.steps{padding:18px}.brand span.t{font-size:19px}}
+@media (max-width:560px){.wrap{padding:0 16px}.hero{padding:24px 16px 40px}.grid3,.grid4,.plans{grid-template-columns:1fr}.heroimgs{grid-template-columns:1fr 1fr;grid-template-rows:96px 96px}.heroimgs div:first-child{grid-row:auto}.cat,.cat span{width:128px}.cat span{height:128px}.step{width:calc(50% - 6px)}.steps{padding:18px}.brand span.t{font-size:19px}}
 @media (prefers-reduced-motion: reduce){html{scroll-behavior:auto}.dcard{transition:none}}
 </style>
 </head>
@@ -146,7 +152,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #F4A9
 <p>Orders, bookings, GCash and loyalty for cafés, salons, spas, laundry and stays. <b style="color:#111">No commission per order</b> — set up in about 10 minutes.</p>
 <div class="ctas"><a class="btn bp" href="#demo"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 4l13 8-13 8z"/></svg>Try the live demo</a><a class="btn bs" href="#login" data-go="signup">Start free</a></div>
 <div class="checks"><span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>No card needed</span><span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>GCash &amp; Maya</span><span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Works on any phone</span><span><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Free plan, no time limit</span></div>
-<div class="heroimgs" aria-hidden="true"><div style="background-image:url(/demo/food/sisig.jpg)"></div><div style="background-image:url(/demo/salon/nail-art.jpg)"></div><div style="background-image:url(/demo/laundry/folded-shirts.jpg)"></div><div style="background-image:url(/demo/stay/pool-palms.jpg)"></div></div>
+<div class="heroimgs" aria-hidden="true"><div style="background-image:url(/demo/cafe/cover.jpg)"></div><div style="background-image:url(/demo/salon/nail-art.jpg)"></div><div style="background-image:url(/demo/laundry/folded-shirts.jpg)"></div><div style="background-image:url(/demo/stay/pool-palms.jpg)"></div></div>
 </div>
 
 <div class="card" id="login">
@@ -176,7 +182,7 @@ button:focus-visible,a:focus-visible,input:focus-visible{outline:3px solid #F4A9
 <section class="sec" id="demo"><div class="wrap">
 <h2>One app for your kind of business</h2>
 <p class="lead">Pick yours — every edition comes with its own live demo shop. Tap around like a real customer.</p>
-<div class="grid3"><a class="dcard" href="/m/taptayo-cafe"><div class="ph" style="background-image:url(/demo/food/sisig.jpg)"><span class="sample">Sample</span></div><div class="t"><b>Café & Restaurant</b><p>Menu with photos, table QR, kitchen, delivery</p><em class="try">View live demo</em></div></a><a class="dcard" href="/m/taptayo-salon"><div class="ph" style="background-image:url(/demo/salon/nail-art.jpg)"><span class="sample">Sample</span></div><div class="t"><b>Salon & Aesthetic</b><p>Bookings, stylists, home service, loyalty</p><em class="try">View live demo</em></div></a><a class="dcard" href="/m/taptayo-spa"><div class="ph" style="background-image:url(/demo/spa/back-massage.jpg)"><span class="sample">Sample</span></div><div class="t"><b>Massage & Spa</b><p>Rooms, therapists, couple bookings, home service</p><em class="try">View live demo</em></div></a><a class="dcard" href="/m/taptayo-laundry"><div class="ph" style="background-image:url(/demo/laundry/laundromat.jpg)"><span class="sample">Sample</span></div><div class="t"><b>Laundry Shop</b><p>Kg pricing, claim stubs, rider pickups</p><em class="try">View live demo</em></div></a><a class="dcard" href="/m/taptayo-airbnb"><div class="ph" style="background-image:url(/demo/stay/pool-palms.jpg)"><span class="sample">Sample</span></div><div class="t"><b>Stay & Resort</b><p>Rooms, dates, check-in, cleaner app</p><em class="try">View live demo</em></div></a><a class="dcard" href="/m/taptayo-studio"><div class="ph" style="background-image:url(/demo/studio/camera.jpg)"><span class="sample">Sample</span></div><div class="t"><b>Photographer & Creator</b><p>Packages, downpayment, raw in 3 days</p><em class="try">View live demo</em></div></a></div>
+<div class="grid3"><a class="dcard" href="/m/taptayo-cafe"><div class="ph" style="background-image:url(/demo/cafe/cover.jpg)"><span class="sample">Sample</span></div><div class="t"><b>Café & Restaurant</b><p>Menu with photos, table QR, kitchen, delivery</p><em class="try">View live demo</em></div></a><a class="dcard" href="/m/taptayo-salon"><div class="ph" style="background-image:url(/demo/salon/nail-art.jpg)"><span class="sample">Sample</span></div><div class="t"><b>Salon & Aesthetic</b><p>Bookings, stylists, home service, loyalty</p><em class="try">View live demo</em></div></a><a class="dcard" href="/m/taptayo-spa"><div class="ph" style="background-image:url(/demo/spa/back-massage.jpg)"><span class="sample">Sample</span></div><div class="t"><b>Massage & Spa</b><p>Rooms, therapists, couple bookings, home service</p><em class="try">View live demo</em></div></a><a class="dcard" href="/m/taptayo-laundry"><div class="ph" style="background-image:url(/demo/laundry/laundromat.jpg)"><span class="sample">Sample</span></div><div class="t"><b>Laundry Shop</b><p>Kg pricing, claim stubs, rider pickups</p><em class="try">View live demo</em></div></a><a class="dcard" href="/m/taptayo-airbnb"><div class="ph" style="background-image:url(/demo/stay/pool-palms.jpg)"><span class="sample">Sample</span></div><div class="t"><b>Stay & Resort</b><p>Rooms, dates, check-in, cleaner app</p><em class="try">View live demo</em></div></a><a class="dcard" href="/m/taptayo-studio"><div class="ph" style="background-image:url(/demo/studio/camera.jpg)"><span class="sample">Sample</span></div><div class="t"><b>Photographer & Creator</b><p>Packages, downpayment, raw in 3 days</p><em class="try">View live demo</em></div></a></div>
 </div></section>
 
 <section class="sec dark"><div class="wrap">
