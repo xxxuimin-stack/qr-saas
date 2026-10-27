@@ -5576,6 +5576,7 @@ exports.createReservation = onCall(withIndex("resv", async (req) => {
 // ===========================================================================
 // (plans are required at the top of the file)
 const { ADMIN_EMAILS } = require("./admins");
+const { paymentDecision } = require("./adminpay");
 
 const isAdminEmail = (email) => !!email && ADMIN_EMAILS.map((e) => e.toLowerCase()).includes(String(email).toLowerCase());
 
@@ -6619,6 +6620,14 @@ exports.adminUpdateSubscription = onCall(async (req) => {
   const patch = { updatedAt: FieldValue.serverTimestamp() };
 
   if (action === "activate") {
+    const paymentId = String(d.paymentId || "");
+    if (paymentId) {
+      const existing = await db.doc(`stores/${storeId}/payments/${paymentId}`).get();
+      if (!existing.exists) throw new HttpsError("not-found", "Payment not found.");
+      const decision = paymentDecision(existing.data().status);
+      if (decision === "already") return { ok: true, already: true };
+      if (decision !== "apply") throw new HttpsError("failed-precondition", "This payment is no longer pending.");
+    }
     // owner referral: a referred business that pays (or reaches 20 completed orders) gives the referrer 1 free month
     { const st = (await db.doc(`stores/${storeId}`).get()).data() || {}; await rewardReferral(storeId, st).catch((e) => logger.warn("referral", e.message)); }
     const plan = PLANS[d.plan];
@@ -6630,21 +6639,22 @@ exports.adminUpdateSubscription = onCall(async (req) => {
     const addonTotal = Object.entries(addons).reduce((a, [k, q]) => a + (ADDONS[k]?.price || 0) * (q === true ? 1 : q), 0);
     if (addons.protect && !sub.protectSince) patch.protectSince = now;
     Object.assign(patch, { plan: d.plan, status: "active", paidUntil, paymentMethod: "manual", addons, lockedPrice: plan.price, comp: false, compNote: "", provisional: FieldValue.delete(), activatedAt: FieldValue.serverTimestamp() });
-    const pend = await db.collection(`stores/${storeId}/payments`).where("status", "==", "pending").get();
-    if (pend.empty) {
-      // no claim from the owner (e.g. direct Activate) → create a record
+    if (paymentId) {
+      const pRef = db.doc(`stores/${storeId}/payments/${paymentId}`);
+      const pSnap = await pRef.get();
+      if (!pSnap.exists) throw new HttpsError("not-found", "Payment not found.");
+      const decision = paymentDecision(pSnap.data().status);
+      if (decision === "already") return { ok: true, already: true };
+      if (decision !== "apply") throw new HttpsError("failed-precondition", "This payment is no longer pending.");
+      await pRef.update({
+        status: "confirmed", plan: d.plan, months, addons, amount: Number(d.amount) || pSnap.data().amount,
+        confirmedAt: FieldValue.serverTimestamp(), confirmedBy: token.email || null,
+      });
+    } else {
       await db.collection(`stores/${storeId}/payments`).add({
         plan: d.plan, months, addons, amount: Number(d.amount) || (plan.price + addonTotal) * months, refNo: String(d.refNo || "").slice(0, 60),
         status: "confirmed", confirmedBy: token.email || null, createdAt: FieldValue.serverTimestamp(), confirmedAt: FieldValue.serverTimestamp(),
       });
-    } else {
-      // confirm the pending claim itself (no duplicates)
-      for (const p of pend.docs) {
-        await p.ref.update({
-          status: "confirmed", plan: d.plan, months, addons, amount: Number(d.amount) || p.data().amount,
-          confirmedAt: FieldValue.serverTimestamp(), confirmedBy: token.email || null,
-        });
-      }
     }
   } else if (action === "comp") {
     // 🎁 free / complimentary access — custom days, add-ons, note
@@ -6665,7 +6675,12 @@ exports.adminUpdateSubscription = onCall(async (req) => {
     Object.assign(patch, { status: until > now ? (sub.plan === "trial" ? "trial" : "active") : "past_due" });
   } else if (action === "rejectPayment") {
     const pid = String(d.paymentId || "");
-    await db.doc(`stores/${storeId}/payments/${pid}`).update({ status: "rejected", note: String(d.note || "").slice(0, 200), updatedAt: FieldValue.serverTimestamp() });
+    if (!pid) throw new HttpsError("invalid-argument", "Missing payment.");
+    const pRef = db.doc(`stores/${storeId}/payments/${pid}`);
+    const pSnap = await pRef.get();
+    if (!pSnap.exists) throw new HttpsError("not-found", "Payment not found.");
+    if (paymentDecision(pSnap.data().status) !== "apply") throw new HttpsError("failed-precondition", "This payment is no longer pending.");
+    await pRef.update({ status: "rejected", note: String(d.note || "").slice(0, 200), updatedAt: FieldValue.serverTimestamp() });
     // not paid → the plan that was turned on while checking goes away right now
     // a rejected (unpaid) claim → no more "active while checking" for this shop; next claims wait for the admin
     await ref.update({ ...(sub.provisional?.paymentId === pid ? { provisional: FieldValue.delete() } : {}), noProvisional: true, updatedAt: FieldValue.serverTimestamp() });

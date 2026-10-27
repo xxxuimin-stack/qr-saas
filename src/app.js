@@ -175,7 +175,7 @@ if (sellBox && !sellBox.childElementCount) {
   wrap.innerHTML = "";
   for (const [key, p] of Object.entries(PRESETS).sort((a, b) => !!a[1].comingSoon - !!b[1].comingSoon)) {
     const sellOf = { cafe: "food", restaurant: "food", salon: "service", spa: "service", makeup: "service", tattoo: "service", clinic: "service", laundry: "service", stay: "stay" };
-if ((p.hidden && key !== "restaurant" && key !== "clinic") || sellOf[key] !== wiz.sell) continue;
+if ((p.hidden && key !== "restaurant") || sellOf[key] !== wiz.sell) continue;
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "type";

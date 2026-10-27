@@ -159,7 +159,7 @@ function draw() {
       <span class="row">${p.proofUrl ? `<a class="btn ghost sm" data-priv="${esc(p.proofUrl)}">🧾 Screenshot</a>` : ""}${p.provisional ? `<span class="pill trial" title="The plan is already on for up to 3 days while you check">Active while checking</span>` : ""}<button class="btn sm" data-ok="${p.store.id}" data-pid="${p.id}">✅ Confirm & activate</button><button class="btn ghost sm danger-text" data-rej="${p.store.id}" data-pid="${p.id}">Reject</button></span>
     </div>`).join("")}</div>` : "";
   hydratePrivate($("pending"));
-  $("pending").querySelectorAll("[data-ok]").forEach((b) => (b.onclick = () => { const p = pend.find((x) => x.id === b.dataset.pid); return activate(b.dataset.ok, { plan: p?.plan === "none" ? "none" : p?.plan, months: p?.months, amount: p?.amount, refNo: p?.refNo, addons: Array.isArray(p?.addons) ? Object.fromEntries(p.addons.map((k) => [k, 1])) : p?.addons || {} }); }));
+  $("pending").querySelectorAll("[data-ok]").forEach((b) => (b.onclick = () => { const p = pend.find((x) => x.id === b.dataset.pid); return activate(b.dataset.ok, { plan: p?.plan === "none" ? "none" : p?.plan, months: p?.months, amount: p?.amount, refNo: p?.refNo, paymentId: p?.id, addons: Array.isArray(p?.addons) ? Object.fromEntries(p.addons.map((k) => [k, 1])) : p?.addons || {} }); }));
   $("pending").querySelectorAll("[data-rej]").forEach((b) => (b.onclick = async () => {
     const note = prompt("Reason (visible to the owner):", "Payment not found. Please send a screenshot.");
     if (note === null) return;
@@ -216,7 +216,7 @@ function activate(storeId, pre = {}) {
     try {
       const addons = {}; body.querySelectorAll("[data-aq]").forEach((i) => { if (Number(i.value) > 0) addons[i.dataset.aq] = Number(i.value); }); body.querySelectorAll("[data-ac]").forEach((c) => { if (c.checked) addons[c.dataset.ac] = 1; });
       if (body.querySelector("[name=comp]").checked) await call("adminUpdateSubscription", { storeId, action: "comp", plan: g("plan"), days: Number(g("days")), note: g("note"), addons });
-      else await call("adminUpdateSubscription", { storeId, action: "activate", plan: g("plan") === "none" ? "free" : g("plan"), months: Number(g("months")), amount: g("amount") ? Number(g("amount")) : null, refNo: g("refNo"), addons });
+      else await call("adminUpdateSubscription", { storeId, action: "activate", plan: g("plan") === "none" ? "free" : g("plan"), months: Number(g("months")), amount: g("amount") ? Number(g("amount")) : null, refNo: g("refNo"), addons, paymentId: pre.paymentId || null });
       closeModal(); toast("Activated ✓"); load();
     } catch (e) { toast(e.message, "error"); foot.querySelector("[data-yes]").disabled = false; }
   };
