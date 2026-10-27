@@ -150,9 +150,18 @@ service cloud.firestore {
         allow delete: if isOwner(storeId);
       }
 
-      // who is on duty (staff screens send a heartbeat)
+      // Duty heartbeat: clients may only maintain the known presence fields.
+      // The staffId must match the document ID; all other data is server/owner managed.
       match /duty/{id} {
-        allow read, write: if inStore(storeId);
+        allow read: if inStore(storeId);
+        allow create: if inStore(storeId)
+                      && request.resource.data.staffId == id
+                      && request.resource.data.keys().hasOnly(['staffId', 'name', 'roles', 'screen', 'visible', 'at', 'atMs', 'delivering', 'returning', 'off']);
+        allow update: if inStore(storeId)
+                      && request.resource.data.staffId == id
+                      && request.resource.data.diff(resource.data).affectedKeys()
+                           .hasOnly(['name', 'roles', 'screen', 'visible', 'at', 'atMs', 'delivering', 'returning', 'off']);
+        allow delete: if false;
       }
 
       match /private/{id} {
@@ -210,10 +219,20 @@ service cloud.firestore {
         allow delete: if isOwner(storeId);
       }
 
-      // Shifts (start/end + cash tally) — staff ng store
+      // Shifts (start/end + cash tally). Keep opening facts immutable after creation.
+      // Closure totals are still client-submitted today; move this workflow to a callable
+      // Cloud Function before treating cash counts as tamper-proof.
       match /shifts/{id} {
         allow read: if inStore(storeId);
-        allow create, update: if memberOf(storeId);
+        allow create: if memberOf(storeId)
+                      && request.resource.data.keys().hasOnly(['status', 'openedBy', 'openedByName', 'openedAt', 'startingCash', 'note', 'createdAt', 'updatedAt'])
+                      && request.resource.data.status == 'open'
+                      && request.resource.data.startingCash is number
+                      && request.resource.data.startingCash >= 0;
+        allow update: if memberOf(storeId)
+                      && request.resource.data.diff(resource.data).affectedKeys()
+                           .hasOnly(['status', 'closedBy', 'closedByName', 'closedAt', 'countedCash', 'expectedCash', 'variance', 'tally', 'closeNote', 'updatedAt'])
+                      && request.resource.data.get('status', '') in ['open', 'needs_count', 'pending_check', 'investigating', 'closed'];
         allow delete: if isOwner(storeId);
       }
 
