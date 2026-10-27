@@ -80,7 +80,7 @@ function mountDemo() {
   if (!store?.demo || document.getElementById("ttDemo")) return;
   const kind = { salon: "booking page", laundry: "laundry page", stay: "booking page" }[store.mode] || "QR menu";
   const bar = document.createElement("div"); bar.id = "ttDemo"; bar.className = "c-demo";
-  bar.innerHTML = `<span>🧪 <b>Demo store</b> · try it, nothing is charged · sample reviews</span><a href="https://taptayo.com/?utm_source=demo&utm_medium=${encodeURIComponent(store.mode || "")}" target="_blank" rel="noopener">Get your own free ${kind} →</a>`;
+  bar.innerHTML = `<span><b>Sample business</b> · not a real shop · nothing is charged</span><a href="https://taptayo.com/?utm_source=demo&utm_medium=${encodeURIComponent(store.mode || "")}" target="_blank" rel="noopener">Get your own free ${kind} →</a>`;
   bar.insertAdjacentHTML("beforeend", `<a href="/app/?demo=${encodeURIComponent(slug)}" target="_blank" rel="noopener">👀 Owner dashboard</a> · <a href="/counter/?demo=${encodeURIComponent(slug)}" target="_blank" rel="noopener">📱 Staff screens</a>`);
   document.body.prepend(bar); document.body.classList.add("has-demo");
 }

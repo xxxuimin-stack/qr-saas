@@ -4888,16 +4888,20 @@ exports.verifyPin = onCall(HOT, async (req) => {
   const hash = pinsSnap.exists ? pinsSnap.data()[staffId] : null;
   // lockout: 10 wrong tries → locked for 15 minutes
   const failRef = db.doc(`stores/${storeId}/private/pinFails`);
-  const fails = ((await failRef.get()).data() || {})[staffId] || {};
-  if (fails.lockedUntil && fails.lockedUntil > Date.now()) throw new HttpsError("resource-exhausted", `Too many wrong PINs. Try again in ${Math.ceil((fails.lockedUntil - Date.now()) / 60000)} min, or ask the owner.`);
-  if (!hash || hash !== pinHash(storeId, pin)) {
-    const n = (fails.count || 0) + 1;
-    await failRef.set({ [staffId]: n >= PIN_MAX_TRIES ? { count: 0, lockedUntil: Date.now() + 15 * 60000 } : { count: n, lockedUntil: 0 } }, { merge: true });
-    logger.warn("bad pin", { storeId, staffId, n });
-    if (n >= PIN_MAX_TRIES) { notifyTelegram(storeId, "shift", `🔒 ${staffSnap.data().name}'s PIN was locked for 15 minutes after ${PIN_MAX_TRIES} wrong tries.`); throw new HttpsError("resource-exhausted", "Too many wrong PINs. Locked for 15 minutes."); }
-    throw new HttpsError("permission-denied", `Wrong PIN. ${PIN_MAX_TRIES - n} ${PIN_MAX_TRIES - n === 1 ? "try" : "tries"} left.`);
-  }
-  if (fails.count) await failRef.set({ [staffId]: { count: 0, lockedUntil: 0 } }, { merge: true });
+  const gate = await db.runTransaction(async (tx) => {
+    const prev = ((await tx.get(failRef)).data() || {})[staffId] || {};
+    if (prev.lockedUntil && prev.lockedUntil > Date.now()) return { state: "locked", lockedUntil: prev.lockedUntil };
+    if (!hash || hash !== pinHash(storeId, pin)) {
+      const next = pinFailNext(prev, Date.now(), PIN_MAX_TRIES);
+      tx.set(failRef, { [staffId]: { count: next.count, lockedUntil: next.lockedUntil } }, { merge: true });
+      return { state: next.locked ? "lock-now" : "bad", left: PIN_MAX_TRIES - next.count };
+    }
+    if (prev.count || prev.lockedUntil) tx.set(failRef, { [staffId]: { count: 0, lockedUntil: 0 } }, { merge: true });
+    return { state: "ok" };
+  });
+  if (gate.state === "locked") throw new HttpsError("resource-exhausted", `Too many wrong PINs. Try again in ${Math.ceil((gate.lockedUntil - Date.now()) / 60000)} min, or ask the owner.`);
+  if (gate.state === "lock-now") { notifyTelegram(storeId, "shift", `🔒 ${staffSnap.data().name}'s PIN was locked for 15 minutes after ${PIN_MAX_TRIES} wrong tries.`); throw new HttpsError("resource-exhausted", "Too many wrong PINs. Locked for 15 minutes."); }
+  if (gate.state === "bad") throw new HttpsError("permission-denied", `Wrong PIN. ${gate.left} ${gate.left === 1 ? "try" : "tries"} left.`);
   const s = staffSnap.data();
   // plan limit on staff PINs: the first N active staff (oldest first) can log in
   { const st = (await db.doc(`stores/${storeId}`).get()).data() || {}; const { lim, plan } = await storeLimits(storeId, st.mode);
@@ -4925,6 +4929,11 @@ function payFields(store, methodId) {
   return { paymentMethod: id, paymentMethodId: id, paymentMethodName: names[id] };
 }
 const STAFF_TOKEN_HOURS = 14;
+function sigOk(secret, body, sig) {
+  const expect = crypto.createHmac("sha256", secret).update(body).digest();
+  const got = Buffer.from(String(sig), "base64url");
+  return got.length === expect.length && crypto.timingSafeEqual(got, expect);
+}
 async function staffKey(storeId) {
   const ref = db.doc(`stores/${storeId}/private/staffKey`);
   const snap = await ref.get();
@@ -4947,14 +4956,14 @@ async function staffFrom(req) {
   const st = String(req.data?.staffToken || "");
   if (st) {
     const [body, sig] = st.split(".");
-    const good = body && sig && crypto.createHmac("sha256", await staffKey(storeId)).update(body).digest("base64url") === sig;
+    const good = body && sig && sigOk(await staffKey(storeId), body, sig);
     if (!good) throw new HttpsError("unauthenticated", "Your staff login expired. Please log in again with your PIN.");
     const p = JSON.parse(Buffer.from(body, "base64url").toString());
     if (p.e < Date.now()) throw new HttpsError("unauthenticated", "Your staff login expired. Please log in again with your PIN.");
     const staffSnap = await db.doc(`stores/${storeId}/staff/${p.s}`).get();
     if (!staffSnap.exists || staffSnap.data().active === false) throw new HttpsError("permission-denied", "This staff account was removed.");
     if (staffSnap.data().planLocked) throw new HttpsError("permission-denied", "This staff PIN is paused — the shop's plan has fewer staff slots now. Ask the owner.");
-    return { storeId, staffId: p.s, name: p.n, roles: staffSnap.data().roles || p.r || [], owner: false };
+    return { storeId, staffId: p.s, name: staffSnap.data().name || p.n, roles: Array.isArray(staffSnap.data().roles) ? staffSnap.data().roles : [], owner: false };
   }
   if (token.role === "owner") { // one-phone owners act as their own staff profile (their jobs, their commission)
     const me = (await db.collection(`stores/${storeId}/staff`).where("isOwner", "==", true).limit(1).get()).docs[0];
@@ -5327,7 +5336,7 @@ const minuteTickRun = async () => {
   for (const d of snap.docs) { const o = d.data(); if (o.acceptedAt || o.test || o.isScheduled) continue; const sid = d.ref.parent.parent.id; (byStore[sid] = byStore[sid] || []).push({ ref: d.ref, ...o }); }
   for (const [storeId, list] of Object.entries(byStore)) {
     try {
-      const store = (await db.doc(`stores/${storeId}`).get()).data(); if (!store || store.mode !== "table") continue;
+      const store = (await db.doc(`stores/${storeId}`).get()).data(); if (!store || store.mode !== "table" || store.settings?.demo) continue;
       const s = store.settings || {};
       const age = (o) => (Date.now() - (o.createdAt?.toMillis?.() || Date.now())) / 60000;
       for (const o of list) {
@@ -5577,6 +5586,7 @@ exports.createReservation = onCall(withIndex("resv", async (req) => {
 // (plans are required at the top of the file)
 const { ADMIN_EMAILS } = require("./admins");
 const { paymentDecision } = require("./adminpay");
+const { pinFailNext } = require("./pinfail");
 
 const isAdminEmail = (email) => !!email && ADMIN_EMAILS.map((e) => e.toLowerCase()).includes(String(email).toLowerCase());
 
