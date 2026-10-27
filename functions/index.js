@@ -1752,7 +1752,7 @@ async function nextWaitNo(storeId, dk) {
   const ref = db.doc(`stores/${storeId}/meta/waitlist`);
   return db.runTransaction(async (tx) => { const c = await tx.get(ref); const cur = c.exists && c.data().dayKey === dk ? c.data().seq : 0; const seq = cur + 1; tx.set(ref, { dayKey: dk, seq }, { merge: true }); return seq; });
 }
-async function writeAppointment(storeId, ctx, { lines, total, minutes, cats }, { customer, uid, providerId, startAt, notes, source, status, staffName, homeService, birthday, referral, extra }) {
+async function writeAppointment(storeId, ctx, { lines, total, minutes, cats }, { customer, uid, providerId, startAt, notes, source, status, staffName, homeService, birthday, referral, extra, allowOverlap }) {
   const cfg = ctx.cfg;
   const ref = db.collection(`stores/${storeId}/appointments`).doc();
   const phoneKey = String(customer.phone || "").replace(/\D/g, "");
@@ -1763,26 +1763,30 @@ async function writeAppointment(storeId, ctx, { lines, total, minutes, cats }, {
   const confirmMins = Number(cfg.confirmMinutes) || 60;
   const deadline = status === "unconfirmed" ? Math.min(startAt.getTime(), Date.now() + confirmMins * 60000) : null;
   const test = testOn(ctx.store.settings);
-  const endMs = startAt.getTime() + (Number(minutes) || 30) * 60000;
-  const lockRef = db.doc(`stores/${storeId}/slotLocks/${`${provider?.id || providerId || "open"}_${startAt.getTime()}`}`);
-  let slotTaken = false;
-  await db.runTransaction(async (tx) => {
-    const cur = await tx.get(lockRef);
-    slotTaken = cur.exists && Number(cur.data()?.until || 0) > startAt.getTime();
-    if (!slotTaken) tx.set(lockRef, { until: endMs, at: Date.now() });
-  });
-  if (slotTaken) throw new HttpsError("failed-precondition", "That time was just taken. Please pick another slot.");
-  await ref.set({
+  const startMs = startAt.getTime();
+  const endMs = startMs + (Number(minutes) || 30) * 60000;
+  const bufferMs = (homeService ? travelOf(cfg) : Number(cfg.bufferMin) || 0) * 60000;
+  const dk = dayKey(startAt, ctx.store.settings?.businessDayCutoff);
+  const lockRef = db.doc(`stores/${storeId}/slotLocks/${`${provider?.id || providerId || "open"}_${startMs}`}`);
+  const appt = {
     ...(test ? { test: true } : {}), ...(ctx.store?.contact?.messenger ? { shopMessenger: ctx.store.contact.messenger } : {}),
     code: test ? "T-" + apptCode().slice(2) : apptCode(), status, customer, customerUid: uid || null, customerKey: phoneKey.length >= 7 ? phoneKey : null,
     items: lines, total, durationEst: minutes, durationConfirmed: null, buffer: homeService ? travelOf(cfg) : Number(cfg.bufferMin) || 0, travelBefore: homeService ? travelOf(cfg) : 0, categories: cats,
     providerId: provider?.id || null, providerName: provider?.name || null, requestedProviderId: providerId || null,
-    startAt: Timestamp.fromDate(startAt), dayKey: dayKey(startAt, ctx.store.settings?.businessDayCutoff), notes: String(notes || "").slice(0, 300), homeService: homeService || null,
+    startAt: Timestamp.fromDate(startAt), dayKey: dk, notes: String(notes || "").slice(0, 300), homeService: homeService || null,
     ...(referral ? { referral } : {}),
     source, createdBy: staffName || null, confirmDeadline: deadline ? Timestamp.fromMillis(deadline) : null,
     homeFee: homeService ? (Number(homeService.fee) || 0) + (Number(homeService.prep?.fee) || 0) : 0,
     paid: false, paymentMethod: null, tip: 0, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
     ...(extra || {}),
+  };
+  await db.runTransaction(async (tx) => {
+    const day = await tx.get(db.collection(`stores/${storeId}/appointments`).where("dayKey", "==", dk));
+    if (!allowOverlap && slotClash(day.docs.map((x) => { const a = x.data(); return { id: x.id, status: a.status, providerId: a.providerId || null, startMs: a.startAt?.toMillis?.() || 0, duration: a.durationConfirmed || a.durationEst, buffer: a.buffer, travelBefore: a.travelBefore }; }), { startMs, endMs: endMs + bufferMs, providerId: provider?.id || null, stylistCount: (ctx.stylists || []).filter((s) => s && s.active !== false).length })) {
+      throw new HttpsError("failed-precondition", "That time was just taken. Please pick another slot.");
+    }
+    tx.set(lockRef, { until: endMs, at: Date.now() });
+    tx.set(ref, appt);
   });
   if (phoneKey.length >= 7 && !test) {
     const cRef = db.doc(`stores/${storeId}/customers/${phoneKey}`);
@@ -2365,9 +2369,15 @@ exports.rescheduleAppointment = onCall(async (req) => {
   const dateStr = new Date(startAt.getTime() + 8 * 3600000).toISOString().slice(0, 10);
   // exclude this appointment when checking slots: temporarily treat as cancelled
   await ref.update({ status: "cancelled" });
-  const slots = await computeSlots(storeId, ctx, dateStr, a.items, a.categories || [], a.durationConfirmed || a.durationEst, a.providerId || a.requestedProviderId || null, { home: !!a.homeService });
-  if (!slots.includes(startAt.getTime())) { await ref.update({ status: a.status }); throw new HttpsError("failed-precondition", "That time is not available."); }
-  await ref.update({ reschedCount: (a.reschedCount || 0) + 1, ...(fee ? { total: round2((a.total || 0) + fee), reschedFees: round2((a.reschedFees || 0) + fee), extraCharges: FieldValue.arrayUnion({ label: "Moving date fee", amount: fee, at: Date.now() }) } : {}), status: a.status === "confirmed" ? "pending" : a.status, startAt: Timestamp.fromDate(startAt), dayKey: dayKey(startAt, ctx.store.settings?.businessDayCutoff), rescheduledFrom: a.startAt, durationConfirmed: null, updatedAt: FieldValue.serverTimestamp() });
+  try {
+    const slots = await computeSlots(storeId, ctx, dateStr, a.items, a.categories || [], a.durationConfirmed || a.durationEst, a.providerId || a.requestedProviderId || null, { home: !!a.homeService });
+    if (!slots.includes(startAt.getTime())) throw new HttpsError("failed-precondition", "That time is not available.");
+    await ref.update({ reschedCount: (a.reschedCount || 0) + 1, ...(fee ? { total: round2((a.total || 0) + fee), reschedFees: round2((a.reschedFees || 0) + fee), extraCharges: FieldValue.arrayUnion({ label: "Moving date fee", amount: fee, at: Date.now() }) } : {}), status: a.status === "confirmed" ? "pending" : a.status, startAt: Timestamp.fromDate(startAt), dayKey: dayKey(startAt, ctx.store.settings?.businessDayCutoff), rescheduledFrom: a.startAt, durationConfirmed: null, updatedAt: FieldValue.serverTimestamp() });
+  } catch (e) {
+    const cur = (await ref.get()).data();
+    if (cur?.status === "cancelled") await ref.update({ status: a.status }).catch(() => {});
+    throw e;
+  }
   return { ok: true };
 });
 // staff/counter: walk-in or phone booking (no slot check for "now" walk-ins; counter decides)
@@ -2405,7 +2415,7 @@ exports.staffCreateAppointment = onCall(async (req) => {
     const r = d.roomId ? spaRooms(ctx).find((x) => x.id === String(d.roomId)) : pickRoom(ctx, dayA, startAt.getTime(), priced.minutes, 1);
     if (r) roomF = { roomId: r.id, roomName: r.name, beds: 1 }; else if (!d.force) throw new HttpsError("already-exists", "All rooms are busy at that time. Book anyway?");
   }
-  const ref = await writeAppointment(storeId, ctx, priced, { customer, uid: null, providerId: d.providerId ? String(d.providerId) : null, startAt, notes: d.notes, source: d.walkIn ? "walkin" : "counter", status: d.providerId && !d.tentative ? "confirmed" : "pending", staffName: d.staffName, homeService, birthday: d.birthday, referral, extra: { ...roomF, ...(d.tentative ? { tentative: true, visitConfirm: { status: "waiting", at: Date.now() }, visitToken: crypto.randomBytes(12).toString("base64url"), ...(d.fromApptId ? { nextOf: String(d.fromApptId) } : {}) } : {}) } });
+  const ref = await writeAppointment(storeId, ctx, priced, { customer, uid: null, providerId: d.providerId ? String(d.providerId) : null, startAt, notes: d.notes, source: d.walkIn ? "walkin" : "counter", status: d.providerId && !d.tentative ? "confirmed" : "pending", staffName: d.staffName, homeService, birthday: d.birthday, referral, allowOverlap: !!d.force, extra: { ...roomF, ...(d.tentative ? { tentative: true, visitConfirm: { status: "waiting", at: Date.now() }, visitToken: crypto.randomBytes(12).toString("base64url"), ...(d.fromApptId ? { nextOf: String(d.fromApptId) } : {}) } : {}) } });
   if (d.walkIn && !d.providerId) {
     const now = Date.now(); const appts = (await dayAppointments(storeId, new Date(now + 8 * 3600000).toISOString().slice(0, 10))).filter((x) => x.id !== ref.id);
     const free = ctx.stylists.filter((st) => !awayNow(ctx, st) && canDo(st, priced.cats) && stylistFree(st, now, now + priced.minutes * 60000) && !appts.some((a) => a.providerId === st.id && overlaps(a, now, now + priced.minutes * 60000)));
@@ -4326,6 +4336,7 @@ function requireOwner(req) {
 // gets a custom token + a device secret saved on the tablet so it can sign back in by itself.
 // ---------------------------------------------------------------------------
 const { orderKeyId } = require("./orderkey");
+const { slotClash } = require("./slotlock");
 const crypto = require("crypto");
 const DEVICE_CODE_MS = 10 * 60000;
 const deviceCode = () => String(Math.floor(100000 + Math.random() * 900000));
@@ -7317,7 +7328,15 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
   const reqText = String(d.request || "").trim().slice(0, 300);
   const stayTest = testOn(store.settings);
   { const { lim, plan } = await storeLimits(storeId, "stay"); await countBooking(storeId, lim, plan, false); }
-  const ref = await db.collection(`stores/${storeId}/stays`).add({
+  const ref = db.collection(`stores/${storeId}/stays`).doc();
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(db.collection(`stores/${storeId}/stays`).where("roomId", "==", roomRef.id));
+    const live = snap.docs.map((x) => ({ id: x.id, ...x.data() })).filter((s) => STAY_ACTIVE.includes(s.status));
+    const again = short
+      ? (live.some((x) => x.checkIn.toMillis() - sbuf < endMs && x.checkOut.toMillis() + sbuf > startMs) || icalClash(room, startMs - sbuf, endMs + sbuf) ? "That time is taken — pick another start time." : (room.blocked || []).includes(inYmd) ? "The room is not available that day." : null)
+      : stayConflict(live, room, startMs, endMs, null, inYmd, outYmd);
+    if (again) throw new HttpsError("already-exists", again);
+    tx.set(ref, {
     ...(stayTest ? { test: true } : {}),
     code, roomId: roomRef.id, roomName: room.name, checkIn: Timestamp.fromMillis(startMs), checkOut: Timestamp.fromMillis(endMs), checkInYmd: inYmd, checkOutYmd: outYmd,
     adults, kids, noId, needsIdOk: noId, noticeDiscount, rulesAck: cfg.houseRules ? Date.now() : null, overstayAck: ovRate ? { rate: ovRate, graceMin: cfg.overstay.graceMin, at: Date.now() } : null, cancelPolicy: cfg.cancel, visitors: [], issues: [],
@@ -7327,6 +7346,7 @@ exports.bookStay = onCall(withIndex("stay", async (req) => {
     noRefundAccepted: true, requests: reqText ? [{ id: "r1", type: "Note", text: reqText, status: "pending", at: Date.now() }] : [],
     status: needsConfirm ? "unconfirmed" : "pending", needsConfirm, confirmDeadline: needsConfirm ? Timestamp.fromMillis(Math.min(Date.now() + (Number(pub.confirm.minutes) || 60) * 60000, startMs)) : null,
     reschedule: null, extension: null, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp(),
+    });
   });
   if (!stayTest) await db.doc(`stores/${storeId}/customers/${phoneKey}`).set({ phone: customer.phone, name: customer.name, orders: FieldValue.increment(1), lastOrderAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   if ((room.icalImports || []).length) notifyTelegram(storeId, "reservation", `📅 Block ${room.name} ${short ? inYmd : `${inYmd} → ${outYmd}`} on ${(room.icalImports || []).map((x) => x.name || "your other sites").join(" / ")} too — their calendars only refresh every few hours.`);
