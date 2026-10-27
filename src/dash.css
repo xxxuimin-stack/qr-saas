@@ -1,6 +1,6 @@
 /* TapTayo owner dashboard — brand tokens with a calm, Grab-like finish: thin soft outlines, soft shadows, light buttons. Scoped to body.dash. */
 body.dash {
-  --brand: #C62828; --ink: #111111; --muted: #6B7280; --paper: #FFFFFF; --surface: #FFFFFF; --grid: #EEF0F2;
+  --brand: var(--tt-red, #C62828); --ink: var(--tt-ink, #161412); --muted: var(--tt-muted, #6F6A63); --paper: var(--tt-bg, #F6F4F1); --surface: #FFFFFF; --grid: #EFECE6;
   --lime: #DCFCE7; --lilac: #EDE9FE; --mango: #FEF3C7; --peach: #FDECEC;
   --edge: #E5E7EB; --edge-strong: #D1D5DB; --brand-soft: #FDECEC; --brand-ink: #B91C1C; --soft: #F3F4F6;
   --sh: 0 1px 2px rgba(17,17,17,.04); --sh-lg: 0 8px 28px rgba(17,17,17,.10);

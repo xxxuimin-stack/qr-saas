@@ -2,7 +2,7 @@
    same calm look as the owner dashboard (thin soft outlines, soft shadows, light buttons). Light by default, 🌙 dark per device (html[data-theme="dark"]).
    Accent follows the business type (body[data-mode]). */
 :root {
-  --bg: #F5F6F8; --grid: #F5F6F8; --panel: #EEF0F2; --card: #FFFFFF; --line: #EEF0F2; --edge: #E5E7EB;
+  --bg: var(--tt-bg, #F6F4F1); --grid: #EFECE6; --panel: #EFECE6; --card: #FFFFFF; --line: #EFECE6; --edge: var(--tt-line, #E6E1D8);
   --ink: #111111; --muted: #6B7280; --on-ink: #FFFFFF;
   /* status — text-safe tones + fills */
   --new: #B45309; --prep: #1D4ED8; --ready: #15803D; --danger: #B91C1C;

@@ -1,10 +1,10 @@
 :root {
-  --bg: #F5F6F8;
+  --bg: var(--tt-bg, #F6F4F1);
   --card: #ffffff;
-  --ink: #111111;
-  --muted: #6B7280;
-  --line: #E5E7EB;
-  --primary: #C62828;
+  --ink: var(--tt-ink, #161412);
+  --muted: var(--tt-muted, #6F6A63);
+  --line: var(--tt-line, #E6E1D8);
+  --primary: var(--tt-red, #C62828);
   --primary-ink: #ffffff;
   --danger: #B42318;
   --ok: #15803D;

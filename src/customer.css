@@ -3,9 +3,9 @@
 :root {
   --primary: #C62828;
   --paper: #FFFFFF;
-  --ink: #111111;
-  --mist: #EEF0F2;
-  --smoke: #6B7280;
+  --ink: var(--tt-ink, #161412);
+  --mist: #EFECE6;
+  --smoke: var(--tt-muted, #6F6A63);
   --soldout: #B42318;
   --ok: #15803D;
   /* Palitan ang font dito — isang linya lang */

@@ -3,7 +3,26 @@
 @font-face { font-family: "Inter"; font-style: normal; font-weight: 500; font-display: swap; src: url("/fonts/inter-500.woff2") format("woff2"); }
 @font-face { font-family: "Inter"; font-style: normal; font-weight: 600; font-display: swap; src: url("/fonts/inter-600.woff2") format("woff2"); }
 @font-face { font-family: "Inter"; font-style: normal; font-weight: 700; font-display: swap; src: url("/fonts/inter-700.woff2") format("woff2"); }
-:root { --tt-font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+:root {
+  --tt-font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --tt-bg: #F6F4F1;
+  --tt-paper: #FFFFFF;
+  --tt-ink: #161412;
+  --tt-muted: #6F6A63;
+  --tt-line: #E6E1D8;
+  --tt-red: #C62828;
+  --tt-red-ink: #9F1D1D;
+  --tt-red-soft: #FDECEC;
+  --tt-ok: #157F3D;
+  --tt-warn: #92400E;
+  --tt-radius: 12px;
+  --tt-shadow: 0 1px 2px rgba(22,20,18,.04), 0 16px 40px rgba(22,20,18,.06);
+}
 html { font-size: 15px; }
 body, button, input, select, textarea { font-family: var(--tt-font); }
+:focus-visible { outline: 2px solid var(--tt-red); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
 @media (max-width: 600px) { input, select, textarea { font-size: 16px !important; } }

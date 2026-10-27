@@ -9,7 +9,7 @@
 <link rel="icon" href="/logo/favicon.svg" type="image/svg+xml">
 <style>
 *{box-sizing:border-box}
-body{margin:0;background:#F5F6F8;font-family:Poppins,system-ui,-apple-system,"Segoe UI",sans-serif;color:#111;-webkit-font-smoothing:antialiased}
+body{margin:0;background:var(--tt-bg);font-family:var(--tt-font);color:var(--tt-ink);-webkit-font-smoothing:antialiased}
 a{color:#B91C1C;font-weight:600;text-decoration:none}a:hover{text-decoration:underline}
 .hidden{display:none !important}
 .wrap{min-height:100vh;display:flex;flex-direction:column}
@@ -25,9 +25,9 @@ header{max-width:1120px;width:100%;margin:0 auto;padding:18px 20px;display:flex;
 .chip{height:34px;padding:0 13px;border-radius:999px;background:#fff;border:1px solid #E5E7EB;font-size:13.5px;font-weight:500;display:inline-flex;align-items:center;gap:6px}
 .chip svg{color:#16A34A}
 .photo{margin-top:26px;border-radius:20px;height:220px;background:url(/demo/cafe/counter.jpg) center/cover,#E5E7EB}
-.card{background:#fff;border:1px solid #E5E7EB;border-radius:20px;padding:26px 24px;display:flex;flex-direction:column;gap:18px;box-shadow:0 8px 28px rgba(17,17,17,.06)}
+.card{background:#fff;border:1px solid var(--tt-line);border-radius:16px;padding:26px 24px;display:flex;flex-direction:column;gap:18px;box-shadow:var(--tt-shadow)}
 .seg{display:grid;grid-template-columns:1fr 1fr;background:#EEF0F2;border-radius:12px;padding:3px;gap:3px}
-.seg button{height:40px;border:0;border-radius:9px;background:transparent;font:500 14px Poppins,sans-serif;color:#6B7280;cursor:pointer}
+.seg button{height:40px;border:0;border-radius:9px;background:transparent;font:500 14px var(--tt-font);color:#6B7280;cursor:pointer}
 .seg button[aria-selected="true"]{background:#fff;color:#111;font-weight:600;box-shadow:0 1px 3px rgba(17,17,17,.08)}
 h2{margin:0;font-size:24px;font-weight:700;letter-spacing:-.02em}
 .sub{margin:4px 0 0;font-size:14.5px;color:#6B7280}
@@ -38,17 +38,17 @@ input{height:48px;padding:0 14px;border:1px solid #D1D5DB;border-radius:12px;bac
 input:focus{outline:none;border-color:#C62828;box-shadow:0 0 0 3px #FDECEC}
 .pw{position:relative;display:flex}
 .pw input{padding-right:72px}
-#pwToggle{position:absolute;right:4px;top:4px;height:40px;padding:0 12px;border:0;border-radius:10px;background:transparent;font:600 13.5px Poppins,sans-serif;color:#374151;cursor:pointer}
-.primary{height:50px;border:0;border-radius:12px;background:#C62828;color:#fff;font:600 16px Poppins,sans-serif;cursor:pointer}
+#pwToggle{position:absolute;right:4px;top:4px;height:40px;padding:0 12px;border:0;border-radius:10px;background:transparent;font:600 13.5px var(--tt-font);color:#374151;cursor:pointer}
+.primary{height:50px;border:0;border-radius:12px;background:#C62828;color:#fff;font:600 16px var(--tt-font);cursor:pointer}
 .primary:hover{background:#B71C1C}
-.google{height:48px;border:1px solid #E5E7EB;border-radius:12px;background:#fff;font:500 15px Poppins,sans-serif;color:#111;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer}
+.google{height:48px;border:1px solid #E5E7EB;border-radius:12px;background:#fff;font:500 15px var(--tt-font);color:#111;display:flex;align-items:center;justify-content:center;gap:10px;cursor:pointer}
 .or{display:flex;align-items:center;gap:10px;color:#9CA3AF;font-size:12.5px}.or::before,.or::after{content:"";flex:1;height:1px;background:#EEF0F2}
 .alert{padding:12px 14px;border-radius:12px;font-size:14px;line-height:1.45}
 .alert.error{background:#FEF2F2;color:#B42318}.alert.ok{background:#ECFDF3;color:#15803D}.alert.warn{background:#FFF7E6;color:#92400E}
 .alert a{color:inherit;text-decoration:underline}
 .note{margin:0;font-size:12.5px;line-height:1.5;color:#6B7280;text-align:center}
 button:disabled{opacity:.6;cursor:wait}
-.roles{display:grid;gap:8px}.roles button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:1.5px solid #E5E7EB;border-radius:12px;background:#fff;padding:10px 12px;font:500 13px Poppins,sans-serif;color:#6B7280;cursor:pointer}.roles button b{font-size:15px;color:#111}.roles button.on{border-color:#C62828;background:#FEF2F2}
+.roles{display:grid;gap:8px}.roles button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left;border:1.5px solid #E5E7EB;border-radius:12px;background:#fff;padding:10px 12px;font:500 13px var(--tt-font);color:#6B7280;cursor:pointer}.roles button b{font-size:15px;color:#111}.roles button.on{border-color:#C62828;background:#FEF2F2}
 .adult{display:flex;gap:8px;align-items:center;font-size:14px;font-weight:500}.adult input{width:20px!important;height:20px!important;min-height:0;padding:0;flex:none}
 button:focus-visible,a:focus-visible{outline:3px solid #F4A9A9;outline-offset:2px}
 @media (max-width:860px){.main{grid-template-columns:1fr;gap:20px;padding-top:0}.hero{order:2}.photo{display:none}.hero h1{font-size:30px}.hero p{font-size:15px}}
@@ -85,7 +85,7 @@ button:focus-visible,a:focus-visible{outline:3px solid #F4A9A9;outline-offset:2p
 <button type="button" id="googleBtn" class="google">
 <svg width="20" height="20" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>
 Continue with Google
-</button><button type="button" id="facebookBtn" class="google"><svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><path fill="#1877F2" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.09 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.7 4.54-4.7 1.31 0 2.68.24 2.68.24v2.96h-1.51c-1.49 0-1.96.93-1.96 1.89v2.27h3.33l-.53 3.49h-2.8V24C19.61 23.09 24 18.1 24 12.07z"/></svg>Continue with Facebook</button>
+</button>
 <div class="or">or</div>
 <form id="authForm" novalidate>
 <div id="nameField" class="hidden" style="display:contents">
