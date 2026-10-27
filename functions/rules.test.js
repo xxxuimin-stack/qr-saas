@@ -25,5 +25,8 @@ test("shift opening facts cannot be changed by later client updates", () => {
   assert.match(block, /allow create: if memberOf\(storeId\)/);
   assert.match(block, /startingCash is number/);
   assert.match(block, /affectedKeys\(\)\s*\.hasOnly\(\['status', 'closedBy', 'closedByName', 'closedAt', 'countedCash', 'expectedCash', 'variance', 'tally', 'closeNote', 'updatedAt'\]\)/);
-  assert.equal(block.includes("'openedBy', 'openedByName', 'openedAt', 'startingCash'"), false);
+  const update = block.slice(block.indexOf("allow update:"), block.indexOf("allow delete:"));
+  for (const field of ["openedBy", "openedByName", "openedAt", "startingCash", "createdAt", "note"]) {
+    assert.equal(update.includes(`'${field}'`), false, field);
+  }
 });
