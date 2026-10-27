@@ -171,8 +171,8 @@ service cloud.firestore {
                     || (signedIn() && (resource.data.customerUid == request.auth.uid || request.auth.uid in resource.data.get('laundry', {}).get('extraUids', [])));
         allow create: if false;   // placeOrder Cloud Function lang
         allow delete: if isOwner(storeId);
-        // Lahat ng role sa store (owner, staff, kitchen) puwedeng mag-update ng status
-        allow update: if isOwner(storeId) || (memberOf(storeId) && onlyStatusChanged());
+        // Status and ticket progress only. Money, items and paid stay in Cloud Functions — even for the owner.
+        allow update: if (isOwner(storeId) || memberOf(storeId)) && onlyStatusChanged();
       }
 
       // One checkout attempt. Cloud Functions only — clients must not mint or read these.
