@@ -5330,7 +5330,27 @@ exports.onShiftWrite = onDocumentWritten("stores/{storeId}/shifts/{id}", async (
   } catch (e) { logger.warn("onShiftWrite", e.message); }
 });
 
+const DEMO_SLUGS = ["taptayo-cafe", "taptayo-salon", "taptayo-spa", "taptayo-laundry", "taptayo-airbnb", "taptayo-studio"];
+async function reopenDemoShops() {
+  for (const slug of DEMO_SLUGS) {
+    const pubSnap = await db.doc(`publicStores/${slug}`).get();
+    if (!pubSnap.exists) continue;
+    const pub = pubSnap.data();
+    const storeRef = db.doc(`stores/${pub.storeId}`);
+    const store = (await storeRef.get()).data();
+    if (!demoShouldReopen(pub, store?.settings)) continue;
+    const kitchen = store.settings.kitchen || {};
+    await storeRef.update({
+      "settings.acceptOrders": true,
+      ...(kitchen.auto ? { "settings.kitchen": { ...kitchen, status: "normal", since: Date.now(), by: "Demo", auto: false } } : {}),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+    await rebuildPublicStore(pub.storeId);
+    logger.info("demo reopened", { slug });
+  }
+}
 const minuteTickRun = async () => {
+  await reopenDemoShops().catch((e) => logger.warn("reopenDemoShops", e.message));
   const snap = await db.collectionGroup("orders").where("status", "==", "pending").get();
   const byStore = {};
   for (const d of snap.docs) { const o = d.data(); if (o.acceptedAt || o.test || o.isScheduled) continue; const sid = d.ref.parent.parent.id; (byStore[sid] = byStore[sid] || []).push({ ref: d.ref, ...o }); }
@@ -5587,6 +5607,7 @@ exports.createReservation = onCall(withIndex("resv", async (req) => {
 const { ADMIN_EMAILS } = require("./admins");
 const { paymentDecision } = require("./adminpay");
 const { pinFailNext } = require("./pinfail");
+const { demoShouldReopen } = require("./demoreopen");
 
 const isAdminEmail = (email) => !!email && ADMIN_EMAILS.map((e) => e.toLowerCase()).includes(String(email).toLowerCase());
 
