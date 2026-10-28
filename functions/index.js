@@ -737,7 +737,7 @@ async function rebuildPublicStore(storeId) {
     qrMode: s.qrMode || "per_table",
     callStaff: pro.callstaff ? s.callStaff || null : null,
     payments: (s.payments?.methods || []).filter((m) => m.enabled !== false),
-    confirm: s.confirm || store.mode === "table" || store.mode === "salon" ? { mode: s.confirm?.mode || "messenger", messengerLink: s.confirm?.messengerLink || "", minutes: s.confirm?.minutes || 60, skipReturning: s.confirm?.skipReturning !== false } : null,
+    confirm: { mode: s.confirm?.mode || "off", messengerLink: s.confirm?.messengerLink || "", minutes: Number(s.confirm?.minutes) || 60, skipReturning: s.confirm?.skipReturning !== false },
     landing: s.landing !== false,
     reservations: pro.reservations ? s.reservations || null : null,
     events: can("events_vip") ? s.events || null : null,
@@ -1411,12 +1411,13 @@ exports.bookLaundryJob = onCall(withIndex("order", async (req) => {
   if (pub.mode !== "laundry") throw new HttpsError("failed-precondition", "Not a laundry store.");
   if (pub.locked || pub.acceptOrders === false) throw new HttpsError("failed-precondition", "The shop is not accepting bookings right now."); if (pub.comingSoon && !(pub.testMode && pub.testMode.until > Date.now())) throw new HttpsError("failed-precondition", "This shop is not open yet — coming soon!");
   const cfg = pub.laundry || {};
-  const mode = ["rider_rider", "rider_pickup", "dropoff_delivery"].includes(d.mode) ? d.mode : null;
+  const mode = ["dropoff_pickup", "rider_rider", "rider_pickup", "dropoff_delivery"].includes(d.mode) ? d.mode : null;
   if (!mode || cfg.modes?.[mode] === false) throw new HttpsError("invalid-argument", "That service mode is not available.");
-  if (!(await storeEntitled(storeId, "delivery"))) throw new HttpsError("failed-precondition", "Pickup / delivery is not available at this shop.");
+  const needsRider = mode !== "dropoff_pickup";
+  if (needsRider && !(await storeEntitled(storeId, "delivery"))) throw new HttpsError("failed-precondition", "Pickup / delivery is not available at this shop.");
   const customer = { name: String(d.customer?.name || "").trim().slice(0, 60), phone: String(d.customer?.phone || "").trim().slice(0, 30), address: String(d.customer?.address || "").trim().slice(0, 200), messenger: msgrOf(d.customer?.messenger), ...geoOf(d.customer) };
   if (customer.name.length < 2 || !customer.phone) throw new HttpsError("invalid-argument", "Name and phone number are required.");
-  if (!customer.address) throw new HttpsError("invalid-argument", "Address is required for pickup / delivery.");
+  if (needsRider && !customer.address) throw new HttpsError("invalid-argument", "Address is required for pickup / delivery.");
   const phoneKey = customer.phone.replace(/\D/g, "");
   await customerGate(req, storeId, customer.phone);
   if (phoneKey.length >= 7) { const c = (await db.doc(`stores/${storeId}/customers/${phoneKey}`).get()).data(); if (c?.flagged) throw new HttpsError("permission-denied", "We can't accept this booking. Please call the shop."); }
